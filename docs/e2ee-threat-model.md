@@ -4,9 +4,9 @@ Status: design baseline for review. This document is not an audit or a claim tha
 
 ## Decision
 
-Use the IETF Messaging Layer Security protocol (MLS, RFC 9420) for direct and group conversations. Evaluate OpenMLS as the Rust implementation. It is a maintained Rust implementation of RFC 9420 with Linux support and multiple ciphersuites. Its current 0.9.x line is pre-1.0, so pin an exact release and isolate it behind an internal adapter. Do not expose OpenMLS types in GTK or REST modules.
+Use the IETF Messaging Layer Security protocol (MLS, RFC 9420) for direct and group conversations. Use OpenMLS 0.9.2 as the initial Rust implementation candidate, pinned exactly (`=0.9.2`) with its supporting crates pinned to the compatible release set. OpenMLS 0.9.2 is pre-1.0, so isolate it behind an internal adapter and review every upgrade. Its upstream workspace currently declares Rust 1.91.0 as the minimum supported toolchain; CI must test that MSRV explicitly. Do not expose OpenMLS types in GTK or REST modules.
 
-Candidate initial ciphersuite: `MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519`. The crypto review must confirm this choice against platform support, dependency provenance, security advisories and interoperability requirements before release. No runtime fallback to an unapproved suite.
+Candidate initial ciphersuite: `MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519`. The crypto review must confirm this choice against platform support, dependency provenance, security advisories and interoperability requirements before release. OpenMLS 0.9.2 documents this ciphersuite as supported. No runtime fallback to an unapproved suite.
 
 ## Assets
 
