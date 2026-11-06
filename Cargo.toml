@@ -1,6 +1,6 @@
 [package]
 name = "tomchat-client"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 description = "Native Linux desktop client for TomChat"
@@ -8,3 +8,6 @@ description = "Native Linux desktop client for TomChat"
 [dependencies]
 gtk = { package = "gtk4", version = "0.9" }
 adw = { package = "libadwaita", version = "0.7", features = ["v1_5"] }
+ureq = { version = "2.12", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
