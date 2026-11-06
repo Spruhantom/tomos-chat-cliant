@@ -4,7 +4,7 @@ Native Linux desktop client for Ubuntu, Fedora, and Arch Linux, built with Rust,
 
 ## Stage 3 transport support
 
-The current GUI provides server address, username, and password fields and sends a login request to POST /api/v1/auth/login. It displays the authenticated username after a successful response. The server protocol now provides conversation, encrypted-message history and WebSocket event endpoints; a full conversation UI and client-side encryption are not yet implemented.
+The current GUI provides server address, username, and password fields and sends a login request to POST /api/v1/auth/login. It displays the authenticated username after a successful response. The server protocol now provides conversation, encrypted-message history and WebSocket event endpoints. A typed Rust messaging API module now supports conversation listing/creation, paginated history, encrypted-message submission and WebSocket endpoint construction. The GTK conversation UI, actual WebSocket client loop and client-side encryption are still to be implemented.
 
 The session token is intentionally held only in memory and discarded after the demonstration login. OS keyring integration and authenticated chat views are the next client tasks.
 
