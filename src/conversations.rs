@@ -5,6 +5,7 @@
 use crate::messaging::TomChatMessaging;
 use adw::prelude::*;
 use gtk::glib;
+use std::collections::HashSet;
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -54,6 +55,9 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
     let conversation_heading = gtk::Label::new(Some("Choose a conversation"));
     conversation_heading.add_css_class("title-2");
     conversation_heading.set_halign(gtk::Align::Start);
+    let realtime_status = gtk::Label::new(Some("Connecting to live messaging…"));
+    realtime_status.set_halign(gtk::Align::Start);
+    realtime_status.add_css_class("dim-label");
     let security_notice = gtk::Label::new(Some(
         "Messages are currently displayed as opaque server-stored envelopes. End-to-end encryption and secure message composition are not yet implemented.",
     ));
@@ -80,6 +84,7 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
     compose_row.append(&composer);
     compose_row.append(&send);
     transcript.append(&conversation_heading);
+    transcript.append(&realtime_status);
     transcript.append(&security_notice);
     transcript.append(&message_scroll);
     transcript.append(&compose_row);
@@ -114,10 +119,29 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
     refresh.connect_clicked(move |_| refresh_action());
 
     let conversation_ids = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+    let selected_conversation = std::rc::Rc::new(std::cell::RefCell::new(None::<String>));
+    let seen_message_ids = std::rc::Rc::new(std::cell::RefCell::new(HashSet::<String>::new()));
     let ids_for_poll = conversation_ids.clone();
     let list_for_poll = conversation_list.clone();
     let messages_for_poll = message_list.clone();
     let heading_for_poll = conversation_heading.clone();
+    let status_for_poll = realtime_status.clone();
+    let selected_for_poll = selected_conversation.clone();
+    let seen_for_poll = seen_message_ids.clone();
+    let realtime_rx = {
+        let (realtime_tx, realtime_rx) = mpsc::channel();
+        let worker = crate::realtime::RealtimeWorker::spawn(base_url.clone(), token.clone(), realtime_tx);
+        match worker {
+            Ok(worker) => {
+                window.connect_close_request(move |_| {
+                    worker.stop();
+                    glib::Propagation::Proceed
+                });
+            }
+            Err(error) => status_for_poll.set_text(&format!("Live messaging unavailable: {error}")),
+        }
+        realtime_rx
+    };
     glib::timeout_add_local(Duration::from_millis(100), move || {
         loop {
             match rx.try_recv() {
@@ -160,24 +184,11 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
                     while let Some(child) = messages_for_poll.first_child() {
                         messages_for_poll.remove(&child);
                     }
+                    seen_for_poll.borrow_mut().clear();
                     for message in items {
-                        let bytes_estimate = message.ciphertext.len().saturating_mul(3) / 4;
-                        let line = format!(
-                            "Message #{} · {} · encrypted payload (about {} bytes)",
-                            message.sequence,
-                            message.sender_id.chars().take(8).collect::<String>(),
-                            bytes_estimate
-                        );
-                        let label = gtk::Label::new(Some(&line));
-                        label.set_halign(gtk::Align::Start);
-                        label.set_wrap(true);
-                        label.set_margin_top(8);
-                        label.set_margin_bottom(8);
-                        label.set_margin_start(10);
-                        label.set_margin_end(10);
-                        let row = gtk::ListBoxRow::new();
-                        row.set_child(Some(&label));
-                        messages_for_poll.append(&row);
+                        if seen_for_poll.borrow_mut().insert(message.id.clone()) {
+                            append_message_row(&messages_for_poll, &message);
+                        }
                     }
                 }
                 Ok(UiEvent::History(Err(error))) => {
@@ -187,11 +198,47 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
                 Err(mpsc::TryRecvError::Disconnected) => return glib::ControlFlow::Break,
             }
         }
+        loop {
+            match realtime_rx.try_recv() {
+                Ok(crate::realtime::RealtimeEvent::Connected) => {
+                    status_for_poll.set_text("Live connection established; synchronising history…");
+                }
+                Ok(crate::realtime::RealtimeEvent::Disconnected(reason)) => {
+                    status_for_poll.set_text(&format!("Live connection interrupted. Reconnecting… {reason}"));
+                }
+                Ok(crate::realtime::RealtimeEvent::SessionExpired) => {
+                    status_for_poll.set_text("Your TomChat session has expired. Please sign in again.");
+                }
+                Ok(crate::realtime::RealtimeEvent::HistorySync(items)) => {
+                    let selected = selected_for_poll.borrow().clone();
+                    for message in items {
+                        if selected.as_deref() == Some(message.conversation_id.as_str())
+                            && seen_for_poll.borrow_mut().insert(message.id.clone())
+                        {
+                            append_message_row(&messages_for_poll, &message);
+                        }
+                    }
+                }
+                Ok(crate::realtime::RealtimeEvent::LiveMessage(message)) => {
+                    let selected = selected_for_poll.borrow().clone();
+                    if selected.as_deref() == Some(message.conversation_id.as_str())
+                        && seen_for_poll.borrow_mut().insert(message.id.clone())
+                    {
+                        append_message_row(&messages_for_poll, &message);
+                    }
+                }
+                Ok(crate::realtime::RealtimeEvent::Acknowledged { sequence, .. }) => {
+                    status_for_poll.set_text(&format!("Server acknowledged message #{sequence}."));
+                }
+                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Disconnected) => break,
+            }
+        }
         glib::ControlFlow::Continue
     });
 
-    let base_for_history = base_url;
-    let token_for_history = token;
+    let base_for_history = base_url.clone();
+    let token_for_history = token.clone();
     let ids_for_selection = conversation_ids;
     let sender = tx;
     let heading_for_selection = conversation_heading.clone();
@@ -201,6 +248,8 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
         let Some(conversation_id) = ids_for_selection.borrow().get(index as usize).cloned() else {
             return;
         };
+        *selected_conversation.borrow_mut() = Some(conversation_id.clone());
+        seen_message_ids.borrow_mut().clear();
         heading_for_selection.set_text("Loading conversation…");
         let base = base_for_history.clone();
         let token = token_for_history.clone();
@@ -215,4 +264,24 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
     });
 
     window.present();
+}
+
+fn append_message_row(list: &gtk::ListBox, message: &crate::messaging::Message) {
+    let bytes_estimate = message.ciphertext.len().saturating_mul(3) / 4;
+    let line = format!(
+        "Message #{} · {} · encrypted payload (about {} bytes)",
+        message.sequence,
+        message.sender_id.chars().take(8).collect::<String>(),
+        bytes_estimate
+    );
+    let label = gtk::Label::new(Some(&line));
+    label.set_halign(gtk::Align::Start);
+    label.set_wrap(true);
+    label.set_margin_top(8);
+    label.set_margin_bottom(8);
+    label.set_margin_start(10);
+    label.set_margin_end(10);
+    let row = gtk::ListBoxRow::new();
+    row.set_child(Some(&label));
+    list.append(&row);
 }
