@@ -17,6 +17,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - run: cargo fmt --all
-      - run: cargo check
-      - run: cargo clippy -- -D warnings
+      - name: Resolve locked dependency graph
+        run: cargo generate-lockfile
+      - run: cargo fmt --all -- --check
+      - run: cargo check --locked
+      - run: cargo clippy --locked -- -D warnings
