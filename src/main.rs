@@ -1,21 +1,18 @@
 use adw::prelude::*;
 use adw::Application;
 use gtk::glib;
-use std::net::IpAddr;
-use std::str::FromStr;
 use std::sync::mpsc;
 use std::time::Duration;
 
 fn validate_server_url(input: &str) -> Result<String, String> {
     let parsed = url::Url::parse(input.trim())
         .map_err(|_| "Enter a valid server URL, including https://".to_string())?;
-    let host = parsed
-        .host_str()
-        .ok_or_else(|| "The server URL must include a hostname.".to_string())?;
-    let is_loopback = host.eq_ignore_ascii_case("localhost")
-        || IpAddr::from_str(host)
-            .map(|address| address.is_loopback())
-            .unwrap_or(false);
+    let is_loopback = match parsed.host() {
+        Some(url::Host::Domain(host)) => host.eq_ignore_ascii_case("localhost"),
+        Some(url::Host::Ipv4(address)) => address.is_loopback(),
+        Some(url::Host::Ipv6(address)) => address.is_loopback(),
+        None => false,
+    };
 
     if !parsed.username().is_empty()
         || parsed.password().is_some()
@@ -23,7 +20,10 @@ fn validate_server_url(input: &str) -> Result<String, String> {
         || parsed.fragment().is_some()
         || (parsed.path() != "/" && !parsed.path().is_empty())
     {
-        return Err("Enter only the server's base URL, without credentials, a path, query or fragment.".to_string());
+        return Err(
+            "Enter only the server's base URL, without credentials, a path, query or fragment."
+                .to_string(),
+        );
     }
 
     match parsed.scheme() {
@@ -35,7 +35,11 @@ fn validate_server_url(input: &str) -> Result<String, String> {
                     .to_string(),
             )
         }
-        _ => return Err("The server URL must use HTTPS, or HTTP for local development.".to_string()),
+        _ => {
+            return Err(
+                "The server URL must use HTTPS, or HTTP for local development.".to_string(),
+            )
+        }
     }
 
     Ok(parsed.as_str().trim_end_matches('/').to_string())
@@ -193,7 +197,6 @@ fn build_login(app: &Application) {
 
     window.present();
 }
-
 
 #[cfg(test)]
 mod tests {
