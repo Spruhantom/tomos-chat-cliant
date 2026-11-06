@@ -1,5 +1,5 @@
-pub mod messaging;
 pub mod conversations;
+pub mod messaging;
 
 use adw::prelude::*;
 use adw::Application;
@@ -137,9 +137,17 @@ fn build_login(app: &Application) {
     let login_for_poll = login.clone();
     glib::timeout_add_local(Duration::from_millis(100), move || match rx.try_recv() {
         Ok(Ok(session)) => {
-            status_for_poll.set_text(&format!("Signed in as {}. Loading conversations…", session.username));
+            status_for_poll.set_text(&format!(
+                "Signed in as {}. Loading conversations…",
+                session.username
+            ));
             login_for_poll.set_sensitive(true);
-            crate::conversations::show(&app_for_poll, session.base_url, session.token, session.username);
+            crate::conversations::show(
+                &app_for_poll,
+                session.base_url,
+                session.token,
+                session.username,
+            );
             glib::ControlFlow::Continue
         }
         Ok(Err(message)) => {
