@@ -24,7 +24,7 @@ jobs:
       - run: cargo test --locked
       - run: cargo clippy --all-targets --locked -- -D warnings
       - name: Commit generated lockfile and formatting
-        if: success()
+        if: success() && github.event_name == 'push'
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
