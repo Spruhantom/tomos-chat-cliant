@@ -1,94 +1,67 @@
 # Real-time transport and cryptographic architecture
 
-Status: design record only. This document does not claim that WebSocket transport,
-end-to-end encryption, device keys, or manual GTK testing are implemented.
+Status: real-time transport is implemented; end-to-end encryption and device identity are not.
 
-## 1. WebSocket transport
+## 1. Implemented transport
 
-The client will use a maintained WebSocket implementation with TLS support rather
-than hand-writing WebSocket framing or cryptographic handshakes. The current
-protocol contract is `/api/v1/ws` with the session bearer token in the HTTP
-upgrade Authorization header. Tokens must never appear in URLs, query strings,
-logs, or crash reports.
+The client uses a background WebSocket worker for the authenticated `/api/v1/ws` endpoint. The session bearer token is sent in the HTTP upgrade Authorization header and never in a URL. The worker handles delivery, acknowledgements, errors, ping/pong, bounded reconnect backoff, session expiry, message-ID de-duplication, and REST history catch-up using the forward `after` cursor.
 
-The connection worker must run outside the GTK main thread and publish typed
-events to the UI through a bounded channel. It must:
-
-- validate the server URL using the same HTTPS/loopback-only HTTP policy as login;
-- cap inbound frame size at 64 KiB and reject malformed JSON, unsupported versions,
-  and empty request IDs;
-- process `message.deliver`, `message.ack`, and `error` envelopes;
-- answer ping frames with pong frames and detect a closed or stale socket;
-- reconnect with exponential backoff and jitter, bounded at 30 seconds, and stop
-  retrying after logout or explicit disconnect;
-- never block GTK callbacks on network I/O and never log bearer tokens or ciphertext;
-- de-duplicate displayed messages by server message ID and sequence.
-
-On reconnect, REST history remains the source of truth. The current API has a
-`before` cursor for older-history pagination, but no `after` cursor. Recovery
-must therefore fetch the newest history page, merge it with locally displayed
-messages, de-duplicate, and resume live delivery. A future API revision should
-add an authenticated `after` sequence cursor for efficient gap recovery.
-
-The sender must use one stable `client_message_id` per logical message and reuse
-it on retries. A WebSocket acknowledgement is not a substitute for durable
-history; persistence is confirmed by the server acknowledgement or a matching
-REST history record.
+The GTK conversation view receives worker events through a channel, displays messages for the selected conversation, and buffers messages for other conversations. The transport is not itself encryption: it relays opaque payloads only.
 
 ## 2. Encryption and device identity
 
-The existing API transports opaque ciphertext but does not provide E2EE. The
-client must keep plaintext composition disabled until a reviewed protocol and
-key lifecycle are implemented. Do not implement custom primitives, custom key
-exchange, or ad-hoc group ratchets.
+TomChat does not yet implement E2EE. The message composer must remain disabled until the cryptographic protocol, device lifecycle, persistence, recovery and verification work has been implemented and independently reviewed.
 
-Before selecting a library, review a threat model covering server compromise,
-malicious group members, device loss, account recovery, metadata leakage,
-downgrade attempts, and compromised endpoints. Evaluate a maintained protocol
-library for both direct and group conversations (including a standards-based
-MLS implementation), its independent security review, Rust support, persistence
-requirements, and migration strategy. The protocol choice is not final here.
+The current protocol evaluation selects IETF Messaging Layer Security (MLS, RFC 9420) as the preferred design for both direct and group conversations, using OpenMLS as the first Rust implementation candidate. This is an engineering decision for a prototype, not a security certification or a claim that OpenMLS has been independently audited for TomChat's integration. OpenMLS is pre-1.0 and its API and storage formats may change; pin an exact version, isolate it behind a narrow adapter, and review release/security notes before upgrades.
 
-Required properties before enabling the composer:
+Initial ciphersuite candidate: `MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519`. Do not silently negotiate a weaker or different suite. The selected suite and protocol version must be authenticated in the MLS group state and visible to clients.
 
-- per-device cryptographic identity and signed device credentials;
-- authenticated device addition/removal and a visible device list;
-- authenticated key distribution and group membership changes;
-- forward secrecy and post-compromise recovery appropriate to the selected protocol;
-- crash-safe persistence of cryptographic transcript / group state;
-- private-key storage through the desktop secret service (for example,
-  Secret Service / libsecret), never plaintext config files or source control;
-- user-verifiable safety numbers or QR-based device/contact verification;
-- explicit lost-device, revocation, account-recovery, and multi-device history flows;
-- strict protocol versioning and downgrade rejection;
-- test vectors, interoperability tests, fuzzing, dependency review, and independent
-  security review before production claims.
+## 3. Device identity and key lifecycle
 
-Private keys must never be sent to the server. The server may store public device
-credentials and opaque protocol messages, but server-side storage alone does not
-establish end-to-end encryption. Backups must be encrypted with a user-controlled
-recovery secret and must not silently weaken forward secrecy.
+Each installation is a distinct device. Account credentials authenticate to the service but are not encryption keys. A device creates its signing credential and MLS key material locally. Private keys and MLS group state remain local and are never uploaded.
 
-## 3. Delivery plan
+The service stores only public device credentials, signed KeyPackages, device status/revocation metadata, and opaque MLS protocol messages. Device enrollment must be authenticated by an existing verified device or by an explicit recovery ceremony. A new device must not silently inherit old message history or impersonate an existing device.
 
-1. Add transport tests and a maintained WebSocket dependency with locked,
-   reproducible dependency resolution.
-2. Implement a reconnecting worker and typed event parsing; test malformed frames,
-   oversized frames, ping/pong, authentication failure, logout, and retry shutdown.
-3. Integrate live delivery into the conversation view and perform REST catch-up
-   after reconnect; test duplicates and out-of-order delivery.
-4. Complete the threat model and select a reviewed E2EE protocol/library.
-5. Implement device enrollment, verification, key storage, group state, recovery,
-   and protocol migration behind disabled-by-default feature gates.
-6. Add end-to-end integration tests and obtain independent cryptographic review.
-7. Only then enable message composition and describe the product as end-to-end
-   encrypted.
+Required lifecycle:
+- create a device identity and private key material locally;
+- publish a signed public credential and replenishable KeyPackages;
+- verify a new device by QR/safety-code comparison with an existing device;
+- add/remove devices through authenticated MLS membership changes;
+- revoke a lost device and force a fresh group epoch;
+- persist MLS state atomically before acknowledging a commit or application message;
+- support encrypted, user-controlled recovery separately from normal device sync;
+- clearly show unverified devices and membership/key changes in the UI.
 
-## 4. Current limitations
+## 4. Local storage
 
-- No WebSocket connection or reconnect loop is implemented yet.
-- The message composer remains disabled.
-- No encryption, device identity, key storage, or key recovery is implemented.
-- The GTK interface has not been manually tested on a desktop session.
-- The server's process-local WebSocket fan-out is suitable only for a single
-  server instance until shared pub/sub is added.
+Use the desktop Secret Service through a maintained integration for small secrets and key-encryption material. Store encrypted MLS state in an application data directory with restrictive permissions. Derive a local wrapping key from a random secret held by the secret service; do not use the account password as the MLS key.
+
+MLS state changes and outbound protocol messages must be committed transactionally. A crash or failed write must not leave the in-memory group state ahead of durable storage. Never log plaintext, private keys, KeyPackages, exported secrets, or message ciphertext. Disable cryptographic debug features in release builds.
+
+## 5. Threat model and limitations
+
+Assume the delivery server can observe, drop, reorder, replay, delay and inject network messages, and can lie about device-directory contents. MLS protects message confidentiality and integrity only when clients validate credentials and membership changes correctly.
+
+Out of scope for the initial desktop release: compromised endpoints, keyloggers, screenshots, malicious OS/root access, traffic analysis, timing/size metadata, denial of service, and recovery-secret theft. The server still sees account identifiers, conversation membership, device directory metadata, message sizes and timestamps.
+
+Account password reset must not recover or replace encryption identity. A user who loses all trusted devices and their recovery secret must be told that encrypted history is unrecoverable. Never create a server-side escrow key.
+
+## 6. Implementation gates
+
+1. Finalise the server and protocol API for device credentials, KeyPackages and opaque MLS messages.
+2. Implement a narrow crypto adapter around a pinned OpenMLS release and a reviewed crypto provider.
+3. Implement durable transactional storage and Secret Service integration.
+4. Add unit tests using MLS test vectors, multi-device and multi-member integration tests, replay/reorder/fork tests, crash-recovery tests, and fuzzing.
+5. Implement device verification, revocation and recovery UI.
+6. Obtain independent review of the full integration and threat model.
+7. Only then enable encrypted message composition behind a feature gate.
+
+## 7. Current status
+
+- Authenticated live transport and reconnect history recovery: implemented.
+- MLS protocol adapter: not implemented.
+- Device registration/directory APIs: not implemented.
+- Secret Service integration and encrypted local state: not implemented.
+- Device verification, revocation and recovery: not implemented.
+- Message composer: intentionally disabled.
+- Manual GTK runtime and multi-device testing: outstanding.
