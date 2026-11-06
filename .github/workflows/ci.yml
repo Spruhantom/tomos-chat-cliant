@@ -17,29 +17,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Resolve locked dependency graph
-        run: |
-          if [ ! -f Cargo.lock ]; then cargo generate-lockfile; fi
       - run: cargo fmt --all -- --check
       - run: cargo check --locked
       - run: cargo test --locked
       - run: cargo clippy --all-targets --locked -- -D warnings
 
-  lockfile:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Commit Cargo.lock if it is missing
-        run: |
-          if [ ! -f Cargo.lock ]; then
-            cargo generate-lockfile
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add Cargo.lock
-            git commit -m "chore: add Cargo.lock"
-            git push
-          fi
