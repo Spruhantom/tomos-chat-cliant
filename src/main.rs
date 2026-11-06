@@ -1,8 +1,33 @@
 use adw::prelude::*;
 use adw::Application;
 use gtk::glib;
+use std::net::IpAddr;
+use std::str::FromStr;
 use std::sync::mpsc;
 use std::time::Duration;
+
+fn validate_server_url(input: &str) -> Result<String, String> {
+    let parsed = url::Url::parse(input.trim())
+        .map_err(|_| "Enter a valid server URL, including https://".to_string())?;
+    let host = parsed.host_str().ok_or_else(|| "The server URL must include a hostname.".to_string())?;
+    let is_loopback = host.eq_ignore_ascii_case("localhost")
+        || IpAddr::from_str(host).map(|address| address.is_loopback()).unwrap_or(false);
+
+    if !parsed.username().is_empty() || parsed.password().is_some()
+        || parsed.query().is_some() || parsed.fragment().is_some()
+        || (parsed.path() != "/" && !parsed.path().is_empty()) {
+        return Err("Enter only the server's base URL, without credentials, a path, query or fragment.".to_string());
+    }
+
+    match parsed.scheme() {
+        "https" => {}
+        "http" if is_loopback => {}
+        "http" => return Err("Use HTTPS for remote servers. HTTP is allowed only for localhost or a loopback IP address.".to_string()),
+        _ => return Err("The server URL must use HTTPS, or HTTP for local development.".to_string()),
+    }
+
+    Ok(parsed.as_str().trim_end_matches('/').to_string())
+}
 
 #[derive(serde::Serialize)]
 struct Credentials<'a> {
@@ -105,24 +130,31 @@ fn build_login(app: &Application) {
     let password_entry = password.clone();
     let status_for_click = status.clone();
     login.connect_clicked(move |button| {
-        let base = server_entry.text().trim().trim_end_matches('/').to_string();
+        let base = match validate_server_url(server_entry.text().as_str()) {
+            Ok(value) => value,
+            Err(message) => {
+                status_for_click.set_text(&message);
+                return;
+            }
+        };
         let user = username_entry.text().to_string();
         let pass = password_entry.text().to_string();
         if base.is_empty() || user.is_empty() || pass.is_empty() {
             status_for_click.set_text("Enter the server address, username and password.");
             return;
         }
-        if !(base.starts_with("https://") || base.starts_with("http://127.0.0.1") || base.starts_with("http://localhost")) {
-            status_for_click.set_text("Use HTTPS for remote servers. HTTP is allowed only for local development.");
-            return;
-        }
-
         button.set_sensitive(false);
         status_for_click.set_text("Connecting…");
         let sender = tx.clone();
         std::thread::spawn(move || {
-            let result = ureq::post(&format!("{base}/api/v1/auth/login"))
-                .send_json(serde_json::to_value(Credentials { username: &user, password: &pass }).unwrap_or_default())
+            let agent = ureq::AgentBuilder::new()
+                .timeout_connect(Duration::from_secs(5))
+                .timeout_read(Duration::from_secs(15))
+                .timeout_write(Duration::from_secs(15))
+                .redirects(0)
+                .build();
+            let result = agent.post(&format!("{base}/api/v1/auth/login"))
+                .send_json(&Credentials { username: &user, password: &pass })
                 .map_err(|error| format!("Sign-in failed: {error}"))
                 .and_then(|response| response.into_json::<LoginResponse>().map_err(|error| format!("Invalid server response: {error}")))
                 .map(|reply| {
@@ -135,4 +167,46 @@ fn build_login(app: &Application) {
     });
 
     window.present();
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::validate_server_url;
+
+    #[test]
+    fn accepts_https_remote_server() {
+        assert_eq!(
+            validate_server_url("https://chat.example.com/").unwrap(),
+            "https://chat.example.com"
+        );
+    }
+
+    #[test]
+    fn accepts_exact_localhost_and_loopback_addresses() {
+        assert!(validate_server_url("http://localhost:8080").is_ok());
+        assert!(validate_server_url("http://127.0.0.1:8080").is_ok());
+        assert!(validate_server_url("http://[::1]:8080").is_ok());
+    }
+
+    #[test]
+    fn rejects_http_for_remote_hosts_and_localhost_lookalikes() {
+        assert!(validate_server_url("http://chat.example.com").is_err());
+        assert!(validate_server_url("http://localhost.attacker.example").is_err());
+        assert!(validate_server_url("http://127.0.0.1.attacker.example").is_err());
+    }
+
+    #[test]
+    fn rejects_credentials_paths_queries_and_fragments() {
+        assert!(validate_server_url("https://user:pass@chat.example.com").is_err());
+        assert!(validate_server_url("https://chat.example.com/api").is_err());
+        assert!(validate_server_url("https://chat.example.com/?x=1").is_err());
+        assert!(validate_server_url("https://chat.example.com/#fragment").is_err());
+    }
+
+    #[test]
+    fn rejects_unsupported_schemes() {
+        assert!(validate_server_url("ftp://chat.example.com").is_err());
+        assert!(validate_server_url("file:///tmp/tomchat").is_err());
+    }
 }
