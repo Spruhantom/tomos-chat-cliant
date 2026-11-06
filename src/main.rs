@@ -88,12 +88,12 @@ fn build_login(app: &Application) {
             Ok(Ok(message)) => {
                 status_for_poll.set_text(&message);
                 login_for_poll.set_sensitive(true);
-                glib::ControlFlow::Break
+                glib::ControlFlow::Continue
             }
             Ok(Err(message)) => {
                 status_for_poll.set_text(&message);
                 login_for_poll.set_sensitive(true);
-                glib::ControlFlow::Break
+                glib::ControlFlow::Continue
             }
             Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
             Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
