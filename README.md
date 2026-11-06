@@ -1,20 +1,16 @@
 # TomChat Desktop Client
 
-Native Linux desktop client for TomChat, targeting Ubuntu, Fedora, and Arch Linux.
+Native Linux desktop client for Ubuntu, Fedora, and Arch Linux, built with Rust, GTK4, and Libadwaita.
 
-## Current status
+## Stage 2
 
-This is an initial Rust + GTK4 + Libadwaita application scaffold. It displays a simple welcome window. Server connectivity, login, messaging, secure local storage, notifications, encryption, and voice/video calling are not implemented yet.
+The current GUI provides server address, username, and password fields and sends a login request to `POST /api/v1/auth/login`. It displays the authenticated username after a successful response.
 
-## Development dependencies
+The session token is intentionally held only in memory and discarded after the demonstration login. OS keyring integration and authenticated chat views are the next client tasks.
 
-On Debian/Ubuntu development hosts:
+## Development
 
-```bash
-sudo apt install build-essential pkg-config libgtk-4-dev libadwaita-1-dev
-```
-
-Then:
+Install GTK development dependencies, then:
 
 ```bash
 cargo fmt --all -- --check
@@ -22,13 +18,14 @@ cargo check
 cargo run
 ```
 
-## Planned packaging
+On Debian/Ubuntu development hosts:
 
-- Ubuntu: DEB
-- Fedora: RPM
-- Arch Linux: PKGBUILD
-- Cross-distribution: Flatpak
+```bash
+sudo apt install build-essential pkg-config libgtk-4-dev libadwaita-1-dev
+```
 
-## Security
+Remote server connections must use HTTPS. Plain HTTP is allowed only for localhost development.
 
-Do not enter real credentials into this scaffold. It does not yet connect to a server or implement authentication.
+## Not yet implemented
+
+Registration UI, token/keyring persistence, conversations, WebSocket messaging, encryption, notifications, calls, and package builds.
