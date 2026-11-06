@@ -9,20 +9,32 @@ use std::time::Duration;
 fn validate_server_url(input: &str) -> Result<String, String> {
     let parsed = url::Url::parse(input.trim())
         .map_err(|_| "Enter a valid server URL, including https://".to_string())?;
-    let host = parsed.host_str().ok_or_else(|| "The server URL must include a hostname.".to_string())?;
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| "The server URL must include a hostname.".to_string())?;
     let is_loopback = host.eq_ignore_ascii_case("localhost")
-        || IpAddr::from_str(host).map(|address| address.is_loopback()).unwrap_or(false);
+        || IpAddr::from_str(host)
+            .map(|address| address.is_loopback())
+            .unwrap_or(false);
 
-    if !parsed.username().is_empty() || parsed.password().is_some()
-        || parsed.query().is_some() || parsed.fragment().is_some()
-        || (parsed.path() != "/" && !parsed.path().is_empty()) {
+    if !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+        || (parsed.path() != "/" && !parsed.path().is_empty())
+    {
         return Err("Enter only the server's base URL, without credentials, a path, query or fragment.".to_string());
     }
 
     match parsed.scheme() {
         "https" => {}
         "http" if is_loopback => {}
-        "http" => return Err("Use HTTPS for remote servers. HTTP is allowed only for localhost or a loopback IP address.".to_string()),
+        "http" => {
+            return Err(
+                "Use HTTPS for remote servers. HTTP is allowed only for localhost or a loopback IP address."
+                    .to_string(),
+            )
+        }
         _ => return Err("The server URL must use HTTPS, or HTTP for local development.".to_string()),
     }
 
@@ -130,7 +142,8 @@ fn build_login(app: &Application) {
     let password_entry = password.clone();
     let status_for_click = status.clone();
     login.connect_clicked(move |button| {
-        let base = match validate_server_url(server_entry.text().as_str()) {
+        let server_text = server_entry.text();
+        let base = match validate_server_url(server_text.as_str()) {
             Ok(value) => value,
             Err(message) => {
                 status_for_click.set_text(&message);
@@ -148,19 +161,31 @@ fn build_login(app: &Application) {
         let sender = tx.clone();
         std::thread::spawn(move || {
             let agent = ureq::AgentBuilder::new()
+                .timeout(Duration::from_secs(20))
                 .timeout_connect(Duration::from_secs(5))
                 .timeout_read(Duration::from_secs(15))
                 .timeout_write(Duration::from_secs(15))
                 .redirects(0)
                 .build();
-            let result = agent.post(&format!("{base}/api/v1/auth/login"))
-                .send_json(&Credentials { username: &user, password: &pass })
+            let result = agent
+                .post(&format!("{base}/api/v1/auth/login"))
+                .send_json(&Credentials {
+                    username: &user,
+                    password: &pass,
+                })
                 .map_err(|error| format!("Sign-in failed: {error}"))
-                .and_then(|response| response.into_json::<LoginResponse>().map_err(|error| format!("Invalid server response: {error}")))
+                .and_then(|response| {
+                    response
+                        .into_json::<LoginResponse>()
+                        .map_err(|error| format!("Invalid server response: {error}"))
+                })
                 .map(|reply| {
                     // Token is deliberately not persisted until OS-keyring integration is added.
                     let _session_token = reply.token;
-                    format!("Signed in as {}. Secure token storage is coming next.", reply.user.username)
+                    format!(
+                        "Signed in as {}. Secure token storage is coming next.",
+                        reply.user.username
+                    )
                 });
             let _ = sender.send(result);
         });
