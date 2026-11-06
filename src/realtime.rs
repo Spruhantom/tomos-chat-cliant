@@ -511,6 +511,48 @@ mod tests {
     }
 
     #[test]
+    fn websocket_acknowledgements_preserve_request_correlation() {
+        let (sender, receiver) = mpsc::channel();
+        let mut seen = MessageDeduplicator::default();
+        let mut cursors = HashMap::new();
+        let mut session = SessionState::Active;
+        let frame = r#"{"version":1,"event":"message.ack","request_id":"request-9","payload":{"message_id":"server-3","sequence":3}}"#;
+        assert!(handle_server_text(frame, &sender, &mut seen, &mut cursors, &mut session).unwrap());
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            RealtimeEvent::Acknowledged { request_id, message_id, sequence: 3 }
+                if request_id == "request-9" && message_id == "server-3"
+        ));
+    }
+
+    #[test]
+    fn duplicate_delivery_frames_are_forwarded_only_once() {
+        let (sender, receiver) = mpsc::channel();
+        let mut seen = MessageDeduplicator::default();
+        let mut cursors = HashMap::new();
+        let mut session = SessionState::Active;
+        let frame = r#"{"version":1,"event":"message.deliver","request_id":"event-1","payload":{"id":"m1","sequence":4,"conversation_id":"c1","sender_id":"u1","client_message_id":"cm1","ciphertext":"YQ==","nonce":"Yg==","encryption_version":1,"key_id":null,"created_at":"2026-11-06T00:00:00Z"}}"#;
+        assert!(handle_server_text(frame, &sender, &mut seen, &mut cursors, &mut session).unwrap());
+        assert!(handle_server_text(frame, &sender, &mut seen, &mut cursors, &mut session).unwrap());
+        assert_eq!(cursors.get("c1"), Some(&4));
+        assert!(matches!(receiver.try_recv().unwrap(), RealtimeEvent::LiveMessage(_)));
+        assert!(receiver.try_recv().is_err());
+    }
+
+    #[test]
+    fn websocket_session_expiry_stops_reconnection() {
+        let (sender, receiver) = mpsc::channel();
+        let mut seen = MessageDeduplicator::default();
+        let mut cursors = HashMap::new();
+        let mut session = SessionState::Active;
+        let frame = r#"{"version":1,"event":"error","request_id":"request-10","payload":{"code":"session_expired"}}"#;
+        assert!(!handle_server_text(frame, &sender, &mut seen, &mut cursors, &mut session).unwrap());
+        assert_eq!(session, SessionState::Expired);
+        assert!(!session.should_reconnect());
+        assert!(receiver.try_recv().is_err());
+    }
+
+    #[test]
     fn parses_delivery_acknowledgement_and_expiry_events() {
         let delivery = r#"{"event":"message.deliver","payload":{"id":"m1","sequence":1,"conversation_id":"c1","sender_id":"u1","client_message_id":"cm1","ciphertext":"YQ==","nonce":"Yg==","encryption_version":1,"key_id":null,"created_at":"2026-11-06T00:00:00Z"}}"#;
         assert!(matches!(serde_json::from_str::<IncomingEvent>(delivery).unwrap(), IncomingEvent::MessageDeliver(_)));
