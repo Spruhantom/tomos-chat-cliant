@@ -8,7 +8,6 @@ use serde::Deserialize;
 use std::collections::{HashMap, VecDeque};
 use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
-use reqwest::StatusCode;
 use std::sync::mpsc;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -16,6 +15,7 @@ use tokio::sync::watch;
 use tokio::time::{sleep, timeout};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::header::{HeaderValue, AUTHORIZATION};
+use tokio_tungstenite::tungstenite::http::StatusCode;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 use tokio_tungstenite::connect_async;
 
@@ -190,6 +190,12 @@ impl RealtimeWorker {
             })
             .map_err(|error| format!("Could not start realtime worker: {error}"))?;
         Ok(Self { shutdown })
+    }
+}
+
+impl RealtimeWorker {
+    pub fn stop(&self) {
+        let _ = self.shutdown.send(true);
     }
 }
 
