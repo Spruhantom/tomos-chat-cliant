@@ -1,3 +1,5 @@
+pub mod messaging;
+
 use adw::prelude::*;
 use adw::Application;
 use gtk::glib;
