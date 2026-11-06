@@ -7,6 +7,17 @@ use crate::messaging::Message;
 use serde::Deserialize;
 use std::collections::{HashMap, VecDeque};
 use std::time::Duration;
+use futures_util::{SinkExt, StreamExt};
+use reqwest::StatusCode;
+use std::sync::mpsc;
+use std::thread;
+use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::watch;
+use tokio::time::{sleep, timeout};
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::http::header::{HeaderValue, AUTHORIZATION};
+use tokio_tungstenite::tungstenite::Message as WsMessage;
+use tokio_tungstenite::connect_async;
 
 pub const MAX_RECONNECT_DELAY: Duration = Duration::from_secs(30);
 pub const INITIAL_RECONNECT_DELAY: Duration = Duration::from_secs(1);
@@ -134,6 +145,279 @@ impl PendingAcknowledgements {
 
     pub fn is_empty(&self) -> bool {
         self.requests.is_empty()
+    }
+}
+
+
+#[derive(Debug)]
+pub enum RealtimeEvent {
+    Connected,
+    Disconnected(String),
+    LiveMessage(Message),
+    HistorySync(Vec<Message>),
+    Acknowledged { request_id: String, message_id: String, sequence: i64 },
+    SessionExpired,
+}
+
+/// Owns the background socket task. Dropping it asks the worker to close cleanly.
+pub struct RealtimeWorker {
+    shutdown: watch::Sender<bool>,
+}
+
+impl RealtimeWorker {
+    pub fn spawn(
+        base_url: String,
+        token: String,
+        events: mpsc::Sender<RealtimeEvent>,
+    ) -> Result<Self, String> {
+        let (shutdown, receiver) = watch::channel(false);
+        thread::Builder::new()
+            .name("tomchat-websocket".into())
+            .spawn(move || {
+                let runtime = match tokio::runtime::Builder::new_multi_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(runtime) => runtime,
+                    Err(error) => {
+                        let _ = events.send(RealtimeEvent::Disconnected(format!(
+                            "Could not start realtime worker: {error}"
+                        )));
+                        return;
+                    }
+                };
+                runtime.block_on(run_realtime(base_url, token, events, receiver));
+            })
+            .map_err(|error| format!("Could not start realtime worker: {error}"))?;
+        Ok(Self { shutdown })
+    }
+}
+
+impl Drop for RealtimeWorker {
+    fn drop(&mut self) {
+        let _ = self.shutdown.send(true);
+    }
+}
+
+async fn run_realtime(
+    base_url: String,
+    token: String,
+    events: mpsc::Sender<RealtimeEvent>,
+    mut shutdown: watch::Receiver<bool>,
+) {
+    let mut backoff = ReconnectBackoff::default();
+    let mut seen = MessageDeduplicator::default();
+    let mut session = SessionState::Active;
+
+    while session.should_reconnect() && !*shutdown.borrow() {
+        let api = match crate::messaging::TomChatMessaging::new(&base_url, &token) {
+            Ok(api) => api,
+            Err(error) => {
+                let _ = events.send(RealtimeEvent::Disconnected(error));
+                break;
+            }
+        };
+        let endpoint = match api.websocket_endpoint() {
+            Ok(endpoint) => endpoint,
+            Err(error) => {
+                let _ = events.send(RealtimeEvent::Disconnected(error));
+                break;
+            }
+        };
+        let mut request = match endpoint.into_client_request() {
+            Ok(request) => request,
+            Err(error) => {
+                let _ = events.send(RealtimeEvent::Disconnected(format!(
+                    "Could not build authenticated WebSocket request: {error}"
+                )));
+                break;
+            }
+        };
+        let authorization = match HeaderValue::from_str(&format!("Bearer {token}")) {
+            Ok(value) => value,
+            Err(_) => {
+                let _ = events.send(RealtimeEvent::Disconnected(
+                    "The session token cannot be used as an HTTP header.".into(),
+                ));
+                break;
+            }
+        };
+        request.headers_mut().insert(AUTHORIZATION, authorization);
+
+        let connection = tokio::select! {
+            _ = shutdown.changed() => return,
+            result = timeout(Duration::from_secs(10), connect_async(request)) => result,
+        };
+
+        let (mut socket, _) = match connection {
+            Ok(Ok(connection)) => connection,
+            Ok(Err(error)) => {
+                if matches!(&error, tokio_tungstenite::tungstenite::Error::Http(response)
+                    if response.status() == StatusCode::UNAUTHORIZED)
+                {
+                    let _ = events.send(RealtimeEvent::SessionExpired);
+                    session = SessionState::Expired;
+                    break;
+                }
+                let _ = events.send(RealtimeEvent::Disconnected(format!(
+                    "WebSocket connection failed: {error}"
+                )));
+                wait_to_reconnect(&mut backoff, &mut shutdown).await;
+                continue;
+            }
+            Err(_) => {
+                let _ = events.send(RealtimeEvent::Disconnected(
+                    "WebSocket connection timed out.".into(),
+                ));
+                wait_to_reconnect(&mut backoff, &mut shutdown).await;
+                continue;
+            }
+        };
+
+        backoff.reset();
+        let _ = events.send(RealtimeEvent::Connected);
+        sync_recent_history(&api, &events, &mut seen);
+
+        let mut disconnected_reason = "The server closed the WebSocket connection.".to_string();
+        loop {
+            tokio::select! {
+                changed = shutdown.changed() => {
+                    if changed.is_err() || *shutdown.borrow() {
+                        let _ = socket.close(None).await;
+                        return;
+                    }
+                }
+                frame = socket.next() => {
+                    match frame {
+                        Some(Ok(WsMessage::Text(text))) => {
+                            match handle_server_text(text.as_ref(), &events, &mut seen, &mut session) {
+                                Ok(true) => {}
+                                Ok(false) => {
+                                    let _ = socket.close(None).await;
+                                    return;
+                                }
+                                Err(error) => {
+                                    disconnected_reason = error;
+                                }
+                            }
+                            if !session.should_reconnect() {
+                                let _ = events.send(RealtimeEvent::SessionExpired);
+                                let _ = socket.close(None).await;
+                                return;
+                            }
+                        }
+                        Some(Ok(WsMessage::Ping(payload))) => {
+                            if let Err(error) = socket.send(WsMessage::Pong(payload)).await {
+                                disconnected_reason = format!("WebSocket pong failed: {error}");
+                                break;
+                            }
+                        }
+                        Some(Ok(WsMessage::Close(_))) | None => break,
+                        Some(Ok(WsMessage::Binary(_))) => {
+                            disconnected_reason = "The server sent an unsupported binary event.".into();
+                            break;
+                        }
+                        Some(Ok(WsMessage::Pong(_))) => {}
+                        Some(Err(error)) => {
+                            disconnected_reason = format!("WebSocket disconnected: {error}");
+                            break;
+                        }
+                        Some(Ok(_)) => {}
+                    }
+                }
+            }
+        }
+
+        let _ = events.send(RealtimeEvent::Disconnected(disconnected_reason));
+        wait_to_reconnect(&mut backoff, &mut shutdown).await;
+    }
+}
+
+fn sync_recent_history(
+    api: &crate::messaging::TomChatMessaging,
+    events: &mpsc::Sender<RealtimeEvent>,
+    seen: &mut MessageDeduplicator,
+) {
+    let conversations = match api.list_conversations() {
+        Ok(page) => page.conversations,
+        Err(error) => {
+            let _ = events.send(RealtimeEvent::Disconnected(format!(
+                "Could not synchronise conversations after reconnecting: {error}"
+            )));
+            return;
+        }
+    };
+    for conversation in conversations {
+        match api.list_messages(&conversation.id, 100, None) {
+            Ok(page) => {
+                let messages = page.messages.into_iter()
+                    .filter(|message| seen.insert(&message.id))
+                    .collect::<Vec<_>>();
+                if !messages.is_empty() {
+                    let _ = events.send(RealtimeEvent::HistorySync(messages));
+                }
+            }
+            Err(error) => {
+                let _ = events.send(RealtimeEvent::Disconnected(format!(
+                    "Could not synchronise conversation history: {error}"
+                )));
+            }
+        }
+    }
+}
+
+fn handle_server_text(
+    text: &str,
+    events: &mpsc::Sender<RealtimeEvent>,
+    seen: &mut MessageDeduplicator,
+    session: &mut SessionState,
+) -> Result<bool, String> {
+    let envelope: crate::messaging::WebSocketEnvelope<serde_json::Value> =
+        serde_json::from_str(text)
+            .map_err(|error| format!("Invalid WebSocket event envelope: {error}"))?;
+    if envelope.version != 1 || envelope.request_id.trim().is_empty() {
+        return Err("The server sent an unsupported WebSocket event envelope.".into());
+    }
+    match envelope.event.as_str() {
+        "message.deliver" => {
+            let message: Message = serde_json::from_value(envelope.payload)
+                .map_err(|error| format!("Invalid message delivery event: {error}"))?;
+            if seen.insert(&message.id) {
+                let _ = events.send(RealtimeEvent::LiveMessage(message));
+            }
+        }
+        "message.ack" => {
+            let ack: MessageAck = serde_json::from_value(envelope.payload)
+                .map_err(|error| format!("Invalid message acknowledgement: {error}"))?;
+            let _ = events.send(RealtimeEvent::Acknowledged {
+                request_id: envelope.request_id,
+                message_id: ack.message_id,
+                sequence: ack.sequence,
+            });
+        }
+        "error" => {
+            let error: ServerError = serde_json::from_value(envelope.payload)
+                .map_err(|error| format!("Invalid server error event: {error}"))?;
+            session.apply_server_error(&error);
+            if !session.should_reconnect() {
+                return Ok(false);
+            }
+        }
+        _ => {}
+    }
+    Ok(true)
+}
+
+async fn wait_to_reconnect(backoff: &mut ReconnectBackoff, shutdown: &mut watch::Receiver<bool>) {
+    let jitter = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_millis() as f64;
+    let factor = 0.8 + (jitter % 401.0) / 1000.0;
+    let delay = backoff.next_delay(factor);
+    tokio::select! {
+        _ = shutdown.changed() => {}
+        _ = sleep(delay) => {}
     }
 }
 
