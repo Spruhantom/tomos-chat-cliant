@@ -5,13 +5,13 @@
 use crate::messaging::TomChatMessaging;
 use adw::prelude::*;
 use gtk::glib;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::mpsc;
 use std::time::Duration;
 
 enum UiEvent {
     Conversations(Result<Vec<crate::messaging::Conversation>, String>),
-    History(Result<Vec<crate::messaging::Message>, String>),
+    History(String, Result<Vec<crate::messaging::Message>, String>),
 }
 
 pub fn show(app: &adw::Application, base_url: String, token: String, username: String) {
@@ -121,6 +121,7 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
     let conversation_ids = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
     let selected_conversation = std::rc::Rc::new(std::cell::RefCell::new(None::<String>));
     let seen_message_ids = std::rc::Rc::new(std::cell::RefCell::new(HashSet::<String>::new()));
+    let pending_messages = std::rc::Rc::new(std::cell::RefCell::new(HashMap::<String, Vec<crate::messaging::Message>>::new()));
     let ids_for_poll = conversation_ids.clone();
     let list_for_poll = conversation_list.clone();
     let messages_for_poll = message_list.clone();
@@ -128,6 +129,7 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
     let status_for_poll = realtime_status.clone();
     let selected_for_poll = selected_conversation.clone();
     let seen_for_poll = seen_message_ids.clone();
+    let pending_for_poll = pending_messages.clone();
     let realtime_rx = {
         let (realtime_tx, realtime_rx) = mpsc::channel();
         let worker = crate::realtime::RealtimeWorker::spawn(base_url.clone(), token.clone(), realtime_tx);
@@ -180,19 +182,29 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
                 Ok(UiEvent::Conversations(Err(error))) => {
                     heading_for_poll.set_text(&format!("Could not load conversations: {error}"));
                 }
-                Ok(UiEvent::History(Ok(items))) => {
+                Ok(UiEvent::History(conversation_id, Ok(items))) => {
+                    if selected_for_poll.borrow().as_deref() != Some(conversation_id.as_str()) {
+                        continue;
+                    }
                     while let Some(child) = messages_for_poll.first_child() {
                         messages_for_poll.remove(&child);
                     }
                     seen_for_poll.borrow_mut().clear();
-                    for message in items {
+                    let mut combined = items;
+                    if let Some(pending) = pending_for_poll.borrow_mut().remove(&conversation_id) {
+                        combined.extend(pending);
+                    }
+                    combined.sort_by_key(|message| message.sequence);
+                    for message in combined {
                         if seen_for_poll.borrow_mut().insert(message.id.clone()) {
                             append_message_row(&messages_for_poll, &message);
                         }
                     }
                 }
-                Ok(UiEvent::History(Err(error))) => {
-                    heading_for_poll.set_text(&format!("Could not load message history: {error}"));
+                Ok(UiEvent::History(conversation_id, Err(error))) => {
+                    if selected_for_poll.borrow().as_deref() == Some(conversation_id.as_str()) {
+                        heading_for_poll.set_text(&format!("Could not load message history: {error}"));
+                    }
                 }
                 Err(mpsc::TryRecvError::Empty) => break,
                 Err(mpsc::TryRecvError::Disconnected) => return glib::ControlFlow::Break,
@@ -212,19 +224,31 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
                 Ok(crate::realtime::RealtimeEvent::HistorySync(items)) => {
                     let selected = selected_for_poll.borrow().clone();
                     for message in items {
-                        if selected.as_deref() == Some(message.conversation_id.as_str())
-                            && seen_for_poll.borrow_mut().insert(message.id.clone())
-                        {
-                            append_message_row(&messages_for_poll, &message);
+                        if selected.as_deref() == Some(message.conversation_id.as_str()) {
+                            if seen_for_poll.borrow_mut().insert(message.id.clone()) {
+                                append_message_row(&messages_for_poll, &message);
+                            }
+                        } else {
+                            pending_for_poll
+                                .borrow_mut()
+                                .entry(message.conversation_id.clone())
+                                .or_default()
+                                .push(message);
                         }
                     }
                 }
                 Ok(crate::realtime::RealtimeEvent::LiveMessage(message)) => {
                     let selected = selected_for_poll.borrow().clone();
-                    if selected.as_deref() == Some(message.conversation_id.as_str())
-                        && seen_for_poll.borrow_mut().insert(message.id.clone())
-                    {
-                        append_message_row(&messages_for_poll, &message);
+                    if selected.as_deref() == Some(message.conversation_id.as_str()) {
+                        if seen_for_poll.borrow_mut().insert(message.id.clone()) {
+                            append_message_row(&messages_for_poll, &message);
+                        }
+                    } else {
+                        pending_for_poll
+                            .borrow_mut()
+                            .entry(message.conversation_id.clone())
+                            .or_default()
+                            .push(message);
                     }
                 }
                 Ok(crate::realtime::RealtimeEvent::Acknowledged { sequence, .. }) => {
@@ -259,7 +283,7 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
                 api.list_messages(&conversation_id, 100, None)
                     .map(|page| page.messages)
             });
-            let _ = sender.send(UiEvent::History(result));
+            let _ = sender.send(UiEvent::History(conversation_id, result));
         });
     });
 
