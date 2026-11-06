@@ -23,3 +23,10 @@ jobs:
       - run: cargo check --locked
       - run: cargo test --locked
       - run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Upload generated Cargo lockfile
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tomchat-client-cargo-lock
+          path: Cargo.lock
+          if-no-files-found: error
