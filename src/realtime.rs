@@ -280,7 +280,7 @@ async fn run_realtime(
             }
         };
 
-        backoff.reset();
+        let connected_at = std::time::Instant::now();
         let _ = events.send(RealtimeEvent::Connected);
         sync_recent_history(&api, &events, &mut seen, &mut cursors);
 
@@ -335,6 +335,9 @@ async fn run_realtime(
             }
         }
 
+        if connected_at.elapsed() >= Duration::from_secs(30) {
+            backoff.reset();
+        }
         let _ = events.send(RealtimeEvent::Disconnected(disconnected_reason));
         wait_to_reconnect(&mut backoff, &mut shutdown).await;
     }
