@@ -1,5 +1,6 @@
 pub mod conversations;
 pub mod messaging;
+pub mod realtime;
 
 use adw::prelude::*;
 use adw::Application;
