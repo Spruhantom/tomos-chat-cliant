@@ -162,23 +162,32 @@ fn build_login(app: &Application) {
         status_for_click.set_text("Connecting…");
         let sender = tx.clone();
         std::thread::spawn(move || {
-            let agent = ureq::AgentBuilder::new()
+            let result = reqwest::blocking::Client::builder()
                 .timeout(Duration::from_secs(20))
-                .timeout_connect(Duration::from_secs(5))
-                .timeout_read(Duration::from_secs(15))
-                .timeout_write(Duration::from_secs(15))
-                .redirects(0)
-                .build();
-            let result = agent
-                .post(&format!("{base}/api/v1/auth/login"))
-                .send_json(&Credentials {
-                    username: &user,
-                    password: &pass,
-                })
-                .map_err(|error| format!("Sign-in failed: {error}"))
-                .and_then(|response| {
+                .connect_timeout(Duration::from_secs(5))
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .map_err(|error| format!("Could not configure connection: {error}"))
+                .and_then(|client| {
+                    let response = client
+                        .post(format!("{base}/api/v1/auth/login"))
+                        .json(&Credentials {
+                            username: &user,
+                            password: &pass,
+                        })
+                        .send()
+                        .map_err(|error| format!("Sign-in failed: {error}"))?;
+                    if response.status().is_redirection() {
+                        return Err(
+                            "The server redirected the login request; redirects are not followed."
+                                .to_string(),
+                        );
+                    }
+                    let response = response
+                        .error_for_status()
+                        .map_err(|error| format!("Sign-in failed: {error}"))?;
                     response
-                        .into_json::<LoginResponse>()
+                        .json::<LoginResponse>()
                         .map_err(|error| format!("Invalid server response: {error}"))
                 })
                 .map(|reply| {
