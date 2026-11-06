@@ -299,6 +299,7 @@ async fn run_realtime(
                             match handle_server_text(text.as_ref(), &events, &mut seen, &mut session) {
                                 Ok(true) => {}
                                 Ok(false) => {
+                                    let _ = events.send(RealtimeEvent::SessionExpired);
                                     let _ = socket.close(None).await;
                                     return;
                                 }
