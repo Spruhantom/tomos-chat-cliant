@@ -15,6 +15,7 @@ pub struct Conversation {
     pub created_at: String,
     pub last_message_at: Option<String>,
     pub member_count: usize,
+    pub member_ids: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
