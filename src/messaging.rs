@@ -59,6 +59,7 @@ pub struct Message {
 pub struct MessagePage {
     pub messages: Vec<Message>,
     pub next_before: Option<i64>,
+    pub next_after: Option<i64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -149,6 +150,31 @@ impl TomChatMessaging {
             .map_err(|error| format!("Could not load messages: {error}"))?
             .json()
             .map_err(|error| format!("Invalid message history response: {error}"))
+    }
+
+    /// Fetch messages newer than the last sequence seen before a disconnect.
+    pub fn list_messages_after(
+        &self,
+        conversation_id: &str,
+        limit: u8,
+        after: i64,
+    ) -> Result<MessagePage, String> {
+        if !(1..=100).contains(&limit) || after < 1 {
+            return Err("Message page size or forward cursor is invalid.".to_string());
+        }
+        self.client
+            .get(format!(
+                "{}/api/v1/conversations/{}/messages",
+                self.base_url, conversation_id
+            ))
+            .bearer_auth(&self.token)
+            .query(&[("limit", limit.to_string()), ("after", after.to_string())])
+            .send()
+            .map_err(|error| format!("Could not synchronise new messages: {error}"))?
+            .error_for_status()
+            .map_err(|error| format!("Could not synchronise new messages: {error}"))?
+            .json()
+            .map_err(|error| format!("Invalid forward history response: {error}"))
     }
 
     pub fn send_encrypted_message(
