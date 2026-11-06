@@ -263,7 +263,6 @@ async fn run_realtime(
                     if response.status() == StatusCode::UNAUTHORIZED)
                 {
                     let _ = events.send(RealtimeEvent::SessionExpired);
-                    session = SessionState::Expired;
                     break;
                 }
                 let _ = events.send(RealtimeEvent::Disconnected(format!(
