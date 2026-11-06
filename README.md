@@ -29,3 +29,15 @@ Remote server connections must use HTTPS. Plain HTTP is allowed only for the exa
 ## Not yet implemented
 
 Registration UI, token/keyring persistence, WebSocket live delivery and reconnect handling, secure message composition, reviewed end-to-end encryption and device-key management, notifications, calls, and package builds.
+
+## Realtime client implementation status
+
+The client now contains a transport-independent realtime state module with tests
+for bounded exponential reconnect delays, resetting backoff after a successful
+connection, duplicate-delivery suppression, request/acknowledgement correlation,
+and terminal handling of the `session_expired` server error.
+
+The actual WebSocket I/O worker and GTK live-update bridge are still pending.
+The current client therefore continues to use REST history and does not claim
+live messaging is available. Message composition remains disabled until a
+reviewed client-side encryption and key-management implementation exists.
