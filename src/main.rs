@@ -1,4 +1,5 @@
 pub mod messaging;
+pub mod conversations;
 
 use adw::prelude::*;
 use adw::Application;
@@ -64,6 +65,13 @@ struct LoginUser {
     username: String,
 }
 
+#[derive(Debug)]
+struct LoginSession {
+    base_url: String,
+    username: String,
+    token: String,
+}
+
 fn main() {
     let app = Application::builder()
         .application_id("uk.co.tomserver.TomChat")
@@ -123,13 +131,15 @@ fn build_login(app: &Application) {
     page.set_content(Some(&content));
     window.set_content(Some(&page));
 
-    let (tx, rx) = mpsc::channel::<Result<String, String>>();
+    let (tx, rx) = mpsc::channel::<Result<LoginSession, String>>();
+    let app_for_poll = app.clone();
     let status_for_poll = status.clone();
     let login_for_poll = login.clone();
     glib::timeout_add_local(Duration::from_millis(100), move || match rx.try_recv() {
-        Ok(Ok(message)) => {
-            status_for_poll.set_text(&message);
+        Ok(Ok(session)) => {
+            status_for_poll.set_text(&format!("Signed in as {}. Loading conversations…", session.username));
             login_for_poll.set_sensitive(true);
+            crate::conversations::show(&app_for_poll, session.base_url, session.token, session.username);
             glib::ControlFlow::Continue
         }
         Ok(Err(message)) => {
@@ -192,13 +202,11 @@ fn build_login(app: &Application) {
                         .json::<LoginResponse>()
                         .map_err(|error| format!("Invalid server response: {error}"))
                 })
-                .map(|reply| {
-                    // Token is deliberately not persisted until OS-keyring integration is added.
-                    let _session_token = reply.token;
-                    format!(
-                        "Signed in as {}. Secure token storage is coming next.",
-                        reply.user.username
-                    )
+                .map(|reply| LoginSession {
+                    // Session token remains in memory only; keyring support is a separate task.
+                    base_url: base,
+                    username: reply.user.username,
+                    token: reply.token,
                 });
             let _ = sender.send(result);
         });
