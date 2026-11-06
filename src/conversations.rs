@@ -125,11 +125,18 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
                     }
                     ids_for_poll.borrow_mut().clear();
                     for item in items {
-                        let label = item.title.clone().filter(|value| !value.trim().is_empty())
+                        let label = item
+                            .title
+                            .clone()
+                            .filter(|value| !value.trim().is_empty())
                             .unwrap_or_else(|| {
-                                let peers = item.member_ids.iter().take(3)
+                                let peers = item
+                                    .member_ids
+                                    .iter()
+                                    .take(3)
                                     .map(|id| id.chars().take(8).collect::<String>())
-                                    .collect::<Vec<_>>().join(", ");
+                                    .collect::<Vec<_>>()
+                                    .join(", ");
                                 format!("{} · {}", item.kind, peers)
                             });
                         let row_label = gtk::Label::new(Some(&label));
@@ -197,9 +204,10 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
         let token = token_for_history.clone();
         let sender = sender.clone();
         std::thread::spawn(move || {
-            let result = TomChatMessaging::new(&base, &token)
-                .and_then(|api| api.list_messages(&conversation_id, 100, None)
-                    .map(|page| page.messages));
+            let result = TomChatMessaging::new(&base, &token).and_then(|api| {
+                api.list_messages(&conversation_id, 100, None)
+                    .map(|page| page.messages)
+            });
             let _ = sender.send(UiEvent::History(result));
         });
     });
