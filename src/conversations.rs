@@ -68,7 +68,9 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
         .child(&message_list)
         .build();
     let composer = gtk::Entry::builder()
-        .placeholder_text("Message composition will be enabled after client-side encryption is implemented")
+        .placeholder_text(
+            "Message composition will be enabled after client-side encryption is implemented",
+        )
         .hexpand(true)
         .sensitive(false)
         .build();
