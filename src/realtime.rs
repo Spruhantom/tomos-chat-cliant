@@ -213,6 +213,7 @@ async fn run_realtime(
 ) {
     let mut backoff = ReconnectBackoff::default();
     let mut seen = MessageDeduplicator::default();
+    let mut cursors = HashMap::<String, i64>::new();
     let mut session = SessionState::Active;
 
     while session.should_reconnect() && !*shutdown.borrow() {
@@ -282,7 +283,7 @@ async fn run_realtime(
 
         backoff.reset();
         let _ = events.send(RealtimeEvent::Connected);
-        sync_recent_history(&api, &events, &mut seen);
+        sync_recent_history(&api, &events, &mut seen, &mut cursors);
 
         let mut disconnected_reason = "The server closed the WebSocket connection.".to_string();
         loop {
@@ -296,7 +297,7 @@ async fn run_realtime(
                 frame = socket.next() => {
                     match frame {
                         Some(Ok(WsMessage::Text(text))) => {
-                            match handle_server_text(text.as_ref(), &events, &mut seen, &mut session) {
+                            match handle_server_text(text.as_ref(), &events, &mut seen, &mut cursors, &mut session) {
                                 Ok(true) => {}
                                 Ok(false) => {
                                     let _ = events.send(RealtimeEvent::SessionExpired);
@@ -344,6 +345,7 @@ fn sync_recent_history(
     api: &crate::messaging::TomChatMessaging,
     events: &mpsc::Sender<RealtimeEvent>,
     seen: &mut MessageDeduplicator,
+    cursors: &mut HashMap<String, i64>,
 ) {
     let conversations = match api.list_conversations() {
         Ok(page) => page.conversations,
@@ -355,20 +357,38 @@ fn sync_recent_history(
         }
     };
     for conversation in conversations {
-        match api.list_messages(&conversation.id, 100, None) {
-            Ok(page) => {
-                let messages = page.messages.into_iter()
-                    .filter(|message| seen.insert(&message.id))
-                    .collect::<Vec<_>>();
-                if !messages.is_empty() {
-                    let _ = events.send(RealtimeEvent::HistorySync(messages));
+        let mut page = if let Some(cursor) = cursors.get(&conversation.id).copied() {
+            api.list_messages_after(&conversation.id, 100, cursor)
+        } else {
+            api.list_messages(&conversation.id, 100, None)
+        };
+        let mut recovered = Vec::new();
+        loop {
+            match page {
+                Ok(current) => {
+                    for message in current.messages {
+                        let cursor = cursors.entry(conversation.id.clone()).or_insert(0);
+                        *cursor = (*cursor).max(message.sequence);
+                        if seen.insert(&message.id) {
+                            recovered.push(message);
+                        }
+                    }
+                    if let Some(next) = current.next_after {
+                        page = api.list_messages_after(&conversation.id, 100, next);
+                    } else {
+                        break;
+                    }
+                }
+                Err(error) => {
+                    let _ = events.send(RealtimeEvent::Disconnected(format!(
+                        "Could not synchronise conversation history: {error}"
+                    )));
+                    break;
                 }
             }
-            Err(error) => {
-                let _ = events.send(RealtimeEvent::Disconnected(format!(
-                    "Could not synchronise conversation history: {error}"
-                )));
-            }
+        }
+        if !recovered.is_empty() {
+            let _ = events.send(RealtimeEvent::HistorySync(recovered));
         }
     }
 }
@@ -377,6 +397,7 @@ fn handle_server_text(
     text: &str,
     events: &mpsc::Sender<RealtimeEvent>,
     seen: &mut MessageDeduplicator,
+    cursors: &mut HashMap<String, i64>,
     session: &mut SessionState,
 ) -> Result<bool, String> {
     let envelope: crate::messaging::WebSocketEnvelope<serde_json::Value> =
@@ -389,6 +410,8 @@ fn handle_server_text(
         "message.deliver" => {
             let message: Message = serde_json::from_value(envelope.payload)
                 .map_err(|error| format!("Invalid message delivery event: {error}"))?;
+            let cursor = cursors.entry(message.conversation_id.clone()).or_insert(0);
+            *cursor = (*cursor).max(message.sequence);
             if seen.insert(&message.id) {
                 let _ = events.send(RealtimeEvent::LiveMessage(message));
             }
