@@ -124,21 +124,19 @@ fn build_login(app: &Application) {
     let (tx, rx) = mpsc::channel::<Result<String, String>>();
     let status_for_poll = status.clone();
     let login_for_poll = login.clone();
-    glib::timeout_add_local(Duration::from_millis(100), move || {
-        match rx.try_recv() {
-            Ok(Ok(message)) => {
-                status_for_poll.set_text(&message);
-                login_for_poll.set_sensitive(true);
-                glib::ControlFlow::Continue
-            }
-            Ok(Err(message)) => {
-                status_for_poll.set_text(&message);
-                login_for_poll.set_sensitive(true);
-                glib::ControlFlow::Continue
-            }
-            Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-            Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
+    glib::timeout_add_local(Duration::from_millis(100), move || match rx.try_recv() {
+        Ok(Ok(message)) => {
+            status_for_poll.set_text(&message);
+            login_for_poll.set_sensitive(true);
+            glib::ControlFlow::Continue
         }
+        Ok(Err(message)) => {
+            status_for_poll.set_text(&message);
+            login_for_poll.set_sensitive(true);
+            glib::ControlFlow::Continue
+        }
+        Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+        Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
     });
 
     let server_entry = server.clone();
