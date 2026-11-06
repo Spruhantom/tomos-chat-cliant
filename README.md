@@ -4,7 +4,7 @@ Native Linux desktop client for Ubuntu, Fedora, and Arch Linux, built with Rust,
 
 ## Stage 3 transport support
 
-The current GUI provides server address, username, and password fields and sends a login request to POST /api/v1/auth/login. It displays the authenticated username after a successful response. The server protocol now provides conversation, encrypted-message history and WebSocket event endpoints. A typed Rust messaging API module now supports conversation listing/creation, paginated history, encrypted-message submission and WebSocket endpoint construction. The GTK conversation browser is now connected to the REST API: it lists conversations, opens paginated message history and displays message metadata without exposing ciphertext. The live WebSocket receive/reconnect loop, secure message composition, client-side encryption and device-key management remain to be implemented.
+The current GUI provides server address, username, and password fields and sends a login request to POST /api/v1/auth/login. It displays the authenticated username after a successful response. The server protocol now provides conversation, encrypted-message history and WebSocket event endpoints. A typed Rust messaging API module now supports conversation listing/creation, paginated history, encrypted-message submission and WebSocket endpoint construction. The GTK conversation browser is now connected to the REST API: it lists conversations, opens paginated message history and displays message metadata without exposing ciphertext. The client now opens an authenticated WebSocket using the in-memory session token, receives live message deliveries and acknowledgements, reconnects with bounded exponential backoff, stops retrying after session expiry, and synchronises missed messages through the REST forward-sequence cursor. The GTK conversation view displays live messages and buffers recovered messages for conversations that are not currently selected. Secure message composition, client-side encryption and device-key management remain to be implemented.
 
 The session token is held in memory for the signed-in conversation window and is not written to disk. OS keyring integration remains outstanding.
 
@@ -28,7 +28,7 @@ Remote server connections must use HTTPS. Plain HTTP is allowed only for the exa
 
 ## Not yet implemented
 
-Registration UI, token/keyring persistence, WebSocket live delivery and reconnect handling, secure message composition, reviewed end-to-end encryption and device-key management, notifications, calls, and package builds.
+Registration UI, token/keyring persistence, secure message composition, reviewed end-to-end encryption and device-key management, notifications, calls, and package builds. Manual GTK runtime testing is still required; CI checks compilation, tests, formatting and Clippy but does not launch the desktop UI.
 
 ## Realtime client implementation status
 
