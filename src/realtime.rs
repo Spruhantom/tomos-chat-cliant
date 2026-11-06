@@ -4,20 +4,20 @@
 //! session-expiry and delivery rules can be tested without a live server.
 
 use crate::messaging::Message;
+use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use std::collections::{HashMap, VecDeque};
-use std::time::Duration;
-use futures_util::{SinkExt, StreamExt};
 use std::sync::mpsc;
 use std::thread;
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::watch;
 use tokio::time::{sleep, timeout};
+use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::header::{HeaderValue, AUTHORIZATION};
 use tokio_tungstenite::tungstenite::http::StatusCode;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
-use tokio_tungstenite::connect_async;
 
 pub const MAX_RECONNECT_DELAY: Duration = Duration::from_secs(30);
 pub const INITIAL_RECONNECT_DELAY: Duration = Duration::from_secs(1);
@@ -72,7 +72,9 @@ pub struct ReconnectBackoff {
 
 impl Default for ReconnectBackoff {
     fn default() -> Self {
-        Self { next: INITIAL_RECONNECT_DELAY }
+        Self {
+            next: INITIAL_RECONNECT_DELAY,
+        }
     }
 }
 
@@ -80,7 +82,11 @@ impl ReconnectBackoff {
     /// Return the current delay, then double it for the next attempt.
     /// Jitter should be sampled in the range 0.8..=1.2 by the worker.
     pub fn next_delay(&mut self, jitter: f64) -> Duration {
-        let factor = if jitter.is_finite() { jitter.clamp(0.8, 1.2) } else { 1.0 };
+        let factor = if jitter.is_finite() {
+            jitter.clamp(0.8, 1.2)
+        } else {
+            1.0
+        };
         let delay = Duration::from_secs_f64(self.next.as_secs_f64() * factor);
         self.next = self.next.saturating_mul(2).min(MAX_RECONNECT_DELAY);
         delay.min(MAX_RECONNECT_DELAY)
@@ -106,7 +112,11 @@ impl Default for MessageDeduplicator {
 
 impl MessageDeduplicator {
     pub fn new(capacity: usize) -> Self {
-        Self { capacity: capacity.max(1), ids: HashMap::new(), order: VecDeque::new() }
+        Self {
+            capacity: capacity.max(1),
+            ids: HashMap::new(),
+            order: VecDeque::new(),
+        }
     }
 
     /// Returns true only for the first delivery of a server message ID.
@@ -148,14 +158,17 @@ impl PendingAcknowledgements {
     }
 }
 
-
 #[derive(Debug)]
 pub enum RealtimeEvent {
     Connected,
     Disconnected(String),
     LiveMessage(Message),
     HistorySync(Vec<Message>),
-    Acknowledged { request_id: String, message_id: String, sequence: i64 },
+    Acknowledged {
+        request_id: String,
+        message_id: String,
+        sequence: i64,
+    },
     SessionExpired,
 }
 
@@ -461,11 +474,18 @@ mod tests {
     fn disconnects_use_exponential_backoff_capped_at_thirty_seconds() {
         let mut backoff = ReconnectBackoff::default();
         let delays = (0..7).map(|_| backoff.next_delay(1.0)).collect::<Vec<_>>();
-        assert_eq!(delays, vec![
-            Duration::from_secs(1), Duration::from_secs(2), Duration::from_secs(4),
-            Duration::from_secs(8), Duration::from_secs(16), Duration::from_secs(30),
-            Duration::from_secs(30),
-        ]);
+        assert_eq!(
+            delays,
+            vec![
+                Duration::from_secs(1),
+                Duration::from_secs(2),
+                Duration::from_secs(4),
+                Duration::from_secs(8),
+                Duration::from_secs(16),
+                Duration::from_secs(30),
+                Duration::from_secs(30),
+            ]
+        );
     }
 
     #[test]
@@ -492,7 +512,10 @@ mod tests {
         let mut pending = PendingAcknowledgements::default();
         pending.track("request-1".into(), "client-message-1".into());
         assert_eq!(pending.acknowledge("unknown"), None);
-        assert_eq!(pending.acknowledge("request-1").as_deref(), Some("client-message-1"));
+        assert_eq!(
+            pending.acknowledge("request-1").as_deref(),
+            Some("client-message-1")
+        );
         assert!(pending.is_empty());
     }
 
@@ -500,7 +523,9 @@ mod tests {
     fn expired_session_is_not_reconnected_with_the_same_token() {
         let mut state = SessionState::Active;
         assert!(state.should_reconnect());
-        state.apply_server_error(&ServerError { code: "session_expired".into() });
+        state.apply_server_error(&ServerError {
+            code: "session_expired".into(),
+        });
         assert_eq!(state, SessionState::Expired);
         assert!(!state.should_reconnect());
     }
@@ -508,7 +533,9 @@ mod tests {
     #[test]
     fn unrelated_server_errors_do_not_expire_the_session() {
         let mut state = SessionState::Active;
-        state.apply_server_error(&ServerError { code: "rate_limit_exceeded".into() });
+        state.apply_server_error(&ServerError {
+            code: "rate_limit_exceeded".into(),
+        });
         assert_eq!(state, SessionState::Active);
         assert!(state.should_reconnect());
     }
@@ -538,7 +565,10 @@ mod tests {
         assert!(handle_server_text(frame, &sender, &mut seen, &mut cursors, &mut session).unwrap());
         assert!(handle_server_text(frame, &sender, &mut seen, &mut cursors, &mut session).unwrap());
         assert_eq!(cursors.get("c1"), Some(&4));
-        assert!(matches!(receiver.try_recv().unwrap(), RealtimeEvent::LiveMessage(_)));
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            RealtimeEvent::LiveMessage(_)
+        ));
         assert!(receiver.try_recv().is_err());
     }
 
@@ -549,7 +579,9 @@ mod tests {
         let mut cursors = HashMap::new();
         let mut session = SessionState::Active;
         let frame = r#"{"version":1,"event":"error","request_id":"request-10","payload":{"code":"session_expired"}}"#;
-        assert!(!handle_server_text(frame, &sender, &mut seen, &mut cursors, &mut session).unwrap());
+        assert!(
+            !handle_server_text(frame, &sender, &mut seen, &mut cursors, &mut session).unwrap()
+        );
         assert_eq!(session, SessionState::Expired);
         assert!(!session.should_reconnect());
         assert!(receiver.try_recv().is_err());
@@ -558,10 +590,19 @@ mod tests {
     #[test]
     fn parses_delivery_acknowledgement_and_expiry_events() {
         let delivery = r#"{"event":"message.deliver","payload":{"id":"m1","sequence":1,"conversation_id":"c1","sender_id":"u1","client_message_id":"cm1","ciphertext":"YQ==","nonce":"Yg==","encryption_version":1,"key_id":null,"created_at":"2026-11-06T00:00:00Z"}}"#;
-        assert!(matches!(serde_json::from_str::<IncomingEvent>(delivery).unwrap(), IncomingEvent::MessageDeliver(_)));
+        assert!(matches!(
+            serde_json::from_str::<IncomingEvent>(delivery).unwrap(),
+            IncomingEvent::MessageDeliver(_)
+        ));
         let ack = r#"{"event":"message.ack","payload":{"message_id":"m1","sequence":1}}"#;
-        assert!(matches!(serde_json::from_str::<IncomingEvent>(ack).unwrap(), IncomingEvent::MessageAck(_)));
+        assert!(matches!(
+            serde_json::from_str::<IncomingEvent>(ack).unwrap(),
+            IncomingEvent::MessageAck(_)
+        ));
         let expired = r#"{"event":"error","payload":{"code":"session_expired"}}"#;
-        assert!(matches!(serde_json::from_str::<IncomingEvent>(expired).unwrap(), IncomingEvent::Error(_)));
+        assert!(matches!(
+            serde_json::from_str::<IncomingEvent>(expired).unwrap(),
+            IncomingEvent::Error(_)
+        ));
     }
 }

@@ -121,7 +121,10 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
     let conversation_ids = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
     let selected_conversation = std::rc::Rc::new(std::cell::RefCell::new(None::<String>));
     let seen_message_ids = std::rc::Rc::new(std::cell::RefCell::new(HashSet::<String>::new()));
-    let pending_messages = std::rc::Rc::new(std::cell::RefCell::new(HashMap::<String, Vec<crate::messaging::Message>>::new()));
+    let pending_messages = std::rc::Rc::new(std::cell::RefCell::new(HashMap::<
+        String,
+        Vec<crate::messaging::Message>,
+    >::new()));
     let ids_for_poll = conversation_ids.clone();
     let list_for_poll = conversation_list.clone();
     let messages_for_poll = message_list.clone();
@@ -132,7 +135,8 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
     let pending_for_poll = pending_messages.clone();
     let realtime_rx = {
         let (realtime_tx, realtime_rx) = mpsc::channel();
-        let worker = crate::realtime::RealtimeWorker::spawn(base_url.clone(), token.clone(), realtime_tx);
+        let worker =
+            crate::realtime::RealtimeWorker::spawn(base_url.clone(), token.clone(), realtime_tx);
         match worker {
             Ok(worker) => {
                 window.connect_close_request(move |_| {
@@ -203,7 +207,8 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
                 }
                 Ok(UiEvent::History(conversation_id, Err(error))) => {
                     if selected_for_poll.borrow().as_deref() == Some(conversation_id.as_str()) {
-                        heading_for_poll.set_text(&format!("Could not load message history: {error}"));
+                        heading_for_poll
+                            .set_text(&format!("Could not load message history: {error}"));
                     }
                 }
                 Err(mpsc::TryRecvError::Empty) => break,
@@ -216,10 +221,13 @@ pub fn show(app: &adw::Application, base_url: String, token: String, username: S
                     status_for_poll.set_text("Live connection established; synchronising history…");
                 }
                 Ok(crate::realtime::RealtimeEvent::Disconnected(reason)) => {
-                    status_for_poll.set_text(&format!("Live connection interrupted. Reconnecting… {reason}"));
+                    status_for_poll.set_text(&format!(
+                        "Live connection interrupted. Reconnecting… {reason}"
+                    ));
                 }
                 Ok(crate::realtime::RealtimeEvent::SessionExpired) => {
-                    status_for_poll.set_text("Your TomChat session has expired. Please sign in again.");
+                    status_for_poll
+                        .set_text("Your TomChat session has expired. Please sign in again.");
                 }
                 Ok(crate::realtime::RealtimeEvent::HistorySync(items)) => {
                     let selected = selected_for_poll.borrow().clone();
