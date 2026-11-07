@@ -38,6 +38,12 @@ Use the desktop Secret Service through a maintained integration for small secret
 
 MLS state changes and outbound protocol messages must be committed transactionally. OpenMLS async operations are not cancellation-safe: on cancellation or storage failure, roll back the transaction, discard the in-memory group and reload it from durable storage. A crash or failed write must not leave the in-memory group state ahead of durable storage. Never log plaintext, private keys, KeyPackages, exported secrets, or message ciphertext. Disable cryptographic debug features in release builds.
 
+### Encrypted local-state envelope (implemented prototype)
+
+The client now has a small storage-crypto module for serialized MLS state blobs. It uses XChaCha20-Poly1305 with a fresh OS-random 192-bit nonce per write, a versioned envelope, and caller-supplied associated data (the stable group identifier). It rejects malformed envelopes, modified ciphertext, a wrong key, and a mismatched group context. The wrapping key type redacts Debug output and zeroizes its in-memory bytes on drop.
+
+This is only the authenticated-encryption primitive. The key is not yet provisioned or persisted by Secret Service, and the OpenMLS provider is not yet backed by this envelope. No production MLS state is currently persisted. A future storage adapter must serialize/restore OpenMLS state atomically, store the wrapping key in Secret Service, and discard/reload in-memory group state after any failed or cancelled write.
+
 ## 5. Threat model and limitations
 
 Assume the delivery server can observe, drop, reorder, replay, delay and inject network messages, and can lie about device-directory contents. MLS protects message confidentiality and integrity only when clients validate credentials and membership changes correctly.
