@@ -163,7 +163,7 @@ fn configure_sqlcipher(
     for byte in key.expose_for_secret_service() {
         let _ = write!(&mut *key_hex, "{byte:02x}");
     }
-    let key_pragma = Zeroizing::new(format!("x'{key_hex}'"));
+    let key_pragma = Zeroizing::new(format!("x'{}'", key_hex.as_str()));
     connection.pragma_update(None, "key", key_pragma.as_str())?;
 
     // Fail closed on a plain SQLite build: the pragma must expose SQLCipher.
