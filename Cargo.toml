@@ -15,3 +15,9 @@ url = "2"
 futures-util = "0.3"
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
 tokio-tungstenite = { version = "0.26.2", features = ["rustls-tls-native-roots"] }
+
+# MLS E2EE protocol and reviewed RustCrypto implementation.
+openmls = "=0.9.2"
+openmls_basic_credential = "=0.6.0"
+openmls_rust_crypto = "=0.6.0"
+tls_codec = { version = "=0.5.0", features = ["derive", "serde", "mls"] }
