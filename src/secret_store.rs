@@ -16,8 +16,7 @@ const ATTRIBUTES: [(&str, &str); 3] = [
 /// Load the existing SQLCipher key from the desktop Secret Service, or create
 /// and store a new random key. Never falls back to a password-derived key or a
 /// plaintext file if the Secret Service is unavailable.
-pub async fn load_or_create_storage_key(
-) -> Result<StorageKey, Box<dyn Error + Send + Sync>> {
+pub async fn load_or_create_storage_key() -> Result<StorageKey, Box<dyn Error + Send + Sync>> {
     let service = SecretService::connect(EncryptionType::Dh).await?;
     let attributes = HashMap::from(ATTRIBUTES);
 
