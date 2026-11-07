@@ -91,15 +91,21 @@ impl PersistentMlsProvider {
             fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
         }
 
-        let connection = Connection::open(path)?;
+        let mut connection = Connection::open(path)?;
         configure_sqlcipher(&connection, key)?;
         connection.pragma_update(None, "cipher_memory_security", "ON")?;
         connection.pragma_update(None, "secure_delete", "ON")?;
         connection.pragma_update(None, "journal_mode", "WAL")?;
 
+        // Migrations require mutable access to the connection. Run them before
+        // wrapping the connection in Rc for shared transactional provider use.
+        {
+            let mut migrations = SqliteStorageProvider::<JsonCodec, _>::new(&mut connection);
+            migrations.run_migrations()?;
+        }
+
         let connection = Rc::new(connection);
-        let mut storage = SqliteStorageProvider::<JsonCodec, _>::new(Rc::clone(&connection));
-        storage.run_migrations()?;
+        let storage = SqliteStorageProvider::<JsonCodec, _>::new(Rc::clone(&connection));
 
         Ok(Self {
             crypto: OpenMlsRustCrypto::default(),
