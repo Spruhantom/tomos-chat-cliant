@@ -2,8 +2,8 @@ pub mod conversations;
 pub mod crypto;
 pub mod messaging;
 pub mod mls_storage;
-pub mod secret_store;
 pub mod realtime;
+pub mod secret_store;
 pub mod storage_crypto;
 
 use adw::prelude::*;
