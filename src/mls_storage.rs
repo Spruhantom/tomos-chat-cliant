@@ -44,6 +44,15 @@ pub struct PersistentMlsProvider {
 }
 
 impl PersistentMlsProvider {
+    /// Open the user's TomChat MLS database using a key loaded from Linux
+    /// Secret Service. This is the normal desktop entry point.
+    pub async fn open_from_secret_service(
+        path: impl AsRef<Path>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let key = crate::secret_store::load_or_create_storage_key().await?;
+        Self::open(path, &key)
+    }
+
     /// Open or create an encrypted MLS database and apply OpenMLS migrations.
     /// The caller must obtain the key from Secret Service before calling this.
     pub fn open(path: impl AsRef<Path>, key: &StorageKey) -> Result<Self, Box<dyn Error + Send + Sync>> {
@@ -157,4 +166,89 @@ fn configure_sqlcipher(
         return Err("SQLCipher did not report a cipher version".into());
     }
     Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use openmls::prelude::*;
+    use openmls_basic_credential::SignatureKeyPair;
+    use openmls_traits::OpenMlsProvider as _;
+    use std::fs;
+    use tls_codec::Serialize;
+
+    const TEST_SUITE: Ciphersuite =
+        Ciphersuite::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519;
+
+    #[test]
+    fn encrypted_openmls_group_survives_provider_restart() {
+        let directory = tempfile::tempdir().expect("create temporary directory");
+        let database = directory.path().join("mls-state.sqlite3");
+        let key = StorageKey::from_secret_service([0x5a; 32]);
+
+        let group_id = {
+            let provider =
+                PersistentMlsProvider::open(&database, &key).expect("open encrypted database");
+            let credential = BasicCredential::new(b"tomchat-persistent-device".to_vec());
+            let signer = SignatureKeyPair::new(TEST_SUITE.signature_algorithm())
+                .expect("create signing key");
+            signer.store(provider.storage()).expect("persist signing key");
+
+            let config = MlsGroupCreateConfig::builder()
+                .ciphersuite(TEST_SUITE)
+                .wire_format_policy(PURE_CIPHERTEXT_WIRE_FORMAT_POLICY)
+                .build();
+
+            provider
+                .transaction(|provider| {
+                    let group = MlsGroup::new(provider, &signer, &config, credential)
+                        .map_err(|error| Box::new(error) as Box<dyn Error + Send + Sync>)?;
+                    Ok(group.group_id().clone())
+                })
+                .expect("commit group creation transaction")
+        };
+
+        // A fresh provider and crypto instance simulate closing and restarting
+        // the desktop application. The database file must not expose SQLite's
+        // plaintext header.
+        let header = fs::read(&database).expect("read encrypted database");
+        assert!(header.len() > 16);
+        assert_ne!(&header[..16], b"SQLite format 3\\0");
+
+        let provider =
+            PersistentMlsProvider::open(&database, &key).expect("reopen encrypted database");
+        let mut restored = MlsGroup::load(provider.storage(), &group_id)
+            .expect("load group state")
+            .expect("group exists after restart");
+        assert_eq!(restored.members().count(), 1);
+
+        let signer = SignatureKeyPair::read(
+            provider.storage(),
+            &restored.own_leaf().signature_key,
+            TEST_SUITE.signature_algorithm(),
+        )
+        .expect("restore device signing key");
+
+        let plaintext = b"message created after application restart";
+        let ciphertext = restored
+            .create_message(&provider, &signer, plaintext)
+            .expect("encrypt with restored group")
+            .tls_serialize_detached()
+            .expect("serialize ciphertext");
+        assert!(!ciphertext
+            .windows(plaintext.len())
+            .any(|window| window == plaintext));
+    }
+
+    #[test]
+    fn encrypted_database_rejects_a_wrong_secret_service_key() {
+        let directory = tempfile::tempdir().expect("create temporary directory");
+        let database = directory.path().join("wrong-key.sqlite3");
+        let correct = StorageKey::from_secret_service([0x31; 32]);
+        let incorrect = StorageKey::from_secret_service([0x32; 32]);
+
+        drop(PersistentMlsProvider::open(&database, &correct).expect("create database"));
+        assert!(PersistentMlsProvider::open(&database, &incorrect).is_err());
+    }
 }
