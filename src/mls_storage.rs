@@ -12,8 +12,8 @@ use std::{
     rc::Rc,
 };
 
-use openmls_sqlite_storage::{Connection, SqliteStorageProvider};
 use openmls_rust_crypto::OpenMlsRustCrypto;
+use openmls_sqlite_storage::{Connection, SqliteStorageProvider};
 use openmls_traits::OpenMlsProvider as OpenMlsProviderTrait;
 use zeroize::Zeroizing;
 
@@ -55,7 +55,10 @@ impl PersistentMlsProvider {
 
     /// Open or create an encrypted MLS database and apply OpenMLS migrations.
     /// The caller must obtain the key from Secret Service before calling this.
-    pub fn open(path: impl AsRef<Path>, key: &StorageKey) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    pub fn open(
+        path: impl AsRef<Path>,
+        key: &StorageKey,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let path = path.as_ref();
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
@@ -127,10 +130,8 @@ impl PersistentMlsProvider {
 }
 
 impl OpenMlsProviderTrait for PersistentMlsProvider {
-    type CryptoProvider =
-        <OpenMlsRustCrypto as OpenMlsProviderTrait>::CryptoProvider;
-    type RandProvider =
-        <OpenMlsRustCrypto as OpenMlsProviderTrait>::RandProvider;
+    type CryptoProvider = <OpenMlsRustCrypto as OpenMlsProviderTrait>::CryptoProvider;
+    type RandProvider = <OpenMlsRustCrypto as OpenMlsProviderTrait>::RandProvider;
     type StorageProvider = SqliteStorageProvider<JsonCodec, Rc<Connection>>;
 
     fn storage(&self) -> &Self::StorageProvider {
@@ -168,7 +169,6 @@ fn configure_sqlcipher(
     Ok(())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -177,8 +177,7 @@ mod tests {
     use std::fs;
     use tls_codec::Serialize;
 
-    const TEST_SUITE: Ciphersuite =
-        Ciphersuite::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519;
+    const TEST_SUITE: Ciphersuite = Ciphersuite::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519;
 
     #[test]
     fn encrypted_openmls_group_survives_provider_restart() {
@@ -192,7 +191,9 @@ mod tests {
             let credential = BasicCredential::new(b"tomchat-persistent-device".to_vec());
             let signer = SignatureKeyPair::new(TEST_SUITE.signature_algorithm())
                 .expect("create signing key");
-            signer.store(provider.storage()).expect("persist signing key");
+            signer
+                .store(provider.storage())
+                .expect("persist signing key");
             let signer_public = signer.public().to_vec();
 
             let config = MlsGroupCreateConfig::builder()
