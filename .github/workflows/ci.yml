@@ -18,6 +18,17 @@ jobs:
         with:
           components: rustfmt, clippy
       - run: cargo fmt --all -- --check
+      # Resolve the newly pinned MLS dependency graph once; subsequent checks
+      # use --locked and the generated lockfile is uploaded for committing.
+      - name: Resolve dependencies and compile
+        run: cargo check
+      - name: Upload resolved Cargo.lock
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resolved-cargo-lock
+          path: Cargo.lock
+          if-no-files-found: error
       - run: cargo check --locked
       - run: cargo test --locked
       - run: cargo clippy --all-targets --locked -- -D warnings
