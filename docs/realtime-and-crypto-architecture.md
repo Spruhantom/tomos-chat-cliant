@@ -42,7 +42,7 @@ MLS state changes and outbound protocol messages must be committed transactional
 
 The client now has a small storage-crypto module for serialized MLS state blobs. It uses XChaCha20-Poly1305 with a fresh OS-random 192-bit nonce per write, a versioned envelope, and caller-supplied associated data (the stable group identifier). It rejects malformed envelopes, modified ciphertext, a wrong key, and a mismatched group context. The wrapping key type redacts Debug output and zeroizes its in-memory bytes on drop.
 
-This is only the authenticated-encryption primitive. The key is not yet provisioned or persisted by Secret Service, and the OpenMLS provider is not yet backed by this envelope. No production MLS state is currently persisted. A future storage adapter must serialize/restore OpenMLS state atomically, store the wrapping key in Secret Service, and discard/reload in-memory group state after any failed or cancelled write.
+This primitive remains available for individual encrypted blobs, but the persistent MLS database now uses SQLCipher full-database encryption. The SQLCipher key is provisioned by Linux Secret Service; OpenMLS uses its official SQLite storage provider with a self-describing JSON codec. This avoids encrypting database lookup keys independently and protects both values and indexes. The database opener fails closed if SQLCipher is unavailable or the key is wrong. Group operations can be run inside a SQLite transaction; callers must discard and reload the in-memory group if an operation fails. The Secret Service integration requires a running unlocked desktop keyring and is not exercised by headless CI.
 
 ## 5. Threat model and limitations
 
@@ -65,9 +65,9 @@ Account password reset must not recover or replace encryption identity. A user w
 ## 7. Current status
 
 - Authenticated live transport and reconnect history recovery: implemented.
-- MLS protocol adapter: not implemented.
+- MLS protocol adapter: prototype only; durable SQLite provider now added.
 - Device registration/directory APIs: not implemented.
-- Secret Service integration and encrypted local state: not implemented.
+- SQLCipher-backed OpenMLS SQLite storage and Linux Secret Service key provisioning: implemented in the current development branch; restart and wrong-key tests pending CI.
 - Device verification, revocation and recovery: not implemented.
 - Message composer: intentionally disabled.
 - Manual GTK runtime and multi-device testing: outstanding.
