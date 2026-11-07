@@ -5,7 +5,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   check:
@@ -22,13 +22,16 @@ jobs:
       # use --locked and the generated lockfile is uploaded for committing.
       - name: Resolve dependencies and compile
         run: cargo check
-      - name: Upload resolved Cargo.lock
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: resolved-cargo-lock
-          path: Cargo.lock
-          if-no-files-found: error
       - run: cargo check --locked
       - run: cargo test --locked
       - run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Commit resolved Cargo.lock
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          if ! git diff --quiet -- Cargo.lock; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add Cargo.lock
+            git commit -m "Lock OpenMLS dependency graph"
+            git push origin "HEAD:${GITHUB_HEAD_REF}"
+          fi
