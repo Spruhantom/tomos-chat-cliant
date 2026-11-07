@@ -7,9 +7,6 @@
 //! replay/fork handling, and independent security review.
 
 use openmls::prelude::*;
-use openmls_basic_credential::SignatureKeyPair;
-use openmls_rust_crypto::OpenMlsRustCrypto;
-use openmls_traits::OpenMlsProvider;
 
 pub const TOMCHAT_MLS_CIPHERSUITE: Ciphersuite =
     Ciphersuite::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519;
@@ -17,6 +14,9 @@ pub const TOMCHAT_MLS_CIPHERSUITE: Ciphersuite =
 #[cfg(test)]
 mod tests {
     use super::*;
+    use openmls_basic_credential::SignatureKeyPair;
+    use openmls_rust_crypto::OpenMlsRustCrypto;
+    use openmls_traits::OpenMlsProvider;
     use tls_codec::{Deserialize, Serialize};
 
     fn create_credential(
