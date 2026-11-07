@@ -136,8 +136,8 @@ mod tests {
     fn encrypted_state_rejects_wrong_key_and_context() {
         let key = StorageKey::generate().expect("generate test key");
         let other_key = StorageKey::generate().expect("generate other key");
-        let envelope = encrypt_state(&key, b"group-a", b"private MLS state")
-            .expect("encrypt state");
+        let envelope =
+            encrypt_state(&key, b"group-a", b"private MLS state").expect("encrypt state");
 
         assert_eq!(
             decrypt_state(&other_key, b"group-a", &envelope),
