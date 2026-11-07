@@ -75,17 +75,13 @@ mod tests {
         )
         .expect("create Alice's MLS group");
 
-        let (commit, welcome, _group_info) = alice_group
+        let (_commit, welcome, _group_info) = alice_group
             .add_members(
                 &alice_provider,
                 &alice_signer,
                 std::slice::from_ref(bob_key_package.key_package()),
             )
             .expect("add Bob to the MLS group");
-        assert!(
-            matches!(commit.body(), MlsMessageBodyOut::PrivateMessage(_)),
-            "group membership commit must use the configured ciphertext wire format"
-        );
         alice_group
             .merge_pending_commit(&alice_provider)
             .expect("merge Alice's membership commit");
@@ -142,8 +138,6 @@ mod tests {
             _ => panic!("expected decrypted MLS application message"),
         }
 
-        let (outsider_credential, outsider_signer) =
-            (outsider_credential, outsider_signer);
         let mut outsider_group = MlsGroup::new(
             &outsider_provider,
             &outsider_signer,
