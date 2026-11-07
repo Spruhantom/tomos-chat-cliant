@@ -194,13 +194,17 @@ mod tests {
         let (group_id, signer_public) = {
             let provider =
                 PersistentMlsProvider::open(&database, &key).expect("open encrypted database");
-            let credential = BasicCredential::new(b"tomchat-persistent-device".to_vec());
+            let basic_credential = BasicCredential::new(b"tomchat-persistent-device".to_vec());
             let signer = SignatureKeyPair::new(TEST_SUITE.signature_algorithm())
                 .expect("create signing key");
             signer
                 .store(provider.storage())
                 .expect("persist signing key");
             let signer_public = signer.public().to_vec();
+            let credential = CredentialWithKey {
+                credential: basic_credential.into(),
+                signature_key: signer.public().into(),
+            };
 
             let config = MlsGroupCreateConfig::builder()
                 .ciphersuite(TEST_SUITE)
