@@ -12,9 +12,9 @@ The GTK conversation view receives worker events through a channel, displays mes
 
 TomChat does not yet implement E2EE. The message composer must remain disabled until the cryptographic protocol, device lifecycle, persistence, recovery and verification work has been implemented and independently reviewed.
 
-The current protocol evaluation selects IETF Messaging Layer Security (MLS, RFC 9420) as the preferred design for both direct and group conversations, using OpenMLS as the first Rust implementation candidate. This is an engineering decision for a prototype, not a security certification or a claim that OpenMLS has been independently audited for TomChat's integration. OpenMLS is pre-1.0 and its API and storage formats may change; pin an exact version, isolate it behind a narrow adapter, and review release/security notes before upgrades.
+The current protocol evaluation selects IETF Messaging Layer Security (MLS, RFC 9420) as the preferred design for both direct and group conversations, using OpenMLS 0.9.2 as the first Rust implementation candidate, pinned exactly with compatible supporting crates. This is an engineering decision for a prototype, not a security certification or a claim that OpenMLS has been independently audited for TomChat's integration. OpenMLS is pre-1.0; its API and storage formats may change. Isolate it behind a narrow adapter and review release/security notes before upgrades. Upstream currently declares Rust 1.91.0 as its minimum supported toolchain, which must be reflected in CI.
 
-Initial ciphersuite candidate: `MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519`. Do not silently negotiate a weaker or different suite. The selected suite and protocol version must be authenticated in the MLS group state and visible to clients.
+Initial ciphersuite candidate: `MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519`. Do not silently negotiate a weaker or different suite. OpenMLS 0.9.2 documents this ciphersuite as supported. The selected suite and protocol version must be authenticated in the MLS group state and visible to clients.
 
 ## 3. Device identity and key lifecycle
 
@@ -36,7 +36,13 @@ Required lifecycle:
 
 Use the desktop Secret Service through a maintained integration for small secrets and key-encryption material. Store encrypted MLS state in an application data directory with restrictive permissions. Derive a local wrapping key from a random secret held by the secret service; do not use the account password as the MLS key.
 
-MLS state changes and outbound protocol messages must be committed transactionally. A crash or failed write must not leave the in-memory group state ahead of durable storage. Never log plaintext, private keys, KeyPackages, exported secrets, or message ciphertext. Disable cryptographic debug features in release builds.
+MLS state changes and outbound protocol messages must be committed transactionally. OpenMLS async operations are not cancellation-safe: on cancellation or storage failure, roll back the transaction, discard the in-memory group and reload it from durable storage. A crash or failed write must not leave the in-memory group state ahead of durable storage. Never log plaintext, private keys, KeyPackages, exported secrets, or message ciphertext. Disable cryptographic debug features in release builds.
+
+### Encrypted local-state envelope (implemented prototype)
+
+The client now has a small storage-crypto module for serialized MLS state blobs. It uses XChaCha20-Poly1305 with a fresh OS-random 192-bit nonce per write, a versioned envelope, and caller-supplied associated data (the stable group identifier). It rejects malformed envelopes, modified ciphertext, a wrong key, and a mismatched group context. The wrapping key type redacts Debug output and zeroizes its in-memory bytes on drop.
+
+This primitive remains available for individual encrypted blobs, but the persistent MLS database now uses SQLCipher full-database encryption. The SQLCipher key is provisioned by Linux Secret Service; OpenMLS uses its official SQLite storage provider with a self-describing JSON codec. This avoids encrypting database lookup keys independently and protects both values and indexes. The database opener fails closed if SQLCipher is unavailable or the key is wrong. Group operations can be run inside a SQLite transaction; callers must discard and reload the in-memory group if an operation fails. The Secret Service integration requires a running unlocked desktop keyring and is not exercised by headless CI.
 
 ## 5. Threat model and limitations
 
@@ -59,9 +65,9 @@ Account password reset must not recover or replace encryption identity. A user w
 ## 7. Current status
 
 - Authenticated live transport and reconnect history recovery: implemented.
-- MLS protocol adapter: not implemented.
+- MLS protocol adapter: prototype only; durable SQLite provider now added.
 - Device registration/directory APIs: not implemented.
-- Secret Service integration and encrypted local state: not implemented.
+- SQLCipher-backed OpenMLS SQLite storage and Linux Secret Service key provisioning: implemented in the current development branch; restart and wrong-key tests pending CI.
 - Device verification, revocation and recovery: not implemented.
 - Message composer: intentionally disabled.
 - Manual GTK runtime and multi-device testing: outstanding.
