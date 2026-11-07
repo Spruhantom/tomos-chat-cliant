@@ -2,6 +2,7 @@ pub mod conversations;
 pub mod crypto;
 pub mod messaging;
 pub mod realtime;
+pub mod storage_crypto;
 
 use adw::prelude::*;
 use adw::Application;
