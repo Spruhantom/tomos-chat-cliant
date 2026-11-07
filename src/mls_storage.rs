@@ -174,7 +174,6 @@ mod tests {
     use super::*;
     use openmls::prelude::*;
     use openmls_basic_credential::SignatureKeyPair;
-    use openmls_traits::OpenMlsProvider as _;
     use std::fs;
     use tls_codec::Serialize;
 
@@ -187,13 +186,14 @@ mod tests {
         let database = directory.path().join("mls-state.sqlite3");
         let key = StorageKey::from_secret_service([0x5a; 32]);
 
-        let group_id = {
+        let (group_id, signer_public) = {
             let provider =
                 PersistentMlsProvider::open(&database, &key).expect("open encrypted database");
             let credential = BasicCredential::new(b"tomchat-persistent-device".to_vec());
             let signer = SignatureKeyPair::new(TEST_SUITE.signature_algorithm())
                 .expect("create signing key");
             signer.store(provider.storage()).expect("persist signing key");
+            let signer_public = signer.public().to_vec();
 
             let config = MlsGroupCreateConfig::builder()
                 .ciphersuite(TEST_SUITE)
@@ -203,8 +203,8 @@ mod tests {
             provider
                 .transaction(|provider| {
                     let group = MlsGroup::new(provider, &signer, &config, credential)
-                        .map_err(|error| Box::new(error) as Box<dyn Error + Send + Sync>)?;
-                    Ok(group.group_id().clone())
+                        .map_err(|error| std::io::Error::other(error.to_string()))?;
+                    Ok((group.group_id().clone(), signer_public))
                 })
                 .expect("commit group creation transaction")
         };
@@ -214,7 +214,7 @@ mod tests {
         // plaintext header.
         let header = fs::read(&database).expect("read encrypted database");
         assert!(header.len() > 16);
-        assert_ne!(&header[..16], b"SQLite format 3\\0");
+        assert_ne!(&header[..16], b"SQLite format 3\0");
 
         let provider =
             PersistentMlsProvider::open(&database, &key).expect("reopen encrypted database");
@@ -225,7 +225,7 @@ mod tests {
 
         let signer = SignatureKeyPair::read(
             provider.storage(),
-            &restored.own_leaf().signature_key,
+            &signer_public,
             TEST_SUITE.signature_algorithm(),
         )
         .expect("restore device signing key");
