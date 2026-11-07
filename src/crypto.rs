@@ -47,8 +47,7 @@ mod tests {
 
         let (alice_credential, alice_signer) =
             create_credential(b"tomchat-test-alice", &alice_provider);
-        let (bob_credential, bob_signer) =
-            create_credential(b"tomchat-test-bob", &bob_provider);
+        let (bob_credential, bob_signer) = create_credential(b"tomchat-test-bob", &bob_provider);
         let (outsider_credential, outsider_signer) =
             create_credential(b"tomchat-test-outsider", &outsider_provider);
 
@@ -89,8 +88,8 @@ mod tests {
         let welcome_bytes = welcome
             .tls_serialize_detached()
             .expect("serialize MLS Welcome");
-        let welcome_in = MlsMessageIn::tls_deserialize_exact(&welcome_bytes)
-            .expect("parse MLS Welcome");
+        let welcome_in =
+            MlsMessageIn::tls_deserialize_exact(&welcome_bytes).expect("parse MLS Welcome");
         let welcome = match welcome_in.extract() {
             MlsMessageBodyIn::Welcome(welcome) => welcome,
             _ => panic!("expected MLS Welcome message"),
@@ -145,8 +144,8 @@ mod tests {
             outsider_credential,
         )
         .expect("create unrelated outsider group");
-        let incoming = MlsMessageIn::tls_deserialize_exact(&encrypted)
-            .expect("parse outsider test message");
+        let incoming =
+            MlsMessageIn::tls_deserialize_exact(&encrypted).expect("parse outsider test message");
         let protocol_message = incoming
             .try_into_protocol_message()
             .expect("convert outsider message");
