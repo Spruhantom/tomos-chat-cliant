@@ -60,4 +60,26 @@ class AccountSafetyPolicyTest {
         val account = state(AgeBand.ADULT_18_PLUS, guardian = GuardianConsentStatus.APPROVED)
         assertFalse(AccountSafetyPolicy.isAccountCleared(account))
     }
+
+    @Test fun debugTestModeAllowsOnlyPrivateAdultMessagingAndCallingWithoutAssurance() {
+        val account = state(AgeBand.ADULT_18_PLUS, AgeAssuranceStatus.NOT_VERIFIED)
+        assertTrue(AccountSafetyPolicy.allows(account, TomChatCapability.EXCHANGE_CONTACT_CARD, allowUnverifiedAdultDebug = true))
+        assertTrue(AccountSafetyPolicy.allows(account, TomChatCapability.MESSAGE_APPROVED_CONTACT, allowUnverifiedAdultDebug = true))
+        assertTrue(AccountSafetyPolicy.allows(account, TomChatCapability.VOICE_CALL_APPROVED_CONTACT, allowUnverifiedAdultDebug = true))
+        assertFalse(AccountSafetyPolicy.allows(account, TomChatCapability.PUBLIC_PROFILE_DISCOVERY, allowUnverifiedAdultDebug = true))
+        assertFalse(AccountSafetyPolicy.allows(account, TomChatCapability.PUBLIC_SOCIAL_POSTING, allowUnverifiedAdultDebug = true))
+    }
+
+    @Test fun debugTestModeNeverBypassesMinorGuardianApproval() {
+        val child = state(AgeBand.CHILD_9_TO_12, AgeAssuranceStatus.NOT_VERIFIED, GuardianConsentStatus.PENDING)
+        val teen = state(AgeBand.TEEN_13_TO_17, AgeAssuranceStatus.NOT_VERIFIED, GuardianConsentStatus.PENDING)
+        assertFalse(AccountSafetyPolicy.allows(child, TomChatCapability.MESSAGE_APPROVED_CONTACT, allowUnverifiedAdultDebug = true))
+        assertFalse(AccountSafetyPolicy.allows(teen, TomChatCapability.VOICE_CALL_APPROVED_CONTACT, allowUnverifiedAdultDebug = true))
+    }
+
+    @Test fun debugTestModeDoesNotAllowInconsistentAdultGuardianState() {
+        val account = state(AgeBand.ADULT_18_PLUS, AgeAssuranceStatus.NOT_VERIFIED, GuardianConsentStatus.APPROVED)
+        assertFalse(AccountSafetyPolicy.allows(account, TomChatCapability.MESSAGE_APPROVED_CONTACT, allowUnverifiedAdultDebug = true))
+    }
+
 }

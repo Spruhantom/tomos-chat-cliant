@@ -67,3 +67,16 @@ The Android first-run flow now saves a minimal profile in the app's private file
 The profile is encrypted with AES-256-GCM. Its random IV and ciphertext are stored in an atomic file, and the AES key is generated and held by Android Keystore. The format version is authenticated as GCM additional authenticated data. Reads fail closed if the profile cannot be decrypted or the original Keystore key is missing; the app does not silently create a replacement key or overwrite an unreadable profile.
 
 The profile codec has JVM unit tests for round-trip serialization, trailing-data rejection and invalid age/guardian combinations. The Keystore and atomic-file integration still needs Android instrumentation/device testing, including app restart, app-data restore behaviour, key invalidation, interrupted writes and device migration. This is local encrypted storage, not yet a complete identity, backup or recovery system.
+
+## Adult-only local testing override (debug builds only)
+
+For controlled real-device testing, the Android debug variant has a narrowly scoped test override:
+
+- It applies only when the locally assigned age band is `ADULT_18_PLUS` and guardian state is `NOT_REQUIRED`.
+- It permits signed contact-card exchange, approved-contact messaging and one-to-one voice calling while age assurance is still `NOT_VERIFIED`.
+- It does not enable public profile discovery, public posting, groups, file sharing or other capabilities.
+- It never applies to child or teen age bands; those accounts remain blocked until the normal age-assurance and guardian-consent checks pass.
+- The UI displays a persistent warning in the Chats and Contacts screens.
+- The override is gated by Android's generated `BuildConfig.DEBUG`; release builds compile with it disabled and continue to enforce the normal policy.
+
+This is a development convenience, not an age-verification mechanism or a production policy. Only use the debug APK with consenting adult testers. Do not distribute a debug build as a public release. Before a production launch, remove or separately review this testing facility and complete the age-assurance and child-safeguarding work.
