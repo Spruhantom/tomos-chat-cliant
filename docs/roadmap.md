@@ -21,28 +21,34 @@
 
 ## Phase 3 — direct peer networking proof of concept
 - Rust networking crate and Android FFI prototype.
+- Bluetooth LE discovery and GATT connection between two physical Android devices.
+- Bluetooth Classic RFCOMM data channel where both devices support it.
 - LAN discovery and direct peer connection between two physical Android devices.
-- Authenticated peer handshake and protocol version negotiation.
+- Authenticated peer handshake and protocol version negotiation, shared across transports.
 - Explicit address/contact exchange for remote peers.
+- Test transport switching, disconnect/reconnect, MTU negotiation, large transfers, permissions, and battery use.
 - Test QUIC and TCP fallback, network changes, IPv4/IPv6, Wi-Fi and mobile data.
 - Demonstrate no central service, relay, DHT bootstrap, or account registration.
 
 ## Phase 4 — encrypted one-to-one messaging
 - Select and integrate reviewed pairwise cryptographic protocol.
 - Signed/encrypted message envelopes, durable outbox, acknowledgements and deduplication.
+- Send messages over Bluetooth LE, Bluetooth Classic, and LAN using the same encrypted envelope.
 - Offline queue and reconnect synchronisation between reachable peers.
 - Negative tests: tampering, replay, wrong keys, downgrade, malformed payloads.
 
 ## Phase 5 — groups and file sharing
 - MLS-based group membership/key lifecycle after protocol review.
 - Encrypted attachments, chunking, integrity checks, size limits and resumable transfer.
+- Prefer Wi-Fi for large transfers; support Bluetooth transfer for suitable file sizes and devices.
 - Group delivery/synchronisation semantics and conflict handling.
 - Abuse controls for untrusted peers.
 
 ## Phase 6 — voice
 - One-to-one voice over direct peer connectivity.
 - Call setup over authenticated peer channel; WebRTC media protection.
-- Mute, speaker, Bluetooth, audio focus, interruption and call lifecycle.
+- Mute, speaker, Bluetooth headset routing, audio focus, interruption and call lifecycle.
+- Experiment with direct Bluetooth peer voice media; do not claim support until latency, quality, and battery tests pass across physical devices.
 - Group voice topology prototype and participant limits.
 - Measure NAT failure rate; never silently add TURN/relay.
 
@@ -61,4 +67,4 @@
 
 ## First development target
 
-A two-device LAN demo: install the debug APK on two physical Android phones, exchange identities by QR, establish a direct authenticated connection, and exchange a test payload. No server, relay, DHT bootstrap, or account registration. This validates the strict premise before adding chat UI or cryptographic complexity.
+A two-device Android demo with two direct transports: exchange identities by QR, discover/connect over Bluetooth LE and send an authenticated test payload; then repeat over the same Wi-Fi LAN. No server, relay, DHT bootstrap, or account registration. This validates transport independence and the strict zero-server premise before adding chat UI or production cryptography.
