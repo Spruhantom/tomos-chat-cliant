@@ -62,6 +62,21 @@ Use direct QUIC where possible, with a carefully evaluated direct TCP fallback. 
 
 The first proof of concept must test two physical Android phones over Bluetooth and on the same LAN. Remote direct-IP tests come after that and must document network conditions and failure cases.
 
+## Automatic fastest-path selection
+
+The connection manager should choose the fastest suitable direct path automatically, rather than always preferring one transport by name. It should consider the actual task and current link conditions:
+
+- Measure recent connection setup time, round-trip latency, usable throughput, packet loss, stability, and estimated battery cost for each available direct path.
+- For nearby devices, evaluate Bluetooth LE, Bluetooth Classic, and Wi-Fi LAN. For remote peers, evaluate only direct IP paths that are already known and reachable.
+- Prefer low latency for chat and call signalling; prefer sustained throughput and stability for file transfers; consider battery use for background synchronisation.
+- Use a short, bounded connection probe and cached recent measurements. Re-evaluate when the network changes or a transfer/call experiences degradation.
+- If a better direct path becomes available, authenticate it as the same peer and migrate the session safely where the protocol permits. Otherwise finish the current operation and use the better path next time.
+- Never send message plaintext over an unverified path. End-to-end encryption and peer authentication remain identical regardless of transport.
+- Do not scan or probe continuously: respect Android permissions, battery, user settings, and background-execution limits.
+- Expose the active transport and a manual "prefer Bluetooth / Wi-Fi / automatic" setting for troubleshooting and user control.
+
+There is no universally fastest transport: Bluetooth can win for nearby small payloads when Wi-Fi is unavailable, while Wi-Fi usually wins for large transfers. The app must benchmark real conditions and choose accordingly. Fastest-path selection must never introduce a relay, STUN/TURN, hosted discovery, or any other server dependency.
+
 ## Messaging model
 
 - Durable local outbox with stable message IDs and idempotent retry.
