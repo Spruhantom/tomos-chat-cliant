@@ -151,8 +151,14 @@ class PeerVoiceCallController(
                 finish(PeerCallEndReason.NETWORK_LOST, failed = true)
             }
         )
-        engine.start()
         audio = engine
+        try {
+            engine.start()
+        } catch (error: Throwable) {
+            audio = null
+            runCatching { engine.close() }
+            throw error
+        }
     }
 
     @Synchronized
