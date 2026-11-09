@@ -64,7 +64,7 @@ Current UI foundation:
 - TomOS neon visual styling;
 - account experience and zero-server policy status placeholders.
 
-The age-band classifier, central capability policy and unit tests are under `android/app/src/main` and `android/app/src/test`. The prototype defaults to unverified accounts, so communication capabilities remain locked; minors additionally require guardian approval. This is domain-policy scaffolding, not a connected age-verification or consent flow.
+The age-band classifier, central capability policy and unit tests are under `android/app/src/main` and `android/app/src/test`. The prototype defaults to unverified accounts, so communication capabilities remain locked; minors additionally require guardian approval. This is domain-policy scaffolding, not a connected age-verification or consent flow. Account setup now persists a minimal profile using AES-256-GCM with a device-held Android Keystore key; the full date of birth is not saved. Keystore/atomic-file behaviour still requires physical-device testing.
 
 ## Build
 
