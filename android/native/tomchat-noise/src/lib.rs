@@ -113,7 +113,7 @@ impl NoiseSession {
         out.truncate(n);
         Ok(out)
     }
-    pub fn is_transport_ready(&self) -> bool { matches!(self.state, State::Transport(_)) }
+    pub fn is_transport_ready(&self) -> bool { matches!(&self.state, State::Transport(_)) }
 }
 
 #[cfg(test)]
