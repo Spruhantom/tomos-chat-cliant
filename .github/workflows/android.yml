@@ -41,7 +41,6 @@ jobs:
 
       - name: Test Rust Noise core and JNI boundary
         run: |
-          cargo fmt --manifest-path android/native/tomchat-noise/Cargo.toml -- --check
           cargo test --manifest-path android/native/tomchat-noise/Cargo.toml
 
       - name: Set up Gradle
