@@ -5,12 +5,10 @@ plugins {
 }
 
 
-import org.gradle.api.tasks.Exec
-
 val nativeNoiseManifest = rootProject.file("android/native/tomchat-noise/Cargo.toml")
 val nativeNoiseOutput = rootProject.file("android/app/src/main/jniLibs")
 
-tasks.register<Exec>("buildTomChatNoise") {
+tasks.register<org.gradle.api.tasks.Exec>("buildTomChatNoise") {
     group = "build"
     description = "Build the Rust Noise core for supported Android ABIs."
     inputs.file(nativeNoiseManifest)
