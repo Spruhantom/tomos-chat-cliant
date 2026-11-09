@@ -191,6 +191,11 @@ fn throw_java(env: &mut JNIEnv, message: &str) {
 }
 
 fn java_bytes(env: &mut JNIEnv, value: JByteArray) -> Result<Vec<u8>, String> {
+    let length = env.get_array_length(&value)
+        .map_err(|e| format!("Invalid byte array: {e}"))?;
+    if length < 0 || length as usize > MAX_MESSAGE {
+        return Err("JNI byte array exceeds the 65535-byte protocol limit.".to_string());
+    }
     env.convert_byte_array(&value).map_err(|e| format!("Invalid byte array: {e}"))
 }
 
