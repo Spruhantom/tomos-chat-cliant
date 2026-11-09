@@ -49,7 +49,7 @@ class TrustedContactStore(filesDir: File) {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, existingKey(), GCMParameterSpec(128, iv))
             cipher.updateAAD(byteArrayOf(version.toByte()))
-            decode(cipher.doFinal(encrypted), version)
+            return decode(cipher.doFinal(encrypted), version)
         } catch (error: Exception) {
             throw IOException("Trusted contacts could not be decrypted; existing data was not changed.", error)
         }
