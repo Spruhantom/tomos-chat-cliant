@@ -54,6 +54,14 @@ jobs:
       - name: Build debug APK
         run: gradle --no-daemon :android:app:assembleDebug
 
+      - name: Run JNI instrumentation tests on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          script: gradle --no-daemon :android:app:connectedDebugAndroidTest
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
