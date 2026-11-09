@@ -16,6 +16,7 @@ Bluetooth is a first-class direct peer transport, not a server substitute:
 - BLE advertisements/GATT for nearby discovery, connection setup, and small encrypted payloads.
 - Bluetooth Classic RFCOMM for a direct byte stream and suitable file transfers where supported.
 - The same authenticated, end-to-end encrypted message envelope is used over Bluetooth and Wi-Fi.
+- An automatic path selector measures available direct links and chooses the best route for the task (low latency for chat/calls, throughput for files, battery efficiency for background sync); users can override it.
 - Android Bluetooth permissions, pairing, adapter state, MTU negotiation, transfer resume, and lifecycle limits must be handled.
 - Bluetooth headset audio routing is required for calls. Direct Bluetooth peer voice media remains experimental until tested on physical devices.
 
