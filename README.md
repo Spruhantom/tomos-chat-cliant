@@ -59,6 +59,7 @@ All networking must use the same authenticated peer identity and end-to-end encr
 The Android foundation uses Kotlin, Jetpack Compose and Material 3, with an isolated Rust Noise XX prototype using Snow at `android/native/tomchat-noise`. The Rust Noise session is connected through a narrow JNI API; Rust owns session state, and Kotlin passes the signed contact key pin. The JNI session is not yet wired to the direct TCP transport. See [docs/architecture.md](docs/architecture.md) for remaining security work. The TomOS visual design is documented in [docs/design-system.md](docs/design-system.md). Tom OS Hyprland 1 is the primary brand reference; TomOS Android SIP informs Android interaction patterns, without importing SIP or Linphone functionality.
 
 Current UI foundation:
+- adaptive compact/medium/expanded window navigation: bottom bar on compact windows and navigation rail on wider windows; content width is constrained on large displays, and setup/contacts can scroll on short or unfolded screens;
 - first-run display-name and date-of-birth screen with local age-band preview;
 - Chats, Contacts, Calls and Settings navigation;
 - TomOS neon visual styling;
