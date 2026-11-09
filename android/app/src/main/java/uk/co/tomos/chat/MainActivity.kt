@@ -97,13 +97,15 @@ class MainActivity : ComponentActivity() {
                 val scope = rememberCoroutineScope()
                 val store = remember { AccountProfileStore(applicationContext.filesDir) }
                 val identityStore = remember { DeviceIdentityStore() }
+                val noiseIdentityStore = remember { NoiseIdentityStore(applicationContext.filesDir) }
 
                 LaunchedEffect(store) {
                     try {
                         val loaded = withContext(Dispatchers.IO) {
                             val saved = store.load()
                             val identity = identityStore.getOrCreate()
-                            val card = saved?.let { ContactCardCodec.encode(ContactCardCodec.create(it.displayName, identity)) }
+                            val noiseIdentity = noiseIdentityStore.getOrCreate()
+                            val card = saved?.let { ContactCardCodec.encode(ContactCardCodec.create(it.displayName, identity, noiseIdentity.publicKey)) }
                             saved to card
                         }
                         profile = loaded.first
@@ -124,8 +126,10 @@ class MainActivity : ComponentActivity() {
                             try {
                                 withContext(Dispatchers.IO) { store.save(newProfile) }
                                 profile = newProfile
-                                val identity = withContext(Dispatchers.IO) { identityStore.getOrCreate() }
-                                contactCard = ContactCardCodec.encode(ContactCardCodec.create(newProfile.displayName, identity))
+                                val identities = withContext(Dispatchers.IO) {
+                                    identityStore.getOrCreate() to noiseIdentityStore.getOrCreate()
+                                }
+                                contactCard = ContactCardCodec.encode(ContactCardCodec.create(newProfile.displayName, identities.first, identities.second.publicKey))
                                 storageError = null
                             } catch (error: IOException) {
                                 storageError = error.message ?: "The encrypted account could not be saved."
@@ -434,13 +438,19 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
         if (scanError != null) Text(scanError!!, color = Color(0xFFFF6B83), modifier = Modifier.padding(20.dp))
         scanned?.let { card ->
             val alreadyTrusted = trusted.any { it.fingerprint == card.fingerprint }
+            val hasNoiseBinding = card.noiseStaticPublicKey != null
             Card(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), colors = CardDefaults.cardColors(containerColor = Panel), border = BorderStroke(1.dp, Cyan)) {
                 Column(Modifier.padding(16.dp)) {
                     Text("VERIFY CONTACT", color = Cyan, fontWeight = FontWeight.Bold)
                     Text(card.displayName, color = TextPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                     Text("Fingerprint", color = Muted, fontSize = 11.sp)
                     Text(card.fingerprint, color = TextPrimary, fontSize = 12.sp)
-                    Text("Compare every group with the other person's device through a separate trusted channel. A valid signature does not prove the person's real-world identity.", color = Muted, fontSize = 12.sp)
+                    Text("The P-256 identity signature covers the Noise X25519 key. Compare the identity fingerprint with the other person through a separate trusted channel. A valid signature does not prove the person's real-world identity.", color = Muted, fontSize = 12.sp)
+                    if (!hasNoiseBinding) {
+                        Text("This is a legacy contact card without a signed Noise key. It cannot be trusted for encrypted sessions; ask the contact to update TomChat and share a new QR code.", color = Color(0xFFFFE14D), fontSize = 12.sp)
+                    } else {
+                        Text("Noise static key is cryptographically bound to this identity.", color = Green, fontSize = 10.sp)
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = fingerprintCompared, onCheckedChange = { fingerprintCompared = it })
                         Text("I independently compared the full fingerprint", color = TextPrimary, fontSize = 12.sp)
@@ -448,11 +458,11 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
                     if (alreadyTrusted) {
                         Text("Already trusted on this device.", color = Green, fontSize = 12.sp)
                     } else {
-                        Button(enabled = fingerprintCompared && !saving, onClick = {
+                        Button(enabled = fingerprintCompared && hasNoiseBinding && !saving, onClick = {
                             saving = true
                             scope.launch {
                                 try {
-                                    val updated = trusted + TrustedContact(card.displayName, card.encodedPublicKey, card.fingerprint)
+                                    val updated = trusted + TrustedContact(card.displayName, card.encodedPublicKey, card.fingerprint, card.noiseStaticPublicKey)
                                     withContext(Dispatchers.IO) { store.save(updated) }
                                     trusted = updated; scanned = null; scanError = null
                                 } catch (error: Exception) { scanError = error.message ?: "Could not save this contact." }
@@ -472,6 +482,7 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
                     Column(Modifier.padding(12.dp)) {
                         Text(contact.displayName, color = TextPrimary, fontWeight = FontWeight.SemiBold)
                         Text(contact.fingerprint, color = Muted, fontSize = 10.sp)
+                        Text(if (contact.noiseStaticPublicKey != null) "Noise identity bound" else "Legacy identity — no Noise binding", color = if (contact.noiseStaticPublicKey != null) Green else Color(0xFFFFE14D), fontSize = 10.sp)
                         TextButton(onClick = {
                             scope.launch {
                                 val updated = trusted.filterNot { it.fingerprint == contact.fingerprint }
@@ -530,7 +541,7 @@ private fun SettingsScreen(profile: AccountProfile) {
                 SettingCard("Connection preference", "Automatic fastest direct route. Bluetooth and Wi-Fi options will appear when transport support is implemented.", "AUTOMATIC")
             }
             item {
-                SettingCard("Identity and security", "Local identity, encrypted storage and contact verification are planned for the next phase.", "ON DEVICE")
+                SettingCard("Identity and security", "P-256 signing identity is bound to a persistent X25519 Noise key. Both private identities are protected by Android Keystore-backed storage; contact cards sign the binding.", "PROTOTYPE")
             }
             item {
                 SettingCard("Backups", "Encrypted local export and encrypted replication to trusted personal devices.", "PLANNED")
