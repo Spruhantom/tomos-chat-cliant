@@ -527,7 +527,12 @@ private fun ChatsScreen(profile: AccountProfile) {
         val peer = selectedContact ?: return@LaunchedEffect
         while (true) {
             try {
-                withContext(Dispatchers.IO) { active.receiveEvent() }
+                when (withContext(Dispatchers.IO) { active.receiveEvent() }) {
+                    is PeerConversationEvent.MessageReceived,
+                    is PeerConversationEvent.DeliveryConfirmed,
+                    is PeerConversationEvent.UnmatchedDeliveryAcknowledgement,
+                    PeerConversationEvent.DuplicateMessage -> Unit
+                }
                 messages = withContext(Dispatchers.IO) { coordinator?.loadHistory(peer.fingerprint).orEmpty() }
             } catch (error: Exception) {
                 statusText = "Connection ended"
