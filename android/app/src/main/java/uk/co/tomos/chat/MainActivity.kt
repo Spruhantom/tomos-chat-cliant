@@ -337,7 +337,7 @@ private fun TomChatApp(
                     containerColor = Void,
                     topBar = {
                         Column {
-                            AppHeader()
+                            AppHeader(profile.displayName)
                             if (foldPosture == FoldPosture.BOOK || foldPosture == FoldPosture.TABLETOP) {
                                 FoldPostureBanner(foldPosture)
                             }
@@ -443,58 +443,87 @@ private fun FoldCompanionPane(
 }
 
 @Composable
-private fun AppHeader() {
+private fun AppHeader(displayName: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(Brush.horizontalGradient(listOf(Panel, Void)))
-            .padding(horizontal = 20.dp, vertical = 18.dp),
+            .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(42.dp)
-                .background(Brush.linearGradient(listOf(Pink, Purple)), RoundedCornerShape(12.dp)),
+                .size(44.dp)
+                .background(Brush.linearGradient(listOf(Pink, Purple)), RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center
         ) {
             Text("T", color = Color.White, fontWeight = FontWeight.Black, fontSize = 25.sp)
         }
         Spacer(Modifier.width(12.dp))
-        Column {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text("TOMCHAT", color = TextPrimary, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
-            Text("PEER TO PEER • ZERO SERVERS", color = Cyan, fontSize = 9.sp, letterSpacing = 1.sp)
+            Text("PRIVATE • DEVICE TO DEVICE", color = Cyan, fontSize = 9.sp, letterSpacing = 0.8.sp)
         }
         Spacer(Modifier.weight(1f))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(7.dp).background(Green, CircleShape))
-            Spacer(Modifier.width(6.dp))
-            Text("LOCAL", color = Muted, fontSize = 10.sp, letterSpacing = 1.sp)
+        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(displayName, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Text("ON THIS DEVICE", color = Muted, fontSize = 8.sp, letterSpacing = 0.8.sp)
         }
     }
 }
 
 @Composable
 private fun ScreenTitle(title: String, subtitle: String) {
-    Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 18.dp)) {
-        Text(title, fontSize = 27.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-        Spacer(Modifier.height(4.dp))
-        Text(subtitle, fontSize = 12.sp, color = Muted)
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 18.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier.width(3.dp).height(42.dp)
+                .background(Brush.verticalGradient(listOf(Pink, Purple)), RoundedCornerShape(3.dp))
+        )
+        Spacer(Modifier.width(13.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text("TOMCHAT", color = Cyan, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
+            Text(title, fontSize = 25.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Text(subtitle, fontSize = 12.sp, color = Muted)
+        }
     }
 }
 
 @Composable
 private fun ChatsScreen() {
-    Column(Modifier.fillMaxSize()) {
-        ScreenTitle("Your chats", "Private conversations stay between your devices.")
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        ScreenTitle("Messages", "A private space for direct conversations.")
         StatusCard()
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 22.dp)) {
-            Text("MESSAGES", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 24.dp)) {
+            Text("INBOX", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
             Spacer(Modifier.height(12.dp))
-            EmptyState(
-                glyph = "✉",
-                title = "Your conversations start here",
-                body = "Connect directly with someone nearby or exchange a TomChat contact card. No account or server required."
-            )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Panel),
+                border = BorderStroke(1.dp, Raised),
+                shape = RoundedCornerShape(20.dp)
+            ) {
+                EmptyState(
+                    glyph = "✉",
+                    title = "Your inbox is ready",
+                    body = "The conversation interface is being prepared. Messaging will become available only after the secure peer session and account safety checks are complete."
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Raised.copy(alpha = 0.55f)),
+                border = BorderStroke(1.dp, Cyan.copy(alpha = 0.18f)),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("BUILT FOR DIRECT CONNECTIONS", color = Cyan, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
+                    Text("No central chat servers", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("TomChat is designed for device-to-device communication. Both peers need a reachable direct connection; offline delivery and global reachability are not guaranteed.", color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
+                }
+            }
         }
     }
 }
@@ -504,19 +533,28 @@ private fun StatusCard() {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
         colors = CardDefaults.cardColors(containerColor = Panel),
-        border = BorderStroke(1.dp, Pink.copy(alpha = 0.45f)),
-        shape = RoundedCornerShape(16.dp)
+        border = BorderStroke(1.dp, Pink.copy(alpha = 0.28f)),
+        shape = RoundedCornerShape(18.dp)
     ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(38.dp).background(Raised, CircleShape), contentAlignment = Alignment.Center) {
-                Text("⌁", color = Cyan, fontSize = 22.sp)
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 15.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier.size(42.dp).background(Raised, RoundedCornerShape(14.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("⌁", color = Cyan, fontSize = 24.sp)
             }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text("Direct connection", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                Text("No peer connected yet", color = Muted, fontSize = 11.sp)
+            Spacer(Modifier.width(13.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("PEER NETWORK", color = Cyan, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
+                Text("No direct peer connected", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text("Waiting for a trusted device", color = Muted, fontSize = 11.sp)
             }
-            Text("OFFLINE", color = Pink, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Surface(color = Pink.copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
+                Text("OFFLINE", color = Pink, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+            }
         }
     }
 }
@@ -651,13 +689,20 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
 
 @Composable
 private fun CallsScreen() {
-    Column(Modifier.fillMaxSize()) {
-        ScreenTitle("Calls", "Private voice calls over direct peer connections.")
-        EmptyState(
-            glyph = "⌕",
-            title = "No calls yet",
-            body = "Voice calling will use authenticated peer connections. Bluetooth headset audio routing is planned; direct Bluetooth calling will be tested separately."
-        )
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        ScreenTitle("Calls", "Voice conversations between trusted devices.")
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            colors = CardDefaults.cardColors(containerColor = Panel),
+            border = BorderStroke(1.dp, Raised),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            EmptyState(
+                glyph = "⌕",
+                title = "Calling is coming next",
+                body = "The call interface will be enabled when authenticated signalling, encrypted voice media and Android audio routing are integrated and tested."
+            )
+        }
     }
 }
 
@@ -713,15 +758,16 @@ private fun SettingCard(title: String, description: String, tag: String) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Panel),
         border = BorderStroke(1.dp, Raised),
-        shape = RoundedCornerShape(14.dp)
+        shape = RoundedCornerShape(18.dp)
     ) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.fillMaxWidth().padding(17.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, color = TextPrimary, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Text(tag, color = Cyan, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Text(title, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                Surface(color = Cyan.copy(alpha = 0.10f), shape = RoundedCornerShape(50)) {
+                    Text(tag, color = Cyan, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp))
+                }
             }
-            Spacer(Modifier.height(7.dp))
-            Text(description, color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
+            Text(description, color = Muted, fontSize = 12.sp, lineHeight = 19.sp)
         }
     }
 }
@@ -729,11 +775,12 @@ private fun SettingCard(title: String, description: String, tag: String) {
 @Composable
 private fun EmptyState(glyph: String, title: String, body: String) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 30.dp, vertical = 48.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 34.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            modifier = Modifier.size(76.dp).background(Panel, RoundedCornerShape(24.dp)),
+            modifier = Modifier.size(76.dp)
+                .background(Brush.linearGradient(listOf(Pink.copy(alpha = 0.18f), Purple.copy(alpha = 0.12f))), RoundedCornerShape(24.dp)),
             contentAlignment = Alignment.Center
         ) {
             Text(glyph, color = Pink, fontSize = 34.sp)
