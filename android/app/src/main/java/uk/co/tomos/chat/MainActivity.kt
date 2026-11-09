@@ -593,7 +593,7 @@ private fun ChatsScreen(profile: AccountProfile) {
     val mayCall = AccountSafetyPolicy.allows(profile.safetyState(), TomChatCapability.VOICE_CALL_APPROVED_CONTACT)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 20.dp)) {
         ScreenTitle("Your chats", "Encrypted, direct conversations between trusted devices.")
-        StatusCard()
+        StatusCard(isConnected = session?.status == PeerConnectionStatus.CONNECTED, connectionText = statusText)
         if (!mayMessage) {
             EmptyState("⌑", "Messaging is locked", AccountSafetyPolicy.restrictionReason(profile.safetyState()))
             return@Column
@@ -609,14 +609,16 @@ private fun ChatsScreen(profile: AccountProfile) {
                         Text(if (contact.noiseStaticPublicKey != null) "Signed Noise key available" else "Legacy card — encrypted connection unavailable", color = if (contact.noiseStaticPublicKey != null) Green else Color(0xFFFFE14D), fontSize = 10.sp)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = {
+                                session?.close(); session = null
                                 selectedContact = contact
-                                session?.close(); session = null; messages = emptyList(); errorText = null
+                                messages = emptyList(); errorText = null
                                 scope.launch {
                                     try { messages = withContext(Dispatchers.IO) { coordinator?.loadHistory(contact.fingerprint).orEmpty() } }
                                     catch (error: Exception) { errorText = error.message ?: "Could not load encrypted history." }
                                 }
                             }) { Text("Open") }
                             TextButton(enabled = coordinator != null && contact.noiseStaticPublicKey != null && !working, onClick = {
+                                session?.close(); session = null
                                 selectedContact = contact; working = true; errorText = null
                                 scope.launch {
                                     try {
@@ -629,6 +631,7 @@ private fun ChatsScreen(profile: AccountProfile) {
                                 }
                             }) { Text("Connect") }
                             TextButton(enabled = coordinator != null && contact.noiseStaticPublicKey != null && !working && !listening, onClick = {
+                                session?.close(); session = null
                                 selectedContact = contact; working = true; errorText = null
                                 scope.launch {
                                     try {
@@ -755,7 +758,7 @@ private fun ChatsScreen(profile: AccountProfile) {
     }
 }
 @Composable
-private fun StatusCard() {
+private fun StatusCard(isConnected: Boolean, connectionText: String) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
         colors = CardDefaults.cardColors(containerColor = Panel),
@@ -769,9 +772,9 @@ private fun StatusCard() {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text("Direct connection", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                Text("No peer connected yet", color = Muted, fontSize = 11.sp)
+                Text(connectionText, color = Muted, fontSize = 11.sp)
             }
-            Text("OFFLINE", color = Pink, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Text(if (isConnected) "ONLINE" else "OFFLINE", color = if (isConnected) Green else Pink, fontSize = 9.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -910,8 +913,8 @@ private fun CallsScreen() {
         ScreenTitle("Calls", "Private voice calls over direct peer connections.")
         EmptyState(
             glyph = "⌕",
-            title = "No calls yet",
-            body = "Voice calling will use authenticated peer connections. Bluetooth headset audio routing is planned; direct Bluetooth calling will be tested separately."
+            title = "Start a private voice call",
+            body = "Open Chats, connect to a trusted contact using the direct encrypted connection, then tap Voice call. Keep the chat open during this prototype call. Microphone permission is requested only when you call or answer. Bluetooth and wired headsets use Android's normal audio routing."
         )
     }
 }
