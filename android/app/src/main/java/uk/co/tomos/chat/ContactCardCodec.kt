@@ -53,15 +53,21 @@ object ContactCardCodec {
         return card
     }
 
-    fun verify(card: ContactCard): Boolean = try {
-        if (card.displayName.isBlank() || card.displayName.length > 64) return false
-        if (fingerprint(card.encodedPublicKey) != card.fingerprint) return false
-        val publicKey = KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(card.encodedPublicKey))
-        val verifier = Signature.getInstance("SHA256withECDSA")
-        verifier.initVerify(publicKey)
-        verifier.update(canonical(card.displayName, card.encodedPublicKey, card.fingerprint))
-        verifier.verify(card.signature)
-    } catch (_: Exception) { false }
+    fun verify(card: ContactCard): Boolean {
+        return try {
+            if (card.displayName.isBlank() || card.displayName.length > 64) {
+                false
+            } else if (fingerprint(card.encodedPublicKey) != card.fingerprint) {
+                false
+            } else {
+                val publicKey = KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(card.encodedPublicKey))
+                val verifier = Signature.getInstance("SHA256withECDSA")
+                verifier.initVerify(publicKey)
+                verifier.update(canonical(card.displayName, card.encodedPublicKey, card.fingerprint))
+                verifier.verify(card.signature)
+            }
+        } catch (_: Exception) { false }
+    }
 
     fun fingerprint(encodedPublicKey: ByteArray): String =
         MessageDigest.getInstance("SHA-256").digest(encodedPublicKey)
