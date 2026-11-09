@@ -2,7 +2,7 @@ name: TomChat Android CI
 
 on:
   push:
-    branches: [main, android-rebuild]
+    branches: [main, android-rebuild, voice-audio-foundation, webrtc-audio-foundation]
   pull_request:
     branches: [main, android-rebuild]
   workflow_dispatch:
