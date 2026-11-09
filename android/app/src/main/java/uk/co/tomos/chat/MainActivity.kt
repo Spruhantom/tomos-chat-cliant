@@ -569,7 +569,7 @@ private fun ChatsScreen(profile: AccountProfile) {
         while (true) {
             try {
                 val event = withContext(Dispatchers.IO) { active.receiveEvent() }
-                callController?.handle(event)
+                withContext(Dispatchers.IO) { callController?.handle(event) }
                 callSnapshot = callController?.snapshot
                 when (event) {
                     is PeerConversationEvent.MessageReceived,
