@@ -1,134 +1,100 @@
-# TomChat messaging and end-to-end encryption priority
+# TomChat parallel communications development plan
 
 **Priority:** Highest active development priority  
 **Branch:** `android-rebuild`  
-**Product constraint:** Serverless peer-to-peer. No TomChat application servers, relays, rendezvous services, hosted key directories, push gateways, or cloud message storage.
+**Product constraint:** Strict serverless peer-to-peer. No TomChat application servers, relays, rendezvous services, hosted key directories, push gateways, TURN relays or cloud message storage.
 
-Secure messaging, group messaging and encrypted voice calling are now the top product priorities. Work is staged so group and real-time media features build on a tested one-to-one encrypted transport rather than introducing several unverified security paths at once. Visual polish, social features and optional integrations remain secondary.
+## Product decision
 
-## Current position
+Develop all five communication capabilities in parallel workstreams:
 
-- Android application and account/contact foundations exist.
-- Direct TCP peer transport and mutual identity authentication foundations exist. Mutual authentication alone is not end-to-end encryption.
-- The Rust Noise XX core and JNI boundary exist as an experimental implementation.
-- Noise has not yet been integrated into the direct TCP application-data path.
-- There is no complete encrypted application-message framing and delivery path yet.
-- Do not describe TomChat as having production-ready E2EE or enable ordinary messaging until the release gates below are met.
+1. One-to-one secure text messaging.
+2. End-to-end encryption and identity/key verification.
+3. Secure group messaging and group membership management.
+4. Encrypted one-to-one voice calls.
+5. Encrypted group voice calls.
 
-## Priority sequence
+Parallel development means design, implementation, tests and prototypes can progress at the same time. It does **not** mean bypassing shared security dependencies or shipping unfinished paths. All workstreams must use the same reviewed identity and cryptographic foundations, and each feature remains disabled until its own security and device-test gates pass.
 
-### 0. Keep the build and test foundation green
+## Shared foundations — owned centrally
 
-- Maintain Rust formatting, check, test and Clippy checks.
-- Run Android JVM tests for the Kotlin Noise wrapper lifecycle and handshake guard.
-- Build the Android APK and verify the packaged native library and required JNI exports for ARM64, ARM32 and x86_64.
-- Keep physical-device checks as a documented manual validation activity; emulator boot is not a required CI gate.
+These are cross-cutting requirements for every workstream:
 
-### 1. Review and harden the identity-to-Noise binding
+- Review and harden identity-to-key binding. Bind the Noise static public key to the existing signed contact identity; verify the signature and trusted fingerprint before session establishment.
+- Protect local private keys using Android Keystore-backed storage and define backup, restore, rotation, revocation and device replacement behaviour.
+- Complete and review the direct peer Noise transport integration. No application data may pass before handshake and pinned-peer verification succeed.
+- Define bounded, versioned framing, strict payload limits, safe parsing, session lifecycle and fail-closed behaviour.
+- Keep message and media payloads encrypted end-to-end. No plaintext fallback, cloud storage or server-side decryption.
+- Review JNI boundaries, key handling, memory lifetime, error paths and cryptographic protocol choices.
+- Maintain Rust format/check/test/Clippy, Kotlin JVM tests, Android APK builds and ABI/JNI export checks. Emulator boot is not a required CI gate; physical-device checks remain mandatory for device claims.
 
-- Confirm the local Noise static private key is generated, stored and retrieved securely, with Android Keystore-backed protection and explicit lifecycle handling.
-- Bind the Noise public key to the existing signed contact identity card.
-- Verify the contact-card signature and the peer key fingerprint before starting a session.
-- Ensure the key presented during the Noise XX handshake exactly matches the trusted contact's pinned Noise key.
-- Test changed keys, missing bindings, malformed keys, revoked contacts and identity replacement.
-- Keep direct TCP identity authentication separate from the cryptographic protection of application data.
+## Parallel workstreams
 
-### 2. Define a bounded encrypted message protocol
+### A. One-to-one text messaging
 
-- Specify a versioned, length-prefixed frame format with strict maximum sizes.
-- Carry application message type, stable message ID and payload only inside Noise-encrypted records.
-- Reject malformed, oversized, truncated and unsupported frames safely.
-- Define connection/session binding, ordering, disconnect and re-handshake behaviour.
-- Use Noise transport sequencing for cryptographic replay/order protection and message IDs for application-level duplicate suppression.
-- Never fall back to plaintext if encryption, key verification or framing fails.
+- Build the versioned encrypted message envelope over the Noise transport.
+- Implement send/receive, stable message IDs, duplicate suppression and bounded payload validation.
+- Add encrypted local message persistence, conversation state and honest sending/delivery status.
+- Test bidirectional exchange, reconnect, partial TCP reads/writes, malformed frames, replay and disconnect behaviour.
 
-### 3. Connect Noise to direct peer transport
+### B. End-to-end encryption and identity
 
-- Integrate the Noise session into the existing direct TCP connection lifecycle.
-- Exchange bounded handshake messages over the authenticated direct connection.
-- Complete and verify the Noise handshake before accepting or sending application data.
-- Route all application payloads through authenticated Noise transport records.
-- Make session close, cancellation, timeout and network loss fail closed.
-- Keep Bluetooth discovery and any other transport as separate follow-on work; do not delay the first Wi-Fi messaging milestone for them.
+- Verify signed contact identity cards and their bound Noise public keys.
+- Pin the expected peer static key and reject mismatches, missing bindings, revoked contacts and identity changes.
+- Ensure all application data is carried only inside authenticated Noise transport records.
+- Add negative tests for wrong keys, tampered ciphertext, replay, incomplete handshakes and closed sessions.
+- This workstream is a shared dependency: other workstreams may build against its interfaces and test doubles, but must not bypass its security gates.
 
-### 4. Prove the encrypted transport with automated tests
+### C. Group messaging
 
-Add deterministic tests for:
+- Evaluate and integrate a reviewed group key-management protocol such as MLS/OpenMLS; do not invent a bespoke group cryptographic scheme.
+- Design authenticated group creation, invitations, joins, removals, membership changes and key rotation.
+- Persist group state safely and test restoration after process/app restart.
+- Test concurrent membership changes, stale/forked state, replay, duplicate delivery and removed-member access.
+- Keep group message delivery peer-to-peer. Document that offline or unreachable members cannot receive messages until a direct path is available.
 
-- Two peers completing the Noise XX handshake with the correct pinned keys.
-- Wrong, changed or untrusted peer keys being rejected.
-- Bidirectional encrypted payload exchange.
-- Tampered ciphertext and malformed records being rejected.
-- Replay, duplicate message IDs, out-of-order and truncated frames.
-- Oversized payloads and invalid protocol versions.
-- Partial TCP reads/writes and multiple frames in one stream.
-- Disconnect during handshake, disconnect during transfer and reconnect with a fresh session.
-- Session closure and attempts to use closed or incomplete sessions.
-- Confirming no application plaintext reaches the socket writer or UI before encryption.
+### D. One-to-one voice calls
 
-Use Rust integration tests with loopback TCP and Kotlin/JVM tests for wrapper and state-machine behaviour. Keep Android native library packaging/JNI export checks in CI. Physical Android-to-Android testing remains required before claiming real-device compatibility.
+- Develop call signalling/state machines alongside text messaging, but gate real calls on the verified peer session.
+- Design direct peer-to-peer audio transport and end-to-end media protection separately from signalling encryption.
+- Define authenticated media-key derivation, nonce management, replay protection, rekeying and teardown with cryptographic review.
+- Implement microphone permission, audio focus, mute, speaker/headset routing, Bluetooth headset support, packet-loss handling and network interruption.
+- Test call setup/teardown, two-way audio, mute, route changes, background/foreground and reconnect on physical devices.
 
-### 5. Deliver the first two-device messaging prototype
+### E. Group voice calls
 
-- Add a minimal conversation view and message composer.
-- Send and receive one-to-one text messages over direct Wi-Fi TCP using the integrated Noise session.
-- Persist received and sent messages locally using encrypted storage.
-- Show clear connection and delivery states without claiming delivery when a peer is unreachable.
-- Test on two physical Android devices on the same Wi-Fi network.
-- Capture logs and test results with private keys and message contents excluded.
-
-### 6. Add end-to-end encrypted group messaging
-
-Begin after one-to-one encrypted text exchange is proven:
-
-- Use a reviewed group key-management protocol, evaluating OpenMLS for MLS rather than inventing a group cryptographic scheme.
-- Persist group state safely and restore it after app restart.
-- Test member addition/removal, stale or forked group state, key rotation, replay, duplicate delivery and concurrent membership changes.
-- Ensure removed members cannot decrypt messages sent after their removal is committed.
-- Keep group membership changes authenticated and visible to participants.
-- Test small groups across multiple physical Android devices before expanding group size.
-- Do not treat a collection of separate one-to-one chats as secure group messaging.
-
-### 7. Add encrypted one-to-one voice calls
-
-Start with direct Wi-Fi/IP calls after the secure session and text protocol are stable:
-
-- Establish call setup and teardown over the authenticated peer connection.
-- Protect voice media end-to-end; encrypting signalling alone does not encrypt audio.
-- Use an authenticated media key derived from the verified peer session, with nonce/replay protection and reviewed rekeying rules.
-- Handle microphone permission, audio focus, Bluetooth headset routing, network changes, packet loss and call interruption.
-- Add clear call states: ringing, connecting, active, reconnecting, ended and failed.
-- Test two-device call setup, two-way audio, mute, speaker/headset switching, background/foreground transitions and disconnects.
-- Keep call media direct peer-to-peer; no media server, TURN relay or cloud fallback.
-
-### 8. Add encrypted group voice calls
-
-Only after one-to-one voice and group key management have been validated:
-
-- Define authenticated group call membership and admission/removal behaviour.
-- Use reviewed group media key distribution and rotation; never reuse a one-to-one media key across a group.
+- Design group-call membership, admission/removal and participant state in parallel with group messaging.
+- Use a reviewed group media-key distribution and rotation design; never reuse a one-to-one media key for a group.
 - Protect media against replay and unauthorized late joiners.
-- Test participant joins/leaves, network changes, packet loss, mute and call teardown across multiple devices.
-- Document direct-connectivity limitations: group calls may fail when peers are behind incompatible NAT/firewalls. Do not silently introduce a relay.
+- Test participant joins/leaves, key rotation, mute, packet loss, network changes and call teardown across multiple devices.
+- Keep media direct between peers. No SFU, media server, TURN relay or cloud fallback. Clearly expose when direct connectivity is unavailable.
 
-## Release gates
+## How parallel development is coordinated
 
-The one-to-one messaging milestone is complete only when:
+- Keep shared protocol and cryptographic interfaces in a single reviewed design to prevent incompatible implementations.
+- Work in isolated feature branches or clearly separated modules, with small reviewable commits.
+- Use mocks/test doubles to let UI, group-state and call-state work proceed while the shared encrypted transport is being completed.
+- Integrate frequently into `android-rebuild`; resolve interface changes centrally and run the full CI suite after integration.
+- Never merge unfinished experimental media or group-key code into a release path merely to keep parallel work moving.
+- Run a threat-model and code review for each cryptographic protocol boundary before enabling it.
 
-1. Identity and Noise key binding is verified against signed, trusted contact data.
-2. No application data can pass before the Noise handshake and peer-key pin check succeed.
-3. The direct TCP data path uses Noise encryption exclusively.
-4. Automated tests cover valid exchange and the negative cases listed above.
-5. Two physical Android devices exchange encrypted text messages successfully over direct Wi-Fi.
-6. A code/security review has checked key handling, JNI boundaries, framing, session lifecycle and failure behaviour.
+## Milestones and release gates
 
-The group messaging milestone additionally requires tested group key lifecycle, membership changes and multi-device encrypted exchange. The voice milestones additionally require encrypted media tests and physical-device audio validation. Do not describe any feature as production-ready until its own gates and security review are complete.
+The workstreams can progress concurrently, but release is gated independently:
 
-## Deferred until the core communication milestones are proven
+- **Text messaging:** verified peer identity, Noise-only application transport, framing/negative tests, encrypted local persistence and successful two-physical-device Wi-Fi exchange.
+- **Group messaging:** reviewed group protocol, secure state restoration, tested membership changes/removal/key rotation and multi-device encrypted exchange.
+- **One-to-one voice:** authenticated call setup, independently protected media, replay/rekey review, and physical-device two-way audio tests.
+- **Group voice:** reviewed group media-key lifecycle, secure joins/leaves/removal, replay protection and multi-device audio tests.
+- **Overall release:** independent security review of identity, key storage, Noise integration, message framing, group key management, media protection, JNI and lifecycle/error handling.
+
+Until a feature passes its own gates, keep it marked experimental or disabled. Do not describe TomChat or any incomplete feature as production-ready E2EE.
+
+## Deferred
 
 - File sharing and voice notes.
-- Bluetooth data transport integration (Bluetooth headset audio routing for calls remains in scope).
+- Bluetooth data transport (Bluetooth headset audio routing for calls remains in scope).
 - TomSocial and public discovery.
-- UI polish unrelated to secure messaging and calling.
+- Unrelated UI polish.
 
-The delivery order is one-to-one encrypted text, encrypted group messaging, encrypted one-to-one voice calls, then encrypted group voice calls. These are all priority features, but each builds on verified foundations from the previous stage.
+These remain secondary to delivering the five communication workstreams safely.
