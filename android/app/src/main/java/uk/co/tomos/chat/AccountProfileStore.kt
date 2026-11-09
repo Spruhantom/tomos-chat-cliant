@@ -58,7 +58,8 @@ class AccountProfileStore(filesDir: File) {
             val encrypted = ByteArray(input.available()).also(input::readFully)
             if (encrypted.isEmpty()) throw IOException("Encrypted profile is empty.")
             val cipher = Cipher.getInstance(TRANSFORMATION)
-            cipher.init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(GCM_TAG_BITS, iv))
+            cipher.init(Cipher.DECRYPT_MODE, getExistingKey(), GCMParameterSpec(GCM_TAG_BITS, iv))
+            cipher.updateAAD(FORMAT_VERSION_AAD)
             val plain = cipher.doFinal(encrypted)
             return AccountProfileCodec.decode(plain)
         } catch (e: Exception) {
@@ -72,6 +73,7 @@ class AccountProfileStore(filesDir: File) {
     fun save(profile: AccountProfile) {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
+        cipher.updateAAD(FORMAT_VERSION_AAD)
         val encrypted = cipher.doFinal(AccountProfileCodec.encode(profile))
         val output = ByteArrayOutputStream()
         DataOutputStream(output).use { data ->
@@ -90,6 +92,12 @@ class AccountProfileStore(filesDir: File) {
             file.failWrite(stream)
             throw IOException("Could not save the encrypted account profile.", e)
         }
+    }
+
+    private fun getExistingKey(): SecretKey {
+        val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        return keyStore.getKey(keyAlias, null) as? SecretKey
+            ?: throw IOException("The account encryption key is missing. The saved profile was not changed.")
     }
 
     private fun getOrCreateKey(): SecretKey {
@@ -115,6 +123,7 @@ class AccountProfileStore(filesDir: File) {
         const val GCM_IV_LENGTH = 12
         const val GCM_TAG_BITS = 128
         const val TRANSFORMATION = "AES/GCM/NoPadding"
+        val FORMAT_VERSION_AAD = byteArrayOf(FORMAT_VERSION.toByte())
     }
 }
 
