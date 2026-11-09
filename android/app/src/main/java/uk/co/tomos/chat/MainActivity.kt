@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -31,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -40,8 +43,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.LocalDate
+import java.time.format.DateTimeParseException
 
 private val Void = Color(0xFF0A0A12)
 private val Panel = Color(0xFF14141F)
@@ -72,7 +79,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme(colorScheme = TomChatColors) {
-                TomChatApp()
+                var assignedBand by rememberSaveable { mutableStateOf<String?>(null) }
+                if (assignedBand == null) {
+                    AccountSetupScreen { band -> assignedBand = band.name }
+                } else {
+                    TomChatApp(AgeBand.valueOf(assignedBand!!))
+                }
             }
         }
     }
@@ -85,8 +97,101 @@ private enum class Destination(val label: String, val glyph: String) {
     Settings("Settings", "⚙")
 }
 
+
 @Composable
-private fun TomChatApp() {
+private fun AccountSetupScreen(onAssigned: (AgeBand) -> Unit) {
+    var displayName by rememberSaveable { mutableStateOf("") }
+    var dateOfBirth by rememberSaveable { mutableStateOf("") }
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
+    var assessedBand by rememberSaveable { mutableStateOf<String?>(null) }
+
+    Column(
+        modifier = Modifier.fillMaxSize().background(Void).padding(horizontal = 24.dp, vertical = 28.dp),
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text("TOMCHAT", color = Pink, fontSize = 13.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
+        Spacer(Modifier.height(10.dp))
+        Text("Let's set up your account", color = TextPrimary, fontSize = 27.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        Text("Your date of birth determines which age-appropriate TomChat experience and protections are assigned.", color = Muted, fontSize = 13.sp, lineHeight = 20.sp)
+        Spacer(Modifier.height(24.dp))
+        OutlinedTextField(
+            value = displayName,
+            onValueChange = { displayName = it; error = null; assessedBand = null },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Display name") },
+            singleLine = true
+        )
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(
+            value = dateOfBirth,
+            onValueChange = { dateOfBirth = it; error = null; assessedBand = null },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Date of birth (YYYY-MM-DD)") },
+            placeholder = { Text("2012-04-23") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii)
+        )
+        Spacer(Modifier.height(10.dp))
+        Text("Your full date of birth should not be retained in the finished account. Age assurance and guardian consent will be separate steps.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
+        if (error != null) {
+            Spacer(Modifier.height(10.dp))
+            Text(error!!, color = Color(0xFFFF6B83), fontSize = 12.sp)
+        }
+        if (assessedBand != null) {
+            val band = AgeBand.valueOf(assessedBand!!)
+            Spacer(Modifier.height(14.dp))
+            Card(colors = CardDefaults.cardColors(containerColor = Panel), border = BorderStroke(1.dp, Cyan.copy(alpha = 0.4f))) {
+                Column(Modifier.padding(14.dp)) {
+                    Text("ASSIGNED EXPERIENCE", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text(band.title, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text(band.description, color = Muted, fontSize = 12.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Prototype only: this does not verify age or guardian consent. Restricted features must remain locked until proper checks are implemented.", color = Color(0xFFFFE14D), fontSize = 11.sp, lineHeight = 16.sp)
+                }
+            }
+        }
+        Spacer(Modifier.height(18.dp))
+        Button(
+            onClick = {
+                val name = displayName.trim()
+                if (name.isEmpty()) {
+                    error = "Please enter a display name."
+                } else {
+                    try {
+                        val dob = LocalDate.parse(dateOfBirth.trim())
+                        when (val assessment = AgeBandPolicy.assess(dob, LocalDate.now())) {
+                            AgeAssessment.InvalidFutureDate -> error = "Date of birth cannot be in the future."
+                            is AgeAssessment.Assigned -> {
+                                if (assessment.band == AgeBand.UNDER_FIVE) {
+                                    error = "A guardian-led setup flow is required for this age group. Independent setup is not available."
+                                    assessedBand = null
+                                } else {
+                                    assessedBand = assessment.band.name
+                                    error = null
+                                }
+                            }
+                        }
+                    } catch (_: DateTimeParseException) {
+                        error = "Enter a valid date in YYYY-MM-DD format."
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Determine account experience") }
+        if (assessedBand != null) {
+            Spacer(Modifier.height(8.dp))
+            Button(onClick = { onAssigned(AgeBand.valueOf(assessedBand!!)) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Continue to TomChat")
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("DIRECT PEER-TO-PEER • NO APPLICATION SERVERS", color = Cyan, fontSize = 9.sp, letterSpacing = 1.sp)
+    }
+}
+
+@Composable
+private fun TomChatApp(ageBand: AgeBand) {
     var destination by rememberSaveable { mutableStateOf(Destination.Chats) }
     Surface(modifier = Modifier.fillMaxSize(), color = Void) {
         Scaffold(
@@ -110,7 +215,7 @@ private fun TomChatApp() {
                     Destination.Chats -> ChatsScreen()
                     Destination.Contacts -> ContactsScreen()
                     Destination.Calls -> CallsScreen()
-                    Destination.Settings -> SettingsScreen()
+                    Destination.Settings -> SettingsScreen(ageBand)
                 }
             }
         }
@@ -221,13 +326,16 @@ private fun CallsScreen() {
 }
 
 @Composable
-private fun SettingsScreen() {
+private fun SettingsScreen(ageBand: AgeBand) {
     Column(Modifier.fillMaxSize()) {
         ScreenTitle("Settings", "Your device. Your identity. Your connections.")
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            item {
+                SettingCard("Account experience", "${ageBand.title}: ${ageBand.description} Age assurance and guardian consent are not connected yet; this is only a local, self-declared age-band preview.", "VERIFICATION PENDING")
+            }
             item {
                 SettingCard("Network policy", "Strict peer-to-peer. No application servers, relays, push gateways or hosted discovery.", "ZERO SERVER")
             }
