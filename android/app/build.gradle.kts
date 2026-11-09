@@ -4,6 +4,35 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+
+import org.gradle.api.tasks.Exec
+
+val nativeNoiseManifest = rootProject.file("android/native/tomchat-noise/Cargo.toml")
+val nativeNoiseOutput = rootProject.file("android/app/src/main/jniLibs")
+
+tasks.register<Exec>("buildTomChatNoise") {
+    group = "build"
+    description = "Build the Rust Noise core for supported Android ABIs."
+    inputs.file(nativeNoiseManifest)
+    inputs.dir(rootProject.file("android/native/tomchat-noise/src"))
+    outputs.dir(nativeNoiseOutput)
+    workingDir = rootProject.projectDir
+    commandLine(
+        "cargo", "ndk",
+        "--platform", "26",
+        "-t", "arm64-v8a",
+        "-t", "armeabi-v7a",
+        "-t", "x86_64",
+        "-o", nativeNoiseOutput.absolutePath,
+        "build", "--release",
+        "--manifest-path", nativeNoiseManifest.absolutePath
+    )
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("buildTomChatNoise")
+}
+
 android {
     namespace = "uk.co.tomos.chat"
     compileSdk = 35
