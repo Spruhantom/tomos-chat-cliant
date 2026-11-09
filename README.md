@@ -2,7 +2,7 @@
 
 **TomChat** is an Android-first project to build a decentralised, peer-to-peer messaging and voice app that keeps identity and communication under the user's control.
 
-> **Development status:** early Android foundation. The current app contains a first-run age-band prototype and basic navigation. It is not yet a functioning messenger, and age verification, guardian consent, end-to-end encrypted messaging, identity storage and peer networking are not yet implemented.
+> **Development status:** early Android foundation. The current app contains first-run age-band setup, local encrypted profile storage, a device signing identity, signed QR contact cards, and a direct TCP identity-proof prototype. It is not yet a functioning messenger. The Noise XX Rust core remains isolated from the Android transport, and end-to-end encrypted messaging is not yet available.
 
 ## Project principles
 
@@ -48,7 +48,7 @@ Any proposed verification mechanism must be assessed against TomChat's strict no
 - File sharing and voice messages.
 - Direct Bluetooth and Wi-Fi LAN connections, plus direct IP connections where reachable.
 - Automatic selection of the best available direct route, based on latency, throughput, stability and battery impact.
-- Device-local P-256 signing identity protected by Android Keystore, plus versioned signed contact cards and local QR rendering. Camera scanning, fingerprint approval and encrypted trusted-contact persistence are implemented. A direct TCP peer transport with mutual signed-nonce identity proof is now prototyped; it does not yet carry application data or provide an encrypted session.
+- Device-local P-256 signing identity protected by Android Keystore, plus persistent X25519 Noise identity protected at rest by an Android Keystore AES-GCM wrapping key. V2 QR contact cards cryptographically bind the Noise public key into the P-256 signature. Camera scanning, fingerprint approval and encrypted trusted-contact persistence are implemented, including compatibility with older V1 cards (which are not Noise-capable). A direct TCP peer transport with mutual signed-nonce identity proof is prototyped; it does not yet carry application data or provide an encrypted session.
 - Encrypted local backup and encrypted peer-to-peer replication to explicitly trusted devices.
 - TomSocial integration as a later, carefully scoped decentralised social layer.
 
@@ -56,7 +56,7 @@ All networking must use the same authenticated peer identity and end-to-end encr
 
 ## Android application
 
-The Android foundation uses Kotlin, Jetpack Compose and Material 3, with the TomOS visual design documented in [docs/design-system.md](docs/design-system.md). Tom OS Hyprland 1 is the primary brand reference; TomOS Android SIP informs Android interaction patterns, without importing SIP or Linphone functionality.
+The Android foundation uses Kotlin, Jetpack Compose and Material 3, with an isolated Rust Noise XX prototype using Snow at `android/native/tomchat-noise`. The Rust Noise session is not yet connected to Android via JNI/UniFFI. See [docs/architecture.md](docs/architecture.md) for the signed identity binding and remaining security work. The TomOS visual design is documented in [docs/design-system.md](docs/design-system.md). Tom OS Hyprland 1 is the primary brand reference; TomOS Android SIP informs Android interaction patterns, without importing SIP or Linphone functionality.
 
 Current UI foundation:
 - first-run display-name and date-of-birth screen with local age-band preview;
@@ -64,7 +64,7 @@ Current UI foundation:
 - TomOS neon visual styling;
 - account experience and zero-server policy status placeholders.
 
-The age-band classifier, central capability policy and unit tests are under `android/app/src/main` and `android/app/src/test`. The prototype defaults to unverified accounts, so communication capabilities remain locked; minors additionally require guardian approval. This is domain-policy scaffolding, not a connected age-verification or consent flow. Account setup now persists a minimal profile using AES-256-GCM with a device-held Android Keystore key; the full date of birth is not saved. Keystore/atomic-file behaviour still requires physical-device testing.
+The age-band classifier, central capability policy and unit tests are under `android/app/src/main` and `android/app/src/test`. The prototype defaults to unverified accounts, so communication capabilities remain locked; minors additionally require guardian approval. This is domain-policy scaffolding, not a connected age-verification or consent flow. Account setup persists a minimal profile using AES-256-GCM with a device-held Android Keystore key; the full date of birth is not saved. The persistent Noise X25519 private scalar is wrapped with AES-256-GCM and is not stored in plaintext. Keystore/atomic-file behaviour still requires physical-device testing.
 
 ## Build
 
