@@ -19,7 +19,7 @@ import javax.crypto.spec.GCMParameterSpec
 private const val MAX_STORED_MESSAGE_BODY_BYTES = 16 * 1024
 
 enum class StoredMessageDirection { INCOMING, OUTGOING }
-enum class StoredMessageStatus { RECEIVED, QUEUED, SENT, FAILED }
+enum class StoredMessageStatus { RECEIVED, QUEUED, SENT, FAILED, DELIVERED }
 
 data class StoredChatMessage(
     val id: UUID,
@@ -54,12 +54,26 @@ class EncryptedMessageStore(filesDir: File) {
     }
 
     @Throws(IOException::class)
-    fun append(message: StoredChatMessage) = synchronized(lock) {
+    fun append(message: StoredChatMessage): Boolean = synchronized(lock) {
         val records = if (file.baseFile.exists()) decryptSnapshot().toMutableList() else mutableListOf()
-        records.removeAll { it.id == message.id }
+        val existing = records.firstOrNull { it.id == message.id }
+        if (existing != null) {
+            if (existing.peerFingerprint != message.peerFingerprint ||
+                existing.direction != message.direction || existing.body != message.body) {
+                throw IOException("A message identifier was reused for different conversation content.")
+            }
+            return@synchronized false
+        }
         records += message
         val bounded = records.sortedBy { it.createdAtEpochMillis }.takeLast(MAX_MESSAGES)
         writeSnapshot(bounded)
+        true
+    }
+
+    @Throws(IOException::class)
+    fun containsMessage(peerFingerprint: String, messageId: UUID): Boolean = synchronized(lock) {
+        if (!file.baseFile.exists()) return@synchronized false
+        decryptSnapshot().any { it.peerFingerprint == peerFingerprint && it.id == messageId }
     }
 
     @Throws(IOException::class)
