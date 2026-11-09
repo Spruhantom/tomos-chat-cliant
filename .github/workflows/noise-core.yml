@@ -1,0 +1,32 @@
+name: TomChat Noise Core CI
+
+on:
+  push:
+    branches: [android-rebuild]
+    paths:
+      - 'android/native/tomchat-noise/**'
+      - '.github/workflows/noise-core.yml'
+  pull_request:
+    branches: [android-rebuild]
+    paths:
+      - 'android/native/tomchat-noise/**'
+      - '.github/workflows/noise-core.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  noise-core:
+    name: Test experimental Noise core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: android/native/tomchat-noise
+      - name: Run Noise session tests
+        run: cargo test --manifest-path android/native/tomchat-noise/Cargo.toml
+      - name: Run Clippy
+        run: cargo clippy --manifest-path android/native/tomchat-noise/Cargo.toml --all-targets -- -D warnings
