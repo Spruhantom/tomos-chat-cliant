@@ -437,7 +437,9 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
         }
         if (scanError != null) Text(scanError!!, color = Color(0xFFFF6B83), modifier = Modifier.padding(20.dp))
         scanned?.let { card ->
-            val alreadyTrusted = trusted.any { it.fingerprint == card.fingerprint }
+            val trustedMatch = trusted.firstOrNull { it.fingerprint == card.fingerprint }
+            val alreadyTrusted = trustedMatch != null && trustedMatch.noiseStaticPublicKey?.contentEquals(card.noiseStaticPublicKey ?: ByteArray(0)) == true
+            val noiseKeyChanged = trustedMatch != null && !alreadyTrusted
             val hasNoiseBinding = card.noiseStaticPublicKey != null
             Card(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), colors = CardDefaults.cardColors(containerColor = Panel), border = BorderStroke(1.dp, Cyan)) {
                 Column(Modifier.padding(16.dp)) {
@@ -458,17 +460,20 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
                     if (alreadyTrusted) {
                         Text("Already trusted on this device.", color = Green, fontSize = 12.sp)
                     } else {
+                        if (noiseKeyChanged) {
+                            Text("WARNING: this contact has presented a different Noise key. Only approve it if you independently re-verified the unchanged identity fingerprint with the contact.", color = Color(0xFFFFE14D), fontSize = 12.sp)
+                        }
                         Button(enabled = fingerprintCompared && hasNoiseBinding && !saving, onClick = {
                             saving = true
                             scope.launch {
                                 try {
-                                    val updated = trusted + TrustedContact(card.displayName, card.encodedPublicKey, card.fingerprint, card.noiseStaticPublicKey)
+                                    val updated = trusted.filterNot { it.fingerprint == card.fingerprint } + TrustedContact(card.displayName, card.encodedPublicKey, card.fingerprint, card.noiseStaticPublicKey)
                                     withContext(Dispatchers.IO) { store.save(updated) }
                                     trusted = updated; scanned = null; scanError = null
                                 } catch (error: Exception) { scanError = error.message ?: "Could not save this contact." }
                                 finally { saving = false }
                             }
-                        }, modifier = Modifier.fillMaxWidth()) { Text(if (saving) "Saving…" else "Trust and save contact") }
+                        }, modifier = Modifier.fillMaxWidth()) { Text(if (saving) "Saving…" else if (noiseKeyChanged) "Approve changed Noise key" else "Trust and save contact") }
                     }
                     TextButton(onClick = { scanned = null; fingerprintCompared = false }) { Text("Reject contact") }
                 }
