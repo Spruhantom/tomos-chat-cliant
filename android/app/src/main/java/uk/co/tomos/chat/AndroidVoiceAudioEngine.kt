@@ -298,7 +298,9 @@ class AndroidVoiceAudioEngine(
     private fun restoreAudioRouting() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                audioManager.setCommunicationDevice(previousCommunicationDevice)
+                val previousDevice = previousCommunicationDevice
+                if (previousDevice != null) audioManager.setCommunicationDevice(previousDevice)
+                else audioManager.clearCommunicationDevice()
             } else {
                 audioManager.isSpeakerphoneOn = previousSpeakerphoneState
             }
