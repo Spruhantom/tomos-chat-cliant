@@ -42,3 +42,20 @@ The production flow needs a reviewed age-assurance design and a separate guardia
 ## Serverless architecture boundary
 
 Age-band calculation can be local. That does not make age verification or guardian consent trustworthy by itself. Any eventual proof should be verified locally where technically possible (for example, using a verifiable credential issued by a suitable independent process), with no TomChat account server, directory, relay, or hosted guardian service. Whether a credential issuer is compatible with the product's strict serverless promise requires a separate product decision and legal/privacy review.
+
+## Central capability policy prototype
+
+A domain-level policy now separates three inputs:
+
+- calculated age band;
+- age-assurance status (`NOT_VERIFIED` / `VERIFIED`);
+- guardian-consent status (`NOT_REQUIRED` / `PENDING` / `APPROVED` / `DENIED`).
+
+`AccountSafetyPolicy` returns explicit capability decisions. In the current default account state, all communication capabilities remain locked because age assurance has not been completed; minor accounts also require guardian approval. The prototype capability matrix is deliberately conservative:
+
+- Ages 5–12: contact-card exchange and messaging to approved contacts only.
+- Ages 13–17: approved-contact messaging, calls, file sharing and private groups; no public discovery or public social posting.
+- Adults: standard capabilities only after verified age and a consistent `NOT_REQUIRED` guardian state.
+- Under 5: independent account setup and capabilities remain blocked.
+
+These are initial product rules for review, not a claim of legal compliance. Before release, the matrix needs a safeguarding review and enforcement at every use-case boundary. UI visibility alone is not a security control. Tests cover unverified accounts, pending/denied guardian approval, age-specific capabilities and inconsistent adult guardian state.
