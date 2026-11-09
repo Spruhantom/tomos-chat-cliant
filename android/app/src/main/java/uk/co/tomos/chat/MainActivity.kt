@@ -32,8 +32,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
@@ -51,6 +53,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -380,6 +383,33 @@ private fun StatusCard() {
 
 @Composable
 private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
+    val context = LocalContext.current
+    val store = remember { TrustedContactStore(context.filesDir) }
+    val scope = rememberCoroutineScope()
+    var trusted by remember { mutableStateOf<List<TrustedContact>>(emptyList()) }
+    var scanOpen by remember { mutableStateOf(false) }
+    var scanned by remember { mutableStateOf<ContactCard?>(null) }
+    var scanError by remember { mutableStateOf<String?>(null) }
+    var fingerprintCompared by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+
+    LaunchedEffect(store) {
+        try { trusted = withContext(Dispatchers.IO) { store.load() } }
+        catch (error: IOException) { scanError = error.message ?: "Could not open trusted contacts." }
+    }
+
+    if (scanOpen) {
+        ContactQrScanner(
+            onScanned = { payload ->
+                scanOpen = false
+                try { scanned = ContactCardCodec.decode(payload); fingerprintCompared = false; scanError = null }
+                catch (error: Exception) { scanError = error.message ?: "This is not a valid TomChat contact card." }
+            },
+            onCancel = { scanOpen = false }
+        )
+        return
+    }
+
     Column(Modifier.fillMaxSize()) {
         ScreenTitle("Contacts", "People you connect with directly.")
         val safety = profile.safetyState()
@@ -387,20 +417,71 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
         if (contactCard == null) {
             EmptyState("◎", "Device identity unavailable", "TomChat could not prepare this device's signed contact card.")
         } else if (!mayExchange) {
-            EmptyState(
-                glyph = "◎",
-                title = "Contact exchange is locked",
-                body = AccountSafetyPolicy.restrictionReason(safety) + " Your device identity is generated locally; sharing it remains disabled until the account safety checks are complete."
-            )
+            EmptyState("◎", "Contact exchange is locked", AccountSafetyPolicy.restrictionReason(safety))
         } else {
-            val bitmap = remember(contactCard) { ContactQrRenderer.render(contactCard).asImageBitmap() }
-            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+                val bitmap = remember(contactCard) { ContactQrRenderer.render(contactCard).asImageBitmap() }
                 Card(colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Cyan)) {
-                    Image(bitmap = bitmap, contentDescription = "Your signed TomChat contact QR code", modifier = Modifier.size(260.dp).padding(10.dp))
+                    Image(bitmap = bitmap, contentDescription = "Your signed TomChat contact QR code", modifier = Modifier.size(220.dp).padding(10.dp))
                 }
-                Spacer(Modifier.height(14.dp))
                 Text("YOUR SIGNED CONTACT CARD", color = Cyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Text("Ask the other person to verify your fingerprint in person before trusting this contact.", color = Muted, fontSize = 12.sp)
+                Text("Compare fingerprints in person before trusting each other.", color = Muted, fontSize = 12.sp)
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = { scanOpen = true; scanned = null; scanError = null }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Scan another person's QR")
+                }
+            }
+        }
+        if (scanError != null) Text(scanError!!, color = Color(0xFFFF6B83), modifier = Modifier.padding(20.dp))
+        scanned?.let { card ->
+            val alreadyTrusted = trusted.any { it.fingerprint == card.fingerprint }
+            Card(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), colors = CardDefaults.cardColors(containerColor = Panel), border = BorderStroke(1.dp, Cyan)) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("VERIFY CONTACT", color = Cyan, fontWeight = FontWeight.Bold)
+                    Text(card.displayName, color = TextPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                    Text("Fingerprint", color = Muted, fontSize = 11.sp)
+                    Text(card.fingerprint, color = TextPrimary, fontSize = 12.sp)
+                    Text("Compare every group with the other person's device through a separate trusted channel. A valid signature does not prove the person's real-world identity.", color = Muted, fontSize = 12.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = fingerprintCompared, onCheckedChange = { fingerprintCompared = it })
+                        Text("I independently compared the full fingerprint", color = TextPrimary, fontSize = 12.sp)
+                    }
+                    if (alreadyTrusted) {
+                        Text("Already trusted on this device.", color = Green, fontSize = 12.sp)
+                    } else {
+                        Button(enabled = fingerprintCompared && !saving, onClick = {
+                            saving = true
+                            scope.launch {
+                                try {
+                                    val updated = trusted + TrustedContact(card.displayName, card.encodedPublicKey, card.fingerprint)
+                                    withContext(Dispatchers.IO) { store.save(updated) }
+                                    trusted = updated; scanned = null; scanError = null
+                                } catch (error: Exception) { scanError = error.message ?: "Could not save this contact." }
+                                finally { saving = false }
+                            }
+                        }, modifier = Modifier.fillMaxWidth()) { Text(if (saving) "Saving…" else "Trust and save contact") }
+                    }
+                    TextButton(onClick = { scanned = null; fingerprintCompared = false }) { Text("Reject contact") }
+                }
+            }
+        }
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+            Text("TRUSTED CONTACTS (${trusted.size})", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            if (trusted.isEmpty()) Text("No trusted contacts saved on this device.", color = Muted, fontSize = 12.sp)
+            trusted.forEach { contact ->
+                Card(colors = CardDefaults.cardColors(containerColor = Panel), modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(contact.displayName, color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                        Text(contact.fingerprint, color = Muted, fontSize = 10.sp)
+                        TextButton(onClick = {
+                            scope.launch {
+                                val updated = trusted.filterNot { it.fingerprint == contact.fingerprint }
+                                try { withContext(Dispatchers.IO) { store.save(updated) }; trusted = updated }
+                                catch (error: Exception) { scanError = error.message ?: "Could not remove this contact." }
+                            }
+                        }) { Text("Remove trust") }
+                    }
+                }
             }
         }
     }
