@@ -53,6 +53,14 @@ android {
         compose = true
         buildConfig = true
     }
+
+    // These libraries ship the same versioned OSGi manifest; it is not
+    // needed in the Android APK and otherwise breaks Java-resource merging.
+    packaging {
+        resources {
+            excludes += "/META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+        }
+    }
 }
 
 dependencies {
