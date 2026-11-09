@@ -44,7 +44,7 @@ impl From<snow::Error> for NoiseSessionError {
     fn from(value: snow::Error) -> Self { Self::Noise(value) }
 }
 
-enum State { Handshake(HandshakeState), Transport(TransportState), Closed }
+enum State { Handshake(Box<HandshakeState>), Transport(TransportState), Closed }
 
 /// One role-specific Noise XX session. Not Clone.
 pub struct NoiseSession {
@@ -67,7 +67,7 @@ impl NoiseSession {
         let params: NoiseParams = PROTOCOL.parse().map_err(|_| NoiseSessionError::InvalidState("Invalid fixed Noise suite."))?;
         let builder = Builder::new(params).local_private_key(local_private)?;
         let state = if initiator { builder.build_initiator()? } else { builder.build_responder()? };
-        Ok(Self { state: State::Handshake(state), expected_peer_static: expected_peer_static.to_vec() })
+        Ok(Self { state: State::Handshake(Box::new(state)), expected_peer_static: expected_peer_static.to_vec() })
     }
     pub fn write_handshake(&mut self, payload: &[u8]) -> Result<Vec<u8>, NoiseSessionError> {
         if payload.len() > MAX_PLAINTEXT { return Err(NoiseSessionError::MessageTooLarge); }
@@ -101,7 +101,7 @@ impl NoiseSession {
         let State::Handshake(handshake) = previous else {
             return Err(NoiseSessionError::InvalidState("Unexpected Noise state transition."));
         };
-        self.state = State::Transport(handshake.into_transport_mode()?);
+        self.state = State::Transport((*handshake).into_transport_mode()?);
         Ok(())
     }
     pub fn encrypt(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, NoiseSessionError> {
@@ -122,60 +122,6 @@ impl NoiseSession {
     }
     pub fn is_transport_ready(&self) -> bool { matches!(&self.state, State::Transport(_)) }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use snow::Builder;
-    fn pair() -> (Vec<u8>, Vec<u8>) {
-        let params: NoiseParams = PROTOCOL.parse().unwrap();
-        let key = Builder::new(params).generate_keypair().unwrap();
-        (key.private, key.public)
-    }
-    #[test]
-    fn xx_handshake_pins_static_keys_and_encrypts_bidirectionally() {
-        let (a_sk, a_pk) = pair();
-        let (b_sk, b_pk) = pair();
-        let mut a = NoiseSession::initiator(&a_sk, &b_pk).unwrap();
-        let mut b = NoiseSession::responder(&b_sk, &a_pk).unwrap();
-        assert!(a.encrypt(b"early").is_err());
-        let m1 = a.write_handshake(&[]).unwrap(); b.read_handshake(&m1).unwrap();
-        let m2 = b.write_handshake(&[]).unwrap(); a.read_handshake(&m2).unwrap();
-        let m3 = a.write_handshake(&[]).unwrap(); b.read_handshake(&m3).unwrap();
-        a.finish_handshake().unwrap(); b.finish_handshake().unwrap();
-        let ct = a.encrypt(b"hello TomChat").unwrap();
-        assert_ne!(ct, b"hello TomChat");
-        assert_eq!(b.decrypt(&ct).unwrap(), b"hello TomChat");
-        let reply = b.encrypt(b"reply").unwrap();
-        assert_eq!(a.decrypt(&reply).unwrap(), b"reply");
-    }
-    #[test]
-    fn rejects_wrong_pinned_peer_key() {
-        let (a_sk, a_pk) = pair();
-        let (b_sk, _) = pair();
-        let (_, wrong_b_pk) = pair();
-        let mut a = NoiseSession::initiator(&a_sk, &wrong_b_pk).unwrap();
-        let mut b = NoiseSession::responder(&b_sk, &a_pk).unwrap();
-        let m1 = a.write_handshake(&[]).unwrap(); b.read_handshake(&m1).unwrap();
-        let m2 = b.write_handshake(&[]).unwrap(); a.read_handshake(&m2).unwrap();
-        let m3 = a.write_handshake(&[]).unwrap(); b.read_handshake(&m3).unwrap();
-        assert!(matches!(a.finish_handshake(), Err(NoiseSessionError::PeerKeyMismatch)));
-        assert!(b.finish_handshake().is_ok());
-    }
-    #[test]
-    fn no_transport_before_handshake() {
-        let (sk, pk) = pair();
-        let mut session = NoiseSession::initiator(&sk, &pk).unwrap();
-        assert!(matches!(session.encrypt(b"x"), Err(NoiseSessionError::InvalidState(_))));
-        assert!(matches!(session.decrypt(b"x"), Err(NoiseSessionError::InvalidState(_))));
-    }
-    #[test]
-    fn validates_static_key_lengths() {
-        assert!(NoiseSession::initiator(&[0; 31], &[0; 32]).is_err());
-        assert!(NoiseSession::responder(&[0; 32], &[0; 33]).is_err());
-    }
-}
-
 
 // JNI boundary. Handles refer to Rust-owned sessions; Java never receives
 // Noise cipher state or key schedules. All calls are synchronous and bounded.
@@ -337,5 +283,58 @@ pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeCloseSession(
     match sessions().lock() {
         Ok(mut map) => { map.remove(&(handle as u64)); }
         Err(_) => throw_java(&mut env, "Noise session registry is unavailable."),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use snow::Builder;
+    fn pair() -> (Vec<u8>, Vec<u8>) {
+        let params: NoiseParams = PROTOCOL.parse().unwrap();
+        let key = Builder::new(params).generate_keypair().unwrap();
+        (key.private, key.public)
+    }
+    #[test]
+    fn xx_handshake_pins_static_keys_and_encrypts_bidirectionally() {
+        let (a_sk, a_pk) = pair();
+        let (b_sk, b_pk) = pair();
+        let mut a = NoiseSession::initiator(&a_sk, &b_pk).unwrap();
+        let mut b = NoiseSession::responder(&b_sk, &a_pk).unwrap();
+        assert!(a.encrypt(b"early").is_err());
+        let m1 = a.write_handshake(&[]).unwrap(); b.read_handshake(&m1).unwrap();
+        let m2 = b.write_handshake(&[]).unwrap(); a.read_handshake(&m2).unwrap();
+        let m3 = a.write_handshake(&[]).unwrap(); b.read_handshake(&m3).unwrap();
+        a.finish_handshake().unwrap(); b.finish_handshake().unwrap();
+        let ct = a.encrypt(b"hello TomChat").unwrap();
+        assert_ne!(ct, b"hello TomChat");
+        assert_eq!(b.decrypt(&ct).unwrap(), b"hello TomChat");
+        let reply = b.encrypt(b"reply").unwrap();
+        assert_eq!(a.decrypt(&reply).unwrap(), b"reply");
+    }
+    #[test]
+    fn rejects_wrong_pinned_peer_key() {
+        let (a_sk, a_pk) = pair();
+        let (b_sk, _) = pair();
+        let (_, wrong_b_pk) = pair();
+        let mut a = NoiseSession::initiator(&a_sk, &wrong_b_pk).unwrap();
+        let mut b = NoiseSession::responder(&b_sk, &a_pk).unwrap();
+        let m1 = a.write_handshake(&[]).unwrap(); b.read_handshake(&m1).unwrap();
+        let m2 = b.write_handshake(&[]).unwrap(); a.read_handshake(&m2).unwrap();
+        let m3 = a.write_handshake(&[]).unwrap(); b.read_handshake(&m3).unwrap();
+        assert!(matches!(a.finish_handshake(), Err(NoiseSessionError::PeerKeyMismatch)));
+        assert!(b.finish_handshake().is_ok());
+    }
+    #[test]
+    fn no_transport_before_handshake() {
+        let (sk, pk) = pair();
+        let mut session = NoiseSession::initiator(&sk, &pk).unwrap();
+        assert!(matches!(session.encrypt(b"x"), Err(NoiseSessionError::InvalidState(_))));
+        assert!(matches!(session.decrypt(b"x"), Err(NoiseSessionError::InvalidState(_))));
+    }
+    #[test]
+    fn validates_static_key_lengths() {
+        assert!(NoiseSession::initiator(&[0; 31], &[0; 32]).is_err());
+        assert!(NoiseSession::responder(&[0; 32], &[0; 33]).is_err());
     }
 }
