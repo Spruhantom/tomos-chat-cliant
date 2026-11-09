@@ -9,6 +9,7 @@ import org.webrtc.MediaConstraints
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
 import java.io.Closeable
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -25,6 +26,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class AndroidWebRtcMediaEngine(context: Context) : Closeable {
     private val appContext = context.applicationContext
     private val closed = AtomicBoolean(false)
+    private val sessions = ConcurrentHashMap.newKeySet<WebRtcAudioSession>()
     private val audioDeviceModule: JavaAudioDeviceModule
     private val factory: PeerConnectionFactory
 
@@ -43,6 +45,7 @@ class AndroidWebRtcMediaEngine(context: Context) : Closeable {
      * Creates a one-to-one audio-only peer connection. It is not connected
      * until a future authenticated signalling layer exchanges SDP and ICE.
      */
+    @Synchronized
     fun createAudioSession(observer: PeerConnection.Observer): WebRtcAudioSession {
         check(!closed.get()) { "WebRTC media engine is closed." }
         check(
@@ -60,8 +63,21 @@ class AndroidWebRtcMediaEngine(context: Context) : Closeable {
         val connection = checkNotNull(factory.createPeerConnection(configuration, observer)) {
             "WebRTC could not create a peer connection."
         }
-        val source = factory.createAudioSource(MediaConstraints())
-        val track = factory.createAudioTrack(LOCAL_AUDIO_TRACK_ID, source)
+        val source = try {
+            factory.createAudioSource(MediaConstraints())
+        } catch (error: Throwable) {
+            connection.close()
+            connection.dispose()
+            throw error
+        }
+        val track = try {
+            factory.createAudioTrack(LOCAL_AUDIO_TRACK_ID, source)
+        } catch (error: Throwable) {
+            connection.close()
+            connection.dispose()
+            source.dispose()
+            throw error
+        }
         val sender = connection.addTrack(track, listOf(LOCAL_AUDIO_STREAM_ID))
         if (sender == null) {
             connection.close()
@@ -70,11 +86,17 @@ class AndroidWebRtcMediaEngine(context: Context) : Closeable {
             source.dispose()
             error("WebRTC could not attach the local audio track.")
         }
-        return WebRtcAudioSession(connection, track, source)
+        lateinit var session: WebRtcAudioSession
+        session = WebRtcAudioSession(connection, track, source) { sessions.remove(session) }
+        sessions.add(session)
+        return session
     }
 
+    @Synchronized
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
+        sessions.toList().forEach(WebRtcAudioSession::close)
+        sessions.clear()
         factory.dispose()
         audioDeviceModule.release()
     }
@@ -102,7 +124,8 @@ class AndroidWebRtcMediaEngine(context: Context) : Closeable {
 class WebRtcAudioSession internal constructor(
     val peerConnection: PeerConnection,
     val localAudioTrack: AudioTrack,
-    private val audioSource: AudioSource
+    private val audioSource: AudioSource,
+    private val onClosed: () -> Unit
 ) : Closeable {
     private val closed = AtomicBoolean(false)
 
@@ -113,5 +136,6 @@ class WebRtcAudioSession internal constructor(
         peerConnection.dispose()
         localAudioTrack.dispose()
         audioSource.dispose()
+        onClosed()
     }
 }
