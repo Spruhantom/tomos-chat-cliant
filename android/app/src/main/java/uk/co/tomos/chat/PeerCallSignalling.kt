@@ -268,23 +268,26 @@ class PeerCallSignalling(
      */
     fun applyRemoteDescription(
         connection: PeerConnection,
-        signal: PeerCallSignal,
+        frame: EncryptedAppFrame,
         observer: SdpObserver
-    ) {
-        require(signal.callId == callId)
-        require(signal.senderFingerprint == transport.authenticatedPeerFingerprint)
+    ): PeerCallSignal {
+        val signal = receive(frame)
         require(signal.kind == PeerCallSignalKind.OFFER || signal.kind == PeerCallSignalKind.ANSWER)
-        require(SdpDtlsFingerprint.extract(checkNotNull(signal.sdp)) == signal.dtlsFingerprint)
+        // The signal can only reach this method after Noise-channel identity,
+        // call-ID and sequence validation. Do not accept caller-constructed SDP.
         val type = if (signal.kind == PeerCallSignalKind.OFFER) SessionDescription.Type.OFFER else SessionDescription.Type.ANSWER
         connection.setRemoteDescription(observer, SessionDescription(type, checkNotNull(signal.sdp)))
+        return signal
     }
 
-    /** Add a candidate only after it has passed this call's authenticated receive checks. */
-    fun addRemoteCandidate(connection: PeerConnection, signal: PeerCallSignal): Boolean {
-        require(signal.callId == callId)
-        require(signal.senderFingerprint == transport.authenticatedPeerFingerprint)
+    /** Candidate frames are authenticated and replay-checked before WebRTC sees them. */
+    fun addRemoteCandidate(connection: PeerConnection, frame: EncryptedAppFrame): PeerCallSignal {
+        val signal = receive(frame)
         require(signal.kind == PeerCallSignalKind.ICE_CANDIDATE)
         val candidate = checkNotNull(signal.candidate)
-        return connection.addIceCandidate(IceCandidate(candidate.sdpMid, candidate.sdpMLineIndex, candidate.candidate))
+        check(connection.addIceCandidate(IceCandidate(candidate.sdpMid, candidate.sdpMLineIndex, candidate.candidate))) {
+            "WebRTC rejected the authenticated ICE candidate."
+        }
+        return signal
     }
 }
