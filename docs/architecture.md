@@ -140,3 +140,13 @@ Current implementation status:
 - Contact-card sharing remains blocked by the central account policy while age assurance or required guardian approval is incomplete.
 
 Do not treat a valid self-signed card as a trusted contact, and do not use a display name as an identity identifier. Fingerprints are the human-verification mechanism for this prototype.
+
+## QR scanning and trusted contacts (prototype)
+
+The Android client now requests camera permission only when the user opens the QR scanner. CameraX provides a local preview and ZXing decodes QR frames on a bounded single-thread executor. The scanner accepts only the signed TomChat contact-card format and validates its embedded fingerprint and ECDSA signature before showing a review screen.
+
+Trust is a separate explicit action. The review screen displays the full SHA-256 fingerprint and requires the user to confirm that they compared it with the other person's device through a separate trusted channel. The self-signature alone does not authenticate a real-world person. The user can reject the card or explicitly save/remove a trusted contact.
+
+Trusted contacts are stored in an app-private atomic file encrypted with AES-256-GCM under a separate Android Keystore key. The store rejects malformed counts, oversized keys, duplicate fingerprints, invalid fingerprints, trailing data, and unreadable/corrupt ciphertext. The raw QR payload is not stored. Camera permission is not requested until scanning is invoked.
+
+Remaining validation: run Android CI, test on physical devices with different camera sensor row/pixel strides and lighting, test permission denial/revocation, inspect QR readability at different display sizes, and test Keystore key invalidation/interrupted writes. This prototype is not a complete contact synchronisation, revocation, key-change or identity-assurance system.
