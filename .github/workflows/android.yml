@@ -39,6 +39,11 @@ jobs:
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
 
+      - name: Test Rust Noise core and JNI boundary
+        run: |
+          cargo fmt --manifest-path android/native/tomchat-noise/Cargo.toml -- --check
+          cargo test --manifest-path android/native/tomchat-noise/Cargo.toml
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
