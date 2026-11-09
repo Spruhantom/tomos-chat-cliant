@@ -1,31 +1,117 @@
-# TomChat Desktop Client
+# TomChat
 
-Native Linux desktop client for Ubuntu, Fedora, and Arch Linux, built with Rust, GTK4, and Libadwaita.
+**TomChat** is an Android-first project to build a decentralised, peer-to-peer messaging and voice app that keeps identity and communication under the user's control.
 
-## Stage 3 transport support
+> **Development status:** early Android foundation. The current app contains first-run age-band setup, local encrypted profile storage, a device signing identity, signed QR contact cards, and a direct TCP identity-proof prototype. It is not yet a functioning messenger. The Snow-based Noise XX core is now exposed to Android through JNI, with a Gradle cargo-ndk build for ARM and x86-64. Android instrumentation tests cover handshake, peer-key pinning and encrypted records. It is not yet connected to the direct socket or messaging UI, and end-to-end encrypted messaging is not yet available.
 
-The current GUI provides server address, username, and password fields and sends a login request to POST /api/v1/auth/login. It displays the authenticated username after a successful response. The server protocol now provides conversation, encrypted-message history and WebSocket event endpoints. A typed Rust messaging API module now supports conversation listing/creation, paginated history, encrypted-message submission and WebSocket endpoint construction. The GTK conversation browser is now connected to the REST API: it lists conversations, opens paginated message history and displays message metadata without exposing ciphertext. The client now opens an authenticated WebSocket using the in-memory session token, receives live message deliveries and acknowledgements, reconnects with bounded exponential backoff, stops retrying after session expiry, and synchronises missed messages through the REST forward-sequence cursor. The GTK conversation view displays live messages and buffers recovered messages for conversations that are not currently selected. Secure message composition, client-side encryption and device-key management remain to be implemented.
+## Project principles
 
-The session token is held in memory for the signed-in conversation window and is not written to disk. OS keyring integration remains outstanding.
+- **Strict peer-to-peer:** TomChat will not deploy or depend on application servers, account servers, relays, push gateways, hosted discovery, central directories or hosted message storage.
+- **Device-controlled identity:** the intended design keeps identity keys under the user's control on their devices.
+- **End-to-end encryption:** message and call content must be protected independently of the transport. The protocol is not yet implemented or security-reviewed.
+- **Local-first data:** conversations and account data should remain on the user's devices, with encrypted local backup and explicitly trusted-device replication planned.
+- **Honest connectivity:** direct connections are best-effort. NAT, carrier restrictions, firewalls, device sleep and offline peers can prevent remote connections. Without relays or mailbox servers, TomChat cannot promise global reachability or offline delivery.
+- **No silent fallback:** if a direct connection cannot be made, the app must explain the limitation rather than quietly using a server.
 
-## Development
+## One app, age-aware account setup
 
-Install GTK development dependencies, then:
+Everyone installs the same TomChat app. During first-run setup, the user enters a display name and date of birth. The app calculates an age band and assigns the corresponding experience; users do not choose their own child, teen or adult mode.
+
+| Calculated age | Planned experience | Intended safeguards |
+| --- | --- | --- |
+| Under 5 | Guardian-led setup only | Independent account setup is blocked in the current prototype |
+| 5–8 | TomChat Kids | Simplified interface, strongest contact and sharing restrictions |
+| 9–12 | TomChat Kids | Age-appropriate messaging and guardian-approved contacts |
+| 13–17 | TomChat Teen | More independence with age-appropriate safeguards |
+| 18+ | TomChat Adult | Standard TomChat experience |
+
+### Important age-safety status
+
+The current implementation is a **self-declared age-band prototype**, not an age-verification system. It previews the experience based on the entered date of birth; it does not prove age, verify a guardian or obtain parental consent. Those checks must be implemented separately before restricted production features are enabled.
+
+The production design must:
+- minimise personal data and avoid retaining a full date of birth unless a reviewed requirement makes it necessary;
+- keep age-band assignment, age assurance and guardian consent as distinct states;
+- prevent users from simply changing a profile setting to unlock adult features;
+- enforce restrictions in application/domain logic, not only by hiding UI;
+- support safe, authenticated and revocable guardian-device pairing;
+- avoid public discovery and unrestricted public groups for child accounts;
+- provide clear block/report controls and age-appropriate contact approval;
+- meet applicable child privacy, age-assurance, consent and online-safety requirements in each launch jurisdiction.
+
+Any proposed verification mechanism must be assessed against TomChat's strict no-application-server requirement. A local date-of-birth calculation alone is not trustworthy age assurance. See [Account age and child safety](docs/account-age-safety.md).
+
+## Planned features
+
+- One-to-one and group messaging.
+- One-to-one and group voice calls.
+- File sharing and voice messages.
+- Direct Bluetooth and Wi-Fi LAN connections, plus direct IP connections where reachable.
+- Automatic selection of the best available direct route, based on latency, throughput, stability and battery impact.
+- Device-local P-256 signing identity protected by Android Keystore, plus persistent X25519 Noise identity protected at rest by an Android Keystore AES-GCM wrapping key. V2 QR contact cards cryptographically bind the Noise public key into the P-256 signature. Camera scanning, fingerprint approval and encrypted trusted-contact persistence are implemented, including compatibility with older V1 cards (which are not Noise-capable). A direct TCP peer transport with mutual signed-nonce identity proof is prototyped; it does not yet carry application data or provide an encrypted session.
+- Encrypted local backup and encrypted peer-to-peer replication to explicitly trusted devices.
+- TomSocial integration as a later, carefully scoped decentralised social layer.
+
+All networking must use the same authenticated peer identity and end-to-end encrypted message envelope. Bluetooth LE discovery/GATT and Bluetooth Classic data transfer are planned; direct Bluetooth peer voice remains experimental until physical-device testing demonstrates acceptable quality and battery use.
+
+## Android application
+
+The Android foundation uses Kotlin, Jetpack Compose and Material 3, with an isolated Rust Noise XX prototype using Snow at `android/native/tomchat-noise`. The Rust Noise session is connected through a narrow JNI API; Rust owns session state, and Kotlin passes the signed contact key pin. The JNI session is not yet wired to the direct TCP transport. See [docs/architecture.md](docs/architecture.md) for remaining security work. The TomOS visual design is documented in [docs/design-system.md](docs/design-system.md). Tom OS Hyprland 1 is the primary brand reference; TomOS Android SIP informs Android interaction patterns, without importing SIP or Linphone functionality.
+
+Current UI foundation:
+- adaptive compact/medium/expanded window navigation: bottom bar on compact windows and navigation rail on wider windows; content width is constrained on large displays, and setup/contacts can scroll on short or unfolded screens;
+- fold posture detection through Jetpack WindowManager, with book mode for half-open vertical folds and tabletop mode for half-open horizontal folds; both layouts provide a hinge gutter and companion navigation pane. Device-by-device physical validation is still required;
+- first-run display-name and date-of-birth screen with local age-band preview;
+- Chats, Contacts, Calls and Settings navigation;
+- TomOS neon visual styling;
+- account experience and zero-server policy status placeholders.
+
+The age-band classifier, central capability policy and unit tests are under `android/app/src/main` and `android/app/src/test`. The prototype defaults to unverified accounts, so communication capabilities remain locked; minors additionally require guardian approval. This is domain-policy scaffolding, not a connected age-verification or consent flow. Account setup persists a minimal profile using AES-256-GCM with a device-held Android Keystore key; the full date of birth is not saved. The persistent Noise X25519 private scalar is wrapped with AES-256-GCM and is not stored in plaintext. Keystore/atomic-file behaviour still requires physical-device testing.
+
+## Build
+
+Requirements: Java 17, Android SDK 35, Android NDK 27.2.12479018, Gradle 8.9, Rust stable with Android targets, and `cargo-ndk` (`cargo install cargo-ndk --locked`).
+
+From the repository root:
 
 ```bash
-cargo fmt --all -- --check
-cargo check
-cargo run
+gradle --no-daemon :android:app:testDebugUnitTest
+gradle --no-daemon :android:app:assembleDebug
 ```
 
-On Debian/Ubuntu development hosts:
+The debug APK is produced at:
 
-```bash
-sudo apt install build-essential pkg-config libgtk-4-dev libadwaita-1-dev
+```
+android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Remote server connections must use HTTPS. Plain HTTP is allowed only for the exact `localhost` hostname or a loopback IP address (`127.0.0.1` or `::1`). Credentials, URL paths, query strings, fragments and redirects are rejected. Login requests have a 20-second overall timeout and a 5-second connection timeout. All redirects are rejected so the password-bearing request cannot be forwarded to another host.
+GitHub Actions runs Android unit tests and builds the debug APK. The existing Rust desktop checks are separate. Check the [Actions page](https://github.com/Spruhantom/tomos-chat-cliant/actions) for the latest result; do not assume a run has passed while it is still in progress.
 
-## Not yet implemented
+## Repository layout
 
-Registration UI, token/keyring persistence, secure message composition, reviewed end-to-end encryption and device-key management, notifications, calls, and package builds. Manual GTK runtime testing is still required; CI checks compilation, tests, formatting and Clippy but does not launch the desktop UI.
+- `android/app` — native Android application and tests.
+- `docs/design-system.md` — TomOS-inspired visual design.
+- `docs/account-age-safety.md` — age bands, child safety and verification requirements.
+- `docs/architecture.md` — architecture direction.
+- `docs/roadmap.md` — development milestones.
+- `docs/decisions/0001-product-baseline.md` — core product decisions.
+- `docs/tomsocial-direction.md` — future TomSocial direction.
+- `legacy-desktop` branch — preserved previous Rust/GTK desktop client.
+
+## Development roadmap
+
+1. Stabilise Android build, navigation and first-run setup.
+2. Implement local identity and secure on-device storage.
+3. Design and review age assurance, guardian consent and age-policy enforcement.
+4. Prototype authenticated direct Bluetooth communication between two physical Android devices.
+5. Add direct Wi-Fi LAN and reachable direct-IP transport.
+6. Implement the reviewed end-to-end encryption protocol and messaging.
+7. Add calls, file transfer, backups and later TomSocial capabilities.
+
+## Security and release policy
+
+TomChat must not be described as secure, production-ready or complete E2EE until the cryptographic protocol and implementation have undergone independent review, threat modelling, interoperability testing and real-device validation. Child-facing features must not be released until age assurance, guardian consent, safeguarding controls and relevant legal/privacy reviews are complete.
+
+## Contributing
+
+Development is currently taking place on the `android-rebuild` branch. The previous desktop client is preserved on `legacy-desktop`; Android work should not be merged into `main` until the new foundation and CI have been reviewed.

@@ -1,0 +1,93 @@
+name: TomChat Android CI
+
+on:
+  push:
+    branches: [main, android-rebuild]
+  pull_request:
+    branches: [main, android-rebuild]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Build and test Android app
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: 12266719
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0 ndk;27.2.12479018'
+          accept-android-sdk-licenses: true
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Test Rust Noise core and JNI boundary
+        run: |
+          cargo test --manifest-path android/native/tomchat-noise/Cargo.toml
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Run unit tests
+        run: gradle --no-daemon :android:app:testDebugUnitTest
+
+      - name: Build debug APK
+        run: gradle --no-daemon :android:app:assembleDebug
+
+      - name: Verify native libraries and JNI exports in APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          NDK_NM="$(find "$ANDROID_HOME/ndk" -type f -name llvm-nm -print -quit)"
+          test -n "$NDK_NM"
+          test -f "$APK"
+          TMP="$(mktemp -d)"
+          trap 'rm -rf "$TMP"' EXIT
+          unzip -q "$APK" 'lib/*/libtomchat_noise.so' -d "$TMP"
+          for ABI in arm64-v8a armeabi-v7a x86_64; do
+            LIB="$TMP/lib/$ABI/libtomchat_noise.so"
+            test -s "$LIB" || { echo "Missing native library for $ABI"; exit 1; }
+            SYMBOLS="$("$NDK_NM" -D --defined-only "$LIB")"
+            for SYMBOL in \
+              Java_uk_co_tomos_chat_NoiseNative_nativeCreateSession \
+              Java_uk_co_tomos_chat_NoiseNative_nativeWriteHandshake \
+              Java_uk_co_tomos_chat_NoiseNative_nativeReadHandshake \
+              Java_uk_co_tomos_chat_NoiseNative_nativeFinishHandshake \
+              Java_uk_co_tomos_chat_NoiseNative_nativeEncrypt \
+              Java_uk_co_tomos_chat_NoiseNative_nativeDecrypt \
+              Java_uk_co_tomos_chat_NoiseNative_nativeCloseSession; do
+              grep -Fq "$SYMBOL" <<< "$SYMBOLS" || {
+                echo "Missing JNI export $SYMBOL in $ABI"
+                exit 1
+              }
+            done
+            echo "Verified $ABI native library and all JNI exports"
+          done
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tomchat-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

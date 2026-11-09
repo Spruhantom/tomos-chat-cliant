@@ -1,0 +1,14 @@
+[package]
+name = "tomchat-noise"
+version = "0.2.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "TomChat experimental Noise Protocol session core"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+snow = "=0.10.0"
+jni = "=0.21.1"
+zeroize = "=1.8.1"
