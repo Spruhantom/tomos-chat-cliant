@@ -26,6 +26,7 @@ class PeerConversationSession(
     private val clock: () -> Long = System::currentTimeMillis
 ) : AutoCloseable {
     private val statusRef = AtomicReference(PeerConnectionStatus.CONNECTED)
+    private val sendStateLock = Any()
 
     init {
         require(peerFingerprint.isNotBlank() && peerFingerprint.length <= 128)
@@ -52,17 +53,17 @@ class PeerConversationSession(
             createdAtEpochMillis = clock(),
             body = text
         )
-        history.append(message)
-        return try {
-            // Persist SENT before writing so a very fast peer acknowledgement cannot
-            // race with a later SENT update and downgrade DELIVERED back to SENT.
-            history.updateOutgoingStatus(peerFingerprint, message.id, StoredMessageStatus.SENT)
-            channel.send(EncryptedAppFrame(EncryptedAppFrame.Type.TEXT, message.id, text.toByteArray(Charsets.UTF_8)))
-            message.copy(status = StoredMessageStatus.SENT)
-        } catch (error: Exception) {
-            statusRef.set(PeerConnectionStatus.FAILED)
-            try { history.updateOutgoingStatus(peerFingerprint, message.id, StoredMessageStatus.FAILED) } catch (_: IOException) { }
-            throw error
+        return synchronized(sendStateLock) {
+            history.append(message)
+            try {
+                channel.send(EncryptedAppFrame(EncryptedAppFrame.Type.TEXT, message.id, text.toByteArray(Charsets.UTF_8)))
+                history.updateOutgoingStatus(peerFingerprint, message.id, StoredMessageStatus.SENT)
+                message.copy(status = StoredMessageStatus.SENT)
+            } catch (error: Exception) {
+                statusRef.set(PeerConnectionStatus.FAILED)
+                try { history.updateOutgoingStatus(peerFingerprint, message.id, StoredMessageStatus.FAILED) } catch (_: IOException) { }
+                throw error
+            }
         }
     }
 
@@ -79,10 +80,12 @@ class PeerConversationSession(
             when (frame.type) {
                 EncryptedAppFrame.Type.DELIVERY_ACK -> {
                     require(frame.payload.isEmpty()) { "Delivery acknowledgement must not contain a payload." }
-                    if (history.updateOutgoingStatus(peerFingerprint, frame.messageId, StoredMessageStatus.DELIVERED)) {
-                        PeerConversationEvent.DeliveryConfirmed(frame.messageId)
-                    } else {
-                        PeerConversationEvent.UnmatchedDeliveryAcknowledgement(frame.messageId)
+                    synchronized(sendStateLock) {
+                        if (history.updateOutgoingStatus(peerFingerprint, frame.messageId, StoredMessageStatus.DELIVERED)) {
+                            PeerConversationEvent.DeliveryConfirmed(frame.messageId)
+                        } else {
+                            PeerConversationEvent.UnmatchedDeliveryAcknowledgement(frame.messageId)
+                        }
                     }
                 }
                 EncryptedAppFrame.Type.TEXT -> {
