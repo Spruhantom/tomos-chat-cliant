@@ -27,7 +27,7 @@ class PeerVoiceCallController(
     @Synchronized
     fun startOutgoing(): UUID {
         check(conversation.status == PeerConnectionStatus.CONNECTED) { "Connect securely before calling." }
-        check(snapshot == null || snapshot?.state in setOf(PeerCallState.ENDED, PeerCallState.FAILED)) {
+        check(snapshot == null || snapshot?.state == PeerCallState.ENDED || snapshot?.state == PeerCallState.FAILED) {
             "A call is already in progress."
         }
         val callId = UUID.randomUUID()
