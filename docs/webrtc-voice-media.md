@@ -35,4 +35,4 @@ Use `io.getstream:stream-webrtc-android:1.3.10`, pinned rather than a dynamic ve
 5. Two-physical-device tests on Wi-Fi and mobile networks, including the expected no-route failure cases.
 6. Security review, dependency/licence inventory, and Android APK size/ABI review.
 
-The Calls screen must remain disabled until these gates are completed. CI compilation alone is not evidence of real-device audio or secure end-to-end calls.
+The Calls screen must remain disabled until these gates are completed. Android CI and Rust CI run on the dedicated voice-development branches. CI compilation alone is not evidence of real-device audio or secure end-to-end calls.
