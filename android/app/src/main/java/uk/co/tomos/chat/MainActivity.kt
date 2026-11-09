@@ -178,6 +178,24 @@ private enum class Destination(val label: String, val glyph: String) {
 }
 
 
+
+@Composable
+private fun AdultDebugTestBanner() {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF392A12)),
+        border = BorderStroke(1.dp, Color(0xFFFFC857))
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text("DEBUG TEST MODE — ADULT ACCOUNTS ONLY", color = Color(0xFFFFD477), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "Age assurance is bypassed only in this debug build for adult-classified accounts. Use only with consenting adult testers. Release builds keep the normal age and guardian checks.",
+                color = TextPrimary, fontSize = 11.sp, lineHeight = 16.sp
+            )
+        }
+    }
+}
+
 @Composable
 private fun ProfileStatusScreen(message: String) {
     Box(Modifier.fillMaxSize().background(Void), contentAlignment = Alignment.Center) {
@@ -589,9 +607,16 @@ private fun ChatsScreen(profile: AccountProfile) {
         }
     }
 
-    val mayMessage = AccountSafetyPolicy.allows(profile.safetyState(), TomChatCapability.MESSAGE_APPROVED_CONTACT)
-    val mayCall = AccountSafetyPolicy.allows(profile.safetyState(), TomChatCapability.VOICE_CALL_APPROVED_CONTACT)
+    val mayMessage = AccountSafetyPolicy.allows(
+        profile.safetyState(), TomChatCapability.MESSAGE_APPROVED_CONTACT,
+        allowUnverifiedAdultDebug = BuildConfig.DEBUG
+    )
+    val mayCall = AccountSafetyPolicy.allows(
+        profile.safetyState(), TomChatCapability.VOICE_CALL_APPROVED_CONTACT,
+        allowUnverifiedAdultDebug = BuildConfig.DEBUG
+    )
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 20.dp)) {
+        if (BuildConfig.DEBUG) AdultDebugTestBanner()
         ScreenTitle("Your chats", "Encrypted, direct conversations between trusted devices.")
         StatusCard(isConnected = session?.status == PeerConnectionStatus.CONNECTED, connectionText = statusText)
         if (!mayMessage) {
@@ -809,9 +834,13 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
     }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        if (BuildConfig.DEBUG) AdultDebugTestBanner()
         ScreenTitle("Contacts", "People you connect with directly.")
         val safety = profile.safetyState()
-        val mayExchange = AccountSafetyPolicy.allows(safety, TomChatCapability.EXCHANGE_CONTACT_CARD)
+        val mayExchange = AccountSafetyPolicy.allows(
+            safety, TomChatCapability.EXCHANGE_CONTACT_CARD,
+            allowUnverifiedAdultDebug = BuildConfig.DEBUG
+        )
         if (contactCard == null) {
             EmptyState("◎", "Device identity unavailable", "TomChat could not prepare this device's signed contact card.")
         } else if (!mayExchange) {
@@ -940,8 +969,11 @@ private fun SettingsScreen(profile: AccountProfile) {
                 )
                 SettingCard(
                     "Safety permissions",
-                    "Messaging, calls, file sharing and social capabilities are checked by the central account policy. They remain disabled in this prototype until age assurance (and guardian approval for minors) is completed.",
-                    "RESTRICTED"
+                    if (BuildConfig.DEBUG && profile.ageBand == AgeBand.ADULT_18_PLUS && profile.guardianConsent == GuardianConsentStatus.NOT_REQUIRED)
+                        "DEBUG TEST MODE: private contact exchange, messaging and voice calls are enabled for adult-classified test accounts without age assurance. This bypass is absent from release builds. Minor accounts still require verified age and guardian approval."
+                    else
+                        "Messaging, calls, file sharing and social capabilities are checked by the central account policy. They remain disabled until age assurance (and guardian approval for minors) is completed.",
+                    if (BuildConfig.DEBUG) "DEBUG TEST MODE" else "RESTRICTED"
                 )
             }
             item {
