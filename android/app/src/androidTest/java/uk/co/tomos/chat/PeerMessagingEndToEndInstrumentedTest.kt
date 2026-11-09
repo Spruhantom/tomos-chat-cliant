@@ -62,20 +62,22 @@ class PeerMessagingEndToEndInstrumentedTest {
             val connectFuture = executor.submit<PeerConversationSession> {
                 alice.connect("127.0.0.1", port, bobContact)
             }
-            aliceSession = connectFuture.get(15, TimeUnit.SECONDS)
-            bobSession = acceptFuture.get(15, TimeUnit.SECONDS)
+            val connectedAlice = connectFuture.get(15, TimeUnit.SECONDS)
+            val connectedBob = acceptFuture.get(15, TimeUnit.SECONDS)
+            aliceSession = connectedAlice
+            bobSession = connectedBob
 
-            val sent = aliceSession.sendText("Hello from Alice over Noise XX")
+            val sent = connectedAlice.sendText("Hello from Alice over Noise XX")
             assertEquals(StoredMessageStatus.SENT, sent.status)
 
-            val received = bobSession.receiveEvent()
+            val received = connectedBob.receiveEvent()
             assertTrue(received is PeerConversationEvent.MessageReceived)
             assertEquals(
                 "Hello from Alice over Noise XX",
                 (received as PeerConversationEvent.MessageReceived).message.body
             )
 
-            val acknowledgement = aliceSession.receiveEvent()
+            val acknowledgement = connectedAlice.receiveEvent()
             assertTrue(acknowledgement is PeerConversationEvent.DeliveryConfirmed)
             val stored = EncryptedMessageStore(aliceDirectory).load(bobContact.fingerprint).single()
             assertEquals(StoredMessageStatus.DELIVERED, stored.status)
