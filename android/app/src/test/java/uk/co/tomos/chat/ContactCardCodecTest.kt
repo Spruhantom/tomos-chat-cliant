@@ -1,7 +1,9 @@
 package uk.co.tomos.chat
 
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.security.KeyPairGenerator
@@ -12,28 +14,49 @@ class ContactCardCodecTest {
         initialize(ECGenParameterSpec("secp256r1"))
     }.generateKeyPair()
 
-    @Test fun signedContactCardRoundTrips() {
-        val card = ContactCardCodec.create("Tom's phone", identity())
+    private fun noiseKey(seed: Int = 7) = ByteArray(32) { (seed + it).toByte() }
+
+    @Test fun signedV2ContactCardRoundTripsIdentityAndNoiseBinding() {
+        val card = ContactCardCodec.create("Tom's phone", identity(), noiseKey())
         val decoded = ContactCardCodec.decode(ContactCardCodec.encode(card))
         assertEquals(card.displayName, decoded.displayName)
         assertEquals(card.fingerprint, decoded.fingerprint)
+        assertArrayEquals(card.noiseStaticPublicKey, decoded.noiseStaticPublicKey)
         assertTrue(ContactCardCodec.verify(decoded))
     }
 
+    @Test fun signatureCoversNoiseStaticPublicKey() {
+        val card = ContactCardCodec.create("Alice", identity(), noiseKey())
+        assertFalse(ContactCardCodec.verify(card.copy(noiseStaticPublicKey = noiseKey(19))))
+    }
+
+    @Test fun rejectsMissingOrWrongLengthNoiseKeyOnCreation() {
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            ContactCardCodec.create("Alice", identity(), ByteArray(31))
+        }
+    }
+
     @Test fun rejectsModifiedDisplayName() {
-        val card = ContactCardCodec.create("Alice", identity())
+        val card = ContactCardCodec.create("Alice", identity(), noiseKey())
         assertFalse(ContactCardCodec.verify(card.copy(displayName = "Mallory")))
     }
 
-    @Test fun rejectsModifiedPublicKey() {
-        val first = ContactCardCodec.create("Alice", identity())
-        val second = ContactCardCodec.create("Bob", identity())
+    @Test fun rejectsModifiedIdentityPublicKey() {
+        val first = ContactCardCodec.create("Alice", identity(), noiseKey())
+        val second = ContactCardCodec.create("Bob", identity(), noiseKey(50))
         assertFalse(ContactCardCodec.verify(first.copy(encodedPublicKey = second.encodedPublicKey)))
     }
 
+    @Test fun legacyV1CardRemainsReadableButHasNoNoiseBinding() {
+        val legacy = ContactCardCodec.createLegacyV1("Old phone", identity())
+        val decoded = ContactCardCodec.decode(ContactCardCodec.encode(legacy))
+        assertNull(decoded.noiseStaticPublicKey)
+        assertTrue(ContactCardCodec.verify(decoded))
+    }
+
     @Test fun rejectsUnsupportedCardVersion() {
-        val card = ContactCardCodec.encode(ContactCardCodec.create("Alice", identity()))
-        val modified = card.replaceFirst("TOMCHAT-CONTACT-V1", "TOMCHAT-CONTACT-V2")
+        val card = ContactCardCodec.encode(ContactCardCodec.create("Alice", identity(), noiseKey()))
+        val modified = card.replaceFirst("TOMCHAT-CONTACT-V2", "TOMCHAT-CONTACT-V3")
         org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { ContactCardCodec.decode(modified) }
     }
 
