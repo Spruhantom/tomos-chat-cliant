@@ -1,31 +1,22 @@
-# TomChat Desktop Client
+# TomChat
 
-Native Linux desktop client for Ubuntu, Fedora, and Arch Linux, built with Rust, GTK4, and Libadwaita.
+TomChat is an Android-first, decentralised messaging and voice application. This branch begins the Android rebuild; the previous Rust/GTK server-connected desktop client is preserved on `legacy-desktop`.
 
-## Stage 3 transport support
+## Product principles
 
-The current GUI provides server address, username, and password fields and sends a login request to POST /api/v1/auth/login. It displays the authenticated username after a successful response. The server protocol now provides conversation, encrypted-message history and WebSocket event endpoints. A typed Rust messaging API module now supports conversation listing/creation, paginated history, encrypted-message submission and WebSocket endpoint construction. The GTK conversation browser is now connected to the REST API: it lists conversations, opens paginated message history and displays message metadata without exposing ciphertext. The client now opens an authenticated WebSocket using the in-memory session token, receives live message deliveries and acknowledgements, reconnects with bounded exponential backoff, stops retrying after session expiry, and synchronises missed messages through the REST forward-sequence cursor. The GTK conversation view displays live messages and buffers recovered messages for conversations that are not currently selected. Secure message composition, client-side encryption and device-key management remain to be implemented.
+- **Strict peer-to-peer:** no TomChat-operated server, account service, relay, push gateway, or central message store is required.
+- **User-owned identity:** keys are generated and controlled on the user's device.
+- **End-to-end encryption:** message and call content is protected independently of transport encryption.
+- **Offline-first:** persist outgoing messages locally and synchronise when peers reconnect.
+- **Open protocols:** document wire formats and versioning; avoid vendor lock-in.
+- **Honest connectivity:** direct communication is best-effort across NATs and mobile networks. No relay means some pairs of devices will be unable to connect remotely.
 
-The session token is held in memory for the signed-in conversation window and is not written to disk. OS keyring integration remains outstanding.
+## Scope
 
-## Development
+Android app with one-to-one and group messaging, voice and group voice, file sharing, QR/contact exchange, local encrypted backups, and encrypted peer-to-peer backup to trusted devices.
 
-Install GTK development dependencies, then:
+## Repository status
 
-```bash
-cargo fmt --all -- --check
-cargo check
-cargo run
-```
+This is the planning and architecture baseline, not a working messenger yet. The next milestone is a minimal Android shell plus a Rust networking-core proof of concept. Do not describe the application as secure or production-ready until independent protocol review, threat modelling, interoperability tests, and device testing are complete.
 
-On Debian/Ubuntu development hosts:
-
-```bash
-sudo apt install build-essential pkg-config libgtk-4-dev libadwaita-1-dev
-```
-
-Remote server connections must use HTTPS. Plain HTTP is allowed only for the exact `localhost` hostname or a loopback IP address (`127.0.0.1` or `::1`). Credentials, URL paths, query strings, fragments and redirects are rejected. Login requests have a 20-second overall timeout and a 5-second connection timeout. All redirects are rejected so the password-bearing request cannot be forwarded to another host.
-
-## Not yet implemented
-
-Registration UI, token/keyring persistence, secure message composition, reviewed end-to-end encryption and device-key management, notifications, calls, and package builds. Manual GTK runtime testing is still required; CI checks compilation, tests, formatting and Clippy but does not launch the desktop UI.
+See [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), and [decisions](docs/decisions/0001-product-baseline.md).
