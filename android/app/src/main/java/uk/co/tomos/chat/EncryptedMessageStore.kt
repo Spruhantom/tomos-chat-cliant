@@ -90,7 +90,7 @@ class EncryptedMessageStore(filesDir: File) {
         }
     }
 
-    private fun writeSnapshot(records: List<StoredChatMessage>) {
+    private fun writeSnapshot(records: List<StoredChatMessage>): Unit {
         try {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
@@ -117,6 +117,7 @@ class EncryptedMessageStore(filesDir: File) {
             if (error is IOException) throw error
             throw IOException("Could not securely save message history.", error)
         }
+        return
     }
 
     private fun encode(records: List<StoredChatMessage>): ByteArray {
