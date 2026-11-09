@@ -16,7 +16,6 @@ data class PeerCallSnapshot(
     val endReason: PeerCallEndReason? = null
 ) {
     init {
-        require(ContactIdentityFingerprint.isValid(peerFingerprint))
         require((state == PeerCallState.ENDED || state == PeerCallState.FAILED) == (endReason != null))
     }
 }
