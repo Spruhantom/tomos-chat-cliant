@@ -178,12 +178,27 @@ only then permits Noise transport records. The Noise transport provides
 authenticated encryption and ordered nonce state; callers cannot use transport
 before handshake completion and pin verification.
 
-The crate is isolated and is not yet connected to the Android app, the direct
-TCP adapter, or the Kotlin identity store. Existing signed QR cards contain a
-P-256 ECDSA identity key, not the Noise X25519 static key. Before integrating
-the session, the contact format must carry a signed binding from the ECDSA
-identity to the Noise static public key; private Noise keys need an Android
-Keystore-protected persistence design. JNI/UniFFI is still pending.
+The Android client now generates a per-installation X25519 static key
+using the Bouncy Castle X25519 implementation. Its 32-byte private scalar is
+stored only as AES-256-GCM ciphertext in an app-private atomic file, with the
+wrapping key held by Android Keystore. On load, the public key is re-derived
+from the decrypted private key and compared in constant time with the stored
+public key. A missing wrapping key or invalid ciphertext fails closed without
+replacing existing identity data.
+
+New V2 QR contact cards include the X25519 static public key in the canonical
+fields signed by the device's P-256 ECDSA identity. The existing SHA-256
+fingerprint remains the fingerprint of the P-256 identity; the Noise key is
+cryptographically bound by that signature. The trusted-contact store now
+persists the bound Noise public key and can read the previous V1 store format.
+Legacy V1 cards remain readable for compatibility, but are clearly marked and
+cannot be saved as Noise-capable contacts in the new UI.
+
+The Rust crate and direct TCP adapter are still not connected through JNI/UniFFI.
+The Kotlin identity store currently prepares the persistent key material and
+the signed card binding; integration must pass the private key into Rust without
+logging or copying it unnecessarily, and pin the saved contact's Noise public
+key during the handshake.
 
 Snow explicitly states that it has not received a formal security audit. The
 TomChat wrapper and identity-binding design are also unaudited. This is an
@@ -191,3 +206,16 @@ experimental protocol integration, not production-ready E2EE. Do not enable
 messaging over it until independent security review, official Noise test-vector
 coverage, malformed-input tests, key lifecycle design, FFI integration and
 physical-device validation are complete.
+
+
+### Signed Noise identity binding milestone
+
+- [x] Create a persistent X25519 static key on each Android installation.
+- [x] Encrypt the private scalar at rest with AES-256-GCM and an Android Keystore wrapping key.
+- [x] Verify the stored public key matches the private scalar on every load.
+- [x] Add V2 signed contact cards that include the Noise public key in the P-256 signature.
+- [x] Persist the bound peer Noise key with trusted contacts; retain V1 encrypted-store read compatibility.
+- [x] Keep legacy V1 cards readable but prevent treating them as Noise-authenticated contacts.
+- [ ] Connect the identity store and Noise session core through a narrow JNI/UniFFI boundary.
+- [ ] Add Android instrumentation tests for Keystore persistence, invalidation, and recovery.
+- [ ] Run Noise test vectors, malformed handshake tests, and physical-device peer tests.
