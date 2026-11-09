@@ -10,6 +10,14 @@ Planned modules:
 - `core-network`: Kotlin-facing API to the Rust peer engine.
 - `native/`: Rust workspace and Android-target builds (initial location; may be split into a workspace later).
 
+## Visual design
+
+Follow [docs/design-system.md](../docs/design-system.md):
+- Tom OS Hyprland 1 supplies the official neon-punk visual identity and canonical palette.
+- TomOS Android SIP supplies Android-native Compose interaction patterns for contacts, calls, dial-pad controls, and call lifecycle UX.
+- Build TomChat as its own app experience; do not import SIP-specific Linphone/SIP logic or desktop-only GTK/Quickshell/Hyprland components.
+- Centralize Compose Material 3 colour, shape, typography, and motion tokens.
+
 ## Direct Bluetooth support
 
 Bluetooth is a first-class direct peer transport, not a server substitute:
