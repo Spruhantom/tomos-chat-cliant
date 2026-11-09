@@ -48,7 +48,7 @@ Any proposed verification mechanism must be assessed against TomChat's strict no
 - File sharing and voice messages.
 - Direct Bluetooth and Wi-Fi LAN connections, plus direct IP connections where reachable.
 - Automatic selection of the best available direct route, based on latency, throughput, stability and battery impact.
-- Device-local P-256 signing identity protected by Android Keystore, plus persistent X25519 Noise identity protected at rest by an Android Keystore AES-GCM wrapping key. V2 QR contact cards cryptographically bind the Noise public key into the P-256 signature. Camera scanning, fingerprint approval and encrypted trusted-contact persistence are implemented, including compatibility with older V1 cards (which are not Noise-capable). A direct TCP peer transport with mutual signed-nonce identity proof is prototyped; it does not yet carry application data or provide an encrypted session.
+- Device-local P-256 signing identity protected by Android Keystore, plus persistent X25519 Noise identity protected at rest by an Android Keystore AES-GCM wrapping key. V2 QR contact cards cryptographically bind the Noise public key into the P-256 signature. Camera scanning, fingerprint approval and encrypted trusted-contact persistence are implemented, including compatibility with older V1 cards (which are not Noise-capable). A direct TCP peer transport now performs mutual signed-nonce identity proof and then establishes a pinned-key Noise XX session before carrying encrypted application frames.
 - Encrypted local backup and encrypted peer-to-peer replication to explicitly trusted devices.
 - TomSocial integration as a later, carefully scoped decentralised social layer.
 
@@ -86,7 +86,7 @@ The debug APK is produced at:
 android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-GitHub Actions runs Android unit tests and builds the debug APK. The existing Rust desktop checks are separate. Check the [Actions page](https://github.com/Spruhantom/tomos-chat-cliant/actions) for the latest result; do not assume a run has passed while it is still in progress.
+GitHub Actions runs Android unit tests, Android instrumentation tests on an API 35 emulator, validates native JNI exports and builds the debug APK. The existing Rust desktop checks are separate. Check the [Actions page](https://github.com/Spruhantom/tomos-chat-cliant/actions) for the latest result; do not assume a run has passed while it is still in progress.
 
 ## Repository layout
 
