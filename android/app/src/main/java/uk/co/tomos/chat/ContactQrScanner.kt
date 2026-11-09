@@ -75,7 +75,7 @@ fun ContactQrScanner(onScanned: (String) -> Unit, onCancel: () -> Unit) {
                 try {
                     val plane = image.planes.first()
                     val source = PlanarYUVLuminanceSource(
-                        plane.buffer.toByteArray(), image.width, image.height,
+                        image.copyLumaPlane(), image.width, image.height,
                         0, 0, image.width, image.height, false
                     )
                     val result = MultiFormatReader().decodeWithState(BinaryBitmap(HybridBinarizer(source)))
@@ -108,6 +108,20 @@ fun ContactQrScanner(onScanned: (String) -> Unit, onCancel: () -> Unit) {
             Button(onClick = onCancel) { Text("Cancel scan") }
         }
     }
+}
+
+private fun androidx.camera.core.ImageProxy.copyLumaPlane(): ByteArray {
+    val plane = planes[0]
+    val buffer = plane.buffer
+    val output = ByteArray(width * height)
+    var target = 0
+    for (row in 0 until height) {
+        val rowStart = row * plane.rowStride
+        for (column in 0 until width) {
+            output[target++] = buffer.get(rowStart + column * plane.pixelStride)
+        }
+    }
+    return output
 }
 
 private fun java.nio.ByteBuffer.toByteArray(): ByteArray {
