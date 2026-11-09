@@ -1,8 +1,12 @@
 package uk.co.tomos.chat
 
 import android.os.Bundle
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -42,6 +46,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
@@ -60,6 +65,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.LocalDensity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -399,7 +405,7 @@ private fun TomChatApp(
 @Composable
 private fun DestinationScreen(destination: Destination, profile: AccountProfile, contactCard: String?) {
     when (destination) {
-        Destination.Chats -> ChatsScreen()
+        Destination.Chats -> ChatsScreen(profile)
         Destination.Contacts -> ContactsScreen(profile, contactCard)
         Destination.Calls -> CallsScreen()
         Destination.Settings -> SettingsScreen(profile)
@@ -483,24 +489,276 @@ private fun ScreenTitle(title: String, subtitle: String) {
 }
 
 @Composable
-private fun ChatsScreen() {
-    Column(Modifier.fillMaxSize()) {
-        ScreenTitle("Your chats", "Private conversations stay between your devices.")
-        StatusCard()
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 22.dp)) {
-            Text("MESSAGES", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-            Spacer(Modifier.height(12.dp))
-            EmptyState(
-                glyph = "✉",
-                title = "Your conversations start here",
-                body = "Connect directly with someone nearby or exchange a TomChat contact card. No account or server required."
-            )
+private fun ChatsScreen(profile: AccountProfile) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val contactStore = remember { TrustedContactStore(context.filesDir) }
+    var coordinator by remember { mutableStateOf<PeerMessagingCoordinator?>(null) }
+    var trusted by remember { mutableStateOf<List<TrustedContact>>(emptyList()) }
+    var selectedContact by remember { mutableStateOf<TrustedContact?>(null) }
+    var address by rememberSaveable { mutableStateOf("") }
+    var port by rememberSaveable { mutableStateOf("47821") }
+    var bindAddress by rememberSaveable { mutableStateOf("0.0.0.0") }
+    var listenPort by rememberSaveable { mutableStateOf("47821") }
+    var listening by remember { mutableStateOf(false) }
+    var session by remember { mutableStateOf<PeerConversationSession?>(null) }
+    var messages by remember { mutableStateOf<List<StoredChatMessage>>(emptyList()) }
+    var draft by rememberSaveable { mutableStateOf("") }
+    var working by remember { mutableStateOf(false) }
+    var statusText by remember { mutableStateOf("Preparing device encryption…") }
+    var errorText by remember { mutableStateOf<String?>(null) }
+    var callSnapshot by remember { mutableStateOf<PeerCallSnapshot?>(null) }
+    var pendingCallAction by remember { mutableStateOf("call") }
+    var callMuted by remember { mutableStateOf(false) }
+    var callSpeaker by remember { mutableStateOf(false) }
+
+    val callController = remember(session, selectedContact) {
+        val activeSession = session
+        val peer = selectedContact
+        if (activeSession != null && peer != null) {
+            PeerVoiceCallController(context, activeSession, peer.fingerprint, onError = { error ->
+                scope.launch { errorText = error.message ?: "Voice call audio failed." }
+            })
+        } else null
+    }
+    val microphonePermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            try {
+                if (pendingCallAction == "accept") callController?.acceptIncoming()
+                else callController?.startOutgoing()
+                callSnapshot = callController?.snapshot
+                callMuted = false
+                callSpeaker = false
+                errorText = null
+            } catch (error: Exception) {
+                errorText = error.message ?: "Could not start the voice call."
+            }
+        } else {
+            errorText = "Microphone permission is required to make or answer a voice call."
+        }
+    }
+
+    LaunchedEffect(context.filesDir) {
+        try {
+            val loaded = withContext(Dispatchers.IO) {
+                val signing = DeviceIdentityStore().getOrCreate()
+                val noise = NoiseIdentityStore(context.filesDir).getOrCreate()
+                PeerMessagingCoordinator(context.filesDir, signing, noise) to contactStore.load()
+            }
+            coordinator = loaded.first
+            trusted = loaded.second
+            statusText = "Ready for a direct encrypted connection"
+        } catch (error: Exception) {
+            errorText = error.message ?: "Could not initialise encrypted messaging."
+            statusText = "Encryption unavailable"
+        }
+    }
+
+    DisposableEffect(coordinator) { onDispose { coordinator?.close() } }
+    DisposableEffect(session) { onDispose { session?.close() } }
+    DisposableEffect(callController) {
+        callSnapshot = callController?.snapshot
+        onDispose { callController?.close() }
+    }
+
+    LaunchedEffect(session) {
+        val active = session ?: return@LaunchedEffect
+        val peer = selectedContact ?: return@LaunchedEffect
+        while (true) {
+            try {
+                val event = withContext(Dispatchers.IO) { active.receiveEvent() }
+                withContext(Dispatchers.IO) { callController?.handle(event) }
+                callSnapshot = callController?.snapshot
+                when (event) {
+                    is PeerConversationEvent.MessageReceived,
+                    is PeerConversationEvent.DeliveryConfirmed,
+                    is PeerConversationEvent.UnmatchedDeliveryAcknowledgement,
+                    PeerConversationEvent.DuplicateMessage,
+                    is PeerConversationEvent.VoiceSignalReceived,
+                    is PeerConversationEvent.VoiceFrameReceived -> Unit
+                }
+                messages = withContext(Dispatchers.IO) { coordinator?.loadHistory(peer.fingerprint).orEmpty() }
+            } catch (error: Exception) {
+                statusText = "Connection ended"
+                errorText = error.message ?: "The encrypted connection was interrupted."
+                session = null
+                break
+            }
+        }
+    }
+
+    val mayMessage = AccountSafetyPolicy.allows(profile.safetyState(), TomChatCapability.MESSAGE_APPROVED_CONTACT)
+    val mayCall = AccountSafetyPolicy.allows(profile.safetyState(), TomChatCapability.VOICE_CALL_APPROVED_CONTACT)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 20.dp)) {
+        ScreenTitle("Your chats", "Encrypted, direct conversations between trusted devices.")
+        StatusCard(isConnected = session?.status == PeerConnectionStatus.CONNECTED, connectionText = statusText)
+        if (!mayMessage) {
+            EmptyState("⌑", "Messaging is locked", AccountSafetyPolicy.restrictionReason(profile.safetyState()))
+            return@Column
+        }
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+            Text("TRUSTED CONTACTS", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+            if (trusted.isEmpty()) Text("Add a contact by scanning and independently verifying their signed QR card first.", color = Muted, fontSize = 12.sp)
+            trusted.forEach { contact ->
+                Card(Modifier.fillMaxWidth().padding(top = 8.dp), colors = CardDefaults.cardColors(containerColor = Panel), border = BorderStroke(1.dp, if (selectedContact?.fingerprint == contact.fingerprint) Cyan else Raised)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(contact.displayName, color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                        Text(contact.fingerprint, color = Muted, fontSize = 9.sp)
+                        Text(if (contact.noiseStaticPublicKey != null) "Signed Noise key available" else "Legacy card — encrypted connection unavailable", color = if (contact.noiseStaticPublicKey != null) Green else Color(0xFFFFE14D), fontSize = 10.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = {
+                                session?.close(); session = null
+                                selectedContact = contact
+                                messages = emptyList(); errorText = null
+                                scope.launch {
+                                    try { messages = withContext(Dispatchers.IO) { coordinator?.loadHistory(contact.fingerprint).orEmpty() } }
+                                    catch (error: Exception) { errorText = error.message ?: "Could not load encrypted history." }
+                                }
+                            }) { Text("Open") }
+                            TextButton(enabled = coordinator != null && contact.noiseStaticPublicKey != null && !working, onClick = {
+                                session?.close(); session = null
+                                selectedContact = contact; working = true; errorText = null
+                                scope.launch {
+                                    try {
+                                        val active = withContext(Dispatchers.IO) { coordinator!!.connect(address.trim(), port.toInt(), contact) }
+                                        session?.close(); session = active
+                                        messages = withContext(Dispatchers.IO) { coordinator!!.loadHistory(contact.fingerprint) }
+                                        statusText = "Encrypted connection established"
+                                    } catch (error: Exception) { errorText = error.message ?: "Could not connect securely."; statusText = "Connection failed" }
+                                    finally { working = false }
+                                }
+                            }) { Text("Connect") }
+                            TextButton(enabled = coordinator != null && contact.noiseStaticPublicKey != null && !working && !listening, onClick = {
+                                session?.close(); session = null
+                                selectedContact = contact; working = true; errorText = null
+                                scope.launch {
+                                    try {
+                                        val actualPort = withContext(Dispatchers.IO) { coordinator!!.startListening(bindAddress.trim(), listenPort.toInt()) }
+                                        listening = true
+                                        statusText = "Listening on port $actualPort — waiting for ${contact.displayName}"
+                                        val active = withContext(Dispatchers.IO) { coordinator!!.accept(contact) }
+                                        session?.close(); session = active
+                                        messages = withContext(Dispatchers.IO) { coordinator!!.loadHistory(contact.fingerprint) }
+                                        listening = false; statusText = "Encrypted connection established"
+                                    } catch (error: Exception) { listening = false; errorText = error.message ?: "Could not accept a secure connection."; statusText = "Listener stopped" }
+                                    finally { working = false }
+                                }
+                            }) { Text(if (listening) "Waiting…" else "Listen") }
+                        }
+                    }
+                }
+            }
+        }
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+            Text("DIRECT CONNECTION", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+            OutlinedTextField(address, { address = it.take(253) }, Modifier.fillMaxWidth(), label = { Text("Peer IP address") }, singleLine = true)
+            OutlinedTextField(port, { port = it.filter(Char::isDigit).take(5) }, Modifier.fillMaxWidth(), label = { Text("Peer port") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+            Text("On the receiving device, select the same trusted contact and use Listen.", color = Muted, fontSize = 11.sp)
+            OutlinedTextField(bindAddress, { bindAddress = it.take(253) }, Modifier.fillMaxWidth(), label = { Text("Local interface to listen on") }, singleLine = true)
+            OutlinedTextField(listenPort, { listenPort = it.filter(Char::isDigit).take(5) }, Modifier.fillMaxWidth(), label = { Text("Local listening port") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+            Text(statusText, color = if (session != null) Green else Muted, fontSize = 11.sp)
+            if (errorText != null) Text(errorText!!, color = Color(0xFFFF6B83), fontSize = 11.sp)
+        }
+        selectedContact?.let { contact ->
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+                Text("CONVERSATION WITH ${contact.displayName.uppercase()}", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                if (session == null) Text("Messages and calls require mutual identity verification and an established Noise XX channel.", color = Muted, fontSize = 11.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                        enabled = mayCall && session?.status == PeerConnectionStatus.CONNECTED &&
+                            (callSnapshot == null || callSnapshot?.state == PeerCallState.ENDED || callSnapshot?.state == PeerCallState.FAILED),
+                        onClick = {
+                            pendingCallAction = "call"
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                try {
+                                    callController?.startOutgoing()
+                                    callSnapshot = callController?.snapshot
+                                    errorText = null
+                                } catch (error: Exception) { errorText = error.message ?: "Could not start the call." }
+                            } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    ) { Text("Voice call") }
+                    callSnapshot?.let { call ->
+                        Text(
+                            when (call.state) {
+                                PeerCallState.OUTGOING -> "Calling…"
+                                PeerCallState.INCOMING -> "Incoming call"
+                                PeerCallState.CONNECTING -> "Connecting audio…"
+                                PeerCallState.ACTIVE -> "Call active"
+                                PeerCallState.RECONNECTING -> "Reconnecting…"
+                                PeerCallState.ENDED -> "Call ended"
+                                PeerCallState.FAILED -> "Call failed"
+                                PeerCallState.IDLE -> "Idle"
+                            },
+                            color = if (call.state == PeerCallState.ACTIVE) Green else Muted,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+                if (callSnapshot?.state == PeerCallState.INCOMING) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(enabled = mayCall, onClick = {
+                            pendingCallAction = "accept"
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                try {
+                                    callController?.acceptIncoming()
+                                    callSnapshot = callController?.snapshot
+                                    errorText = null
+                                } catch (error: Exception) { errorText = error.message ?: "Could not answer the call." }
+                            } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                        }) { Text("Answer") }
+                        TextButton(onClick = {
+                            runCatching { callController?.rejectIncoming() }
+                            callSnapshot = callController?.snapshot
+                        }) { Text("Reject") }
+                    }
+                }
+                if (callSnapshot?.state == PeerCallState.ACTIVE) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = {
+                            callMuted = !callMuted
+                            runCatching { callController?.setMuted(callMuted) }
+                        }) { Text(if (callMuted) "Unmute" else "Mute") }
+                        TextButton(onClick = {
+                            callSpeaker = !callSpeaker
+                            val routed = runCatching { callController?.setSpeakerphoneEnabled(callSpeaker) == true }.getOrDefault(false)
+                            if (!routed) { callSpeaker = false; errorText = "That audio route is not available on this device." }
+                        }) { Text(if (callSpeaker) "Earpiece" else "Speaker") }
+                        Button(onClick = {
+                            callController?.hangUp()
+                            callSnapshot = callController?.snapshot
+                        }) { Text("Hang up") }
+                    }
+                }
+                messages.forEach { message ->
+                    Card(Modifier.fillMaxWidth().padding(vertical = 3.dp), colors = CardDefaults.cardColors(containerColor = if (message.direction == StoredMessageDirection.OUTGOING) Raised else Panel)) {
+                        Column(Modifier.padding(10.dp)) {
+                            Text(message.body, color = TextPrimary, fontSize = 13.sp)
+                            Text("${if (message.direction == StoredMessageDirection.OUTGOING) "YOU" else contact.displayName.uppercase()} • ${message.status.name}", color = Muted, fontSize = 9.sp)
+                        }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(draft, { draft = it.take(16_384) }, Modifier.weight(1f), label = { Text("Encrypted message") }, enabled = session?.status == PeerConnectionStatus.CONNECTED, maxLines = 3)
+                    TextButton(enabled = session?.status == PeerConnectionStatus.CONNECTED && draft.isNotBlank() && !working, onClick = {
+                        val text = draft.trim(); val active = session ?: return@TextButton; draft = ""; working = true
+                        scope.launch {
+                            try {
+                                withContext(Dispatchers.IO) { active.sendText(text) }
+                                messages = withContext(Dispatchers.IO) { coordinator?.loadHistory(contact.fingerprint).orEmpty() }
+                            } catch (error: Exception) { errorText = error.message ?: "Message could not be sent."; statusText = "Message send failed" }
+                            finally { working = false }
+                        }
+                    }) { Text("Send") }
+                }
+            }
         }
     }
 }
-
 @Composable
-private fun StatusCard() {
+private fun StatusCard(isConnected: Boolean, connectionText: String) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
         colors = CardDefaults.cardColors(containerColor = Panel),
@@ -514,9 +772,9 @@ private fun StatusCard() {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text("Direct connection", color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                Text("No peer connected yet", color = Muted, fontSize = 11.sp)
+                Text(connectionText, color = Muted, fontSize = 11.sp)
             }
-            Text("OFFLINE", color = Pink, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            Text(if (isConnected) "ONLINE" else "OFFLINE", color = if (isConnected) Green else Pink, fontSize = 9.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -655,8 +913,8 @@ private fun CallsScreen() {
         ScreenTitle("Calls", "Private voice calls over direct peer connections.")
         EmptyState(
             glyph = "⌕",
-            title = "No calls yet",
-            body = "Voice calling will use authenticated peer connections. Bluetooth headset audio routing is planned; direct Bluetooth calling will be tested separately."
+            title = "Start a private voice call",
+            body = "Open Chats, connect to a trusted contact using the direct encrypted connection, then tap Voice call. Keep the chat open during this prototype call. Microphone permission is requested only when you call or answer. Bluetooth and wired headsets use Android's normal audio routing."
         )
     }
 }
