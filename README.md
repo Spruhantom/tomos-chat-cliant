@@ -2,7 +2,7 @@
 
 **TomChat** is an Android-first project to build a decentralised, peer-to-peer messaging and voice app that keeps identity and communication under the user's control.
 
-> **Development status:** Android messaging prototype integration is in progress. The Compose Chats screen now has user-invoked direct TCP listen/connect controls for independently trusted contacts. A successful connection performs mutual signed identity proof followed by a pinned-key Noise XX handshake; text frames and delivery acknowledgements then travel only inside the encrypted channel. Conversation history is protected at rest with Android Keystore AES-256-GCM. This is an early prototype, not a production-ready messenger: CI validation, physical two-device tests, protocol review and independent security review remain outstanding. The account safety policy intentionally keeps messaging disabled until age assurance (and guardian approval where required) is complete.
+> **Development status:** The Android prototype now includes direct TCP peer messaging and a first one-to-one voice-call path. Trusted contacts authenticate with signed identity proof, then pinned-key Noise XX; text, delivery acknowledgements, call signalling and 20 ms PCM voice frames are sent inside the encrypted channel. Android audio capture/playback uses communication audio mode, optional echo cancellation/noise suppression and speaker/earpiece routing. The call path is currently a LAN/reachable-IP prototype using raw PCM over ordered TCP; it is not yet optimised for mobile internet, NAT traversal, packet loss or battery use. CI and physical two-device audio testing remain outstanding. The account safety policy intentionally keeps messaging and calls disabled until age assurance (and guardian approval where required) is complete.
 
 ## Project principles
 
@@ -52,7 +52,7 @@ Any proposed verification mechanism must be assessed against TomChat's strict no
 - Encrypted local backup and encrypted peer-to-peer replication to explicitly trusted devices.
 - TomSocial integration as a later, carefully scoped decentralised social layer.
 
-All networking must use the same authenticated peer identity and end-to-end encrypted message envelope. Bluetooth LE discovery/GATT and Bluetooth Classic data transfer are planned; direct Bluetooth peer voice remains experimental until physical-device testing demonstrates acceptable quality and battery use.
+All networking must use the same authenticated peer identity and end-to-end encrypted message envelope. The current voice prototype carries fixed-size PCM frames through the Noise channel over the established direct TCP connection. Opus encoding, adaptive jitter buffering, packet-loss concealment, UDP/WebRTC-style media transport, NAT traversal and Bluetooth voice transport remain future work.
 
 ## Android application
 
@@ -63,7 +63,9 @@ Current UI foundation:
 - fold posture detection through Jetpack WindowManager, with book mode for half-open vertical folds and tabletop mode for half-open horizontal folds; both layouts provide a hinge gutter and companion navigation pane. Device-by-device physical validation is still required;
 - first-run display-name and date-of-birth screen with local age-band preview;
 - Chats, Contacts, Calls and Settings navigation;
-- prototype chat flow with manual direct-IP connection/listen, trusted-contact selection, Noise XX gating, encrypted text frames, encrypted delivery receipts and local history; the composer stays locked until the account safety policy allows messaging and the Noise session is established;
+- prototype chat flow with manual direct-IP connection/listen, trusted-contact selection, Noise XX gating, encrypted text frames, encrypted delivery receipts and local history;
+- prototype one-to-one voice calls from an active encrypted chat, with incoming-call invite/accept/reject, hang-up, mute, speaker/earpiece routing, runtime microphone permission and PCM media frames carried only through the Noise channel;
+- messaging and calling remain locked until the account safety policy allows the relevant capability and the Noise session is established;
 - TomOS neon visual styling;
 - account experience and zero-server policy status placeholders.
 
@@ -106,8 +108,9 @@ GitHub Actions runs Android unit tests, Android instrumentation tests on an API 
 3. Design and review age assurance, guardian consent and age-policy enforcement.
 4. Prototype authenticated direct Bluetooth communication between two physical Android devices.
 5. Add direct Wi-Fi LAN and reachable direct-IP transport.
-6. Implement the reviewed end-to-end encryption protocol and messaging.
-7. Add calls, file transfer, backups and later TomSocial capabilities.
+6. Complete messaging delivery/reconnect reliability and independently review the end-to-end encryption implementation.
+7. Validate the voice prototype on two physical devices, then add Opus, jitter handling and a mobile-friendly media transport.
+8. Add file transfer, backups and later TomSocial capabilities.
 
 ## Security and release policy
 
