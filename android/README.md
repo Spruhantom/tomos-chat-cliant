@@ -6,7 +6,7 @@ The native Android foundation is now scaffolded in `android/app` using Kotlin, J
 
 The project uses Android Gradle Plugin 8.7.3, Kotlin 2.0.21, Java 17, and compile/target SDK 35 (minimum SDK 26).
 
-With Android SDK, Java 17, and Gradle 8.9 installed, build from the repository root:
+Install Java 17, Android SDK 35, Android NDK 27.2.12479018, Gradle 8.9, Rust stable with the `aarch64-linux-android`, `armv7-linux-androideabi` and `x86_64-linux-android` targets, and `cargo-ndk` (`cargo install cargo-ndk --locked`). Build from the repository root:
 
 ```bash
 gradle --no-daemon :android:app:assembleDebug
@@ -48,7 +48,7 @@ Bluetooth is a first-class direct peer transport, not a server substitute:
 - Android Bluetooth permissions, pairing, adapter state, MTU negotiation, transfer resume, and lifecycle limits must be handled.
 - Bluetooth headset audio routing is required for calls. Direct Bluetooth peer voice media remains experimental until tested on physical devices.
 
-The Android client now creates a persistent X25519 static key. Its private scalar is encrypted at rest with AES-256-GCM using a non-exportable Android Keystore wrapping key. New V2 QR cards include the Noise public key in the P-256 identity signature, and the trusted-contact store persists that binding. Legacy V1 cards remain readable but cannot be trusted as Noise-capable contacts. The Rust Noise XX core is still isolated and is not connected to Android or the direct TCP adapter. The next networking milestone is a narrow JNI/UniFFI integration that passes local key material into Rust and pins the trusted contact's signed Noise key during the handshake, followed by physical-device LAN testing.
+The Android client now creates a persistent X25519 static key. Its private scalar is encrypted at rest with AES-256-GCM using a non-exportable Android Keystore wrapping key. New V2 QR cards include the Noise public key in the P-256 identity signature, and the trusted-contact store persists that binding. Legacy V1 cards remain readable but cannot be trusted as Noise-capable contacts. The Rust Noise XX core is now exposed to Android through a narrow JNI boundary. Rust owns session state behind opaque handles; Kotlin can exchange handshake messages and request authenticated encryption/decryption only after the Rust core verifies the saved peer static key. The Gradle build uses cargo-ndk to package `libtomchat_noise.so` for arm64-v8a, armeabi-v7a and x86_64. Device instrumentation tests exercise the JNI handshake and encrypted records. This core is not yet connected to the direct TCP adapter or messaging UI; no application data may be sent over the old identity-proof socket. The next milestone is bounded stream framing and direct transport integration, followed by two-physical-device LAN testing.
 
 ## Planned modules
 
