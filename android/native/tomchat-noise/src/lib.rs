@@ -215,6 +215,7 @@ fn return_bytes(env: &mut JNIEnv, value: Result<Vec<u8>, NoiseSessionError>) -> 
     }
 }
 
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeCreateSession(
     mut env: JNIEnv,
@@ -252,6 +253,7 @@ pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeCreateSession(
     }
 }
 
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeWriteHandshake(
     mut env: JNIEnv, _class: JClass, handle: jlong, payload: JByteArray,
@@ -267,6 +269,7 @@ pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeWriteHandshake(
     return_bytes(&mut env, result)
 }
 
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeReadHandshake(
     mut env: JNIEnv, _class: JClass, handle: jlong, message: JByteArray,
@@ -282,6 +285,7 @@ pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeReadHandshake(
     return_bytes(&mut env, result)
 }
 
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeFinishHandshake(
     mut env: JNIEnv, _class: JClass, handle: jlong,
@@ -293,6 +297,7 @@ pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeFinishHandshake(
     if let Err(error) = result { throw_java(&mut env, &error.to_string()); }
 }
 
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeEncrypt(
     mut env: JNIEnv, _class: JClass, handle: jlong, plaintext: JByteArray,
@@ -308,6 +313,7 @@ pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeEncrypt(
     return_bytes(&mut env, result)
 }
 
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeDecrypt(
     mut env: JNIEnv, _class: JClass, handle: jlong, ciphertext: JByteArray,
@@ -323,6 +329,7 @@ pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeDecrypt(
     return_bytes(&mut env, result)
 }
 
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeCloseSession(
     mut env: JNIEnv, _class: JClass, handle: jlong,
