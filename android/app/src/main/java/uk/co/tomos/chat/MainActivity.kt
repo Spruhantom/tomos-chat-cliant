@@ -438,8 +438,16 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
         if (scanError != null) Text(scanError!!, color = Color(0xFFFF6B83), modifier = Modifier.padding(20.dp))
         scanned?.let { card ->
             val trustedMatch = trusted.firstOrNull { it.fingerprint == card.fingerprint }
-            val alreadyTrusted = trustedMatch != null && trustedMatch.noiseStaticPublicKey?.contentEquals(card.noiseStaticPublicKey ?: ByteArray(0)) == true
-            val noiseKeyChanged = trustedMatch != null && !alreadyTrusted
+            val sameNoiseKey = trustedMatch?.let { existing ->
+                val savedKey = existing.noiseStaticPublicKey
+                val presentedKey = card.noiseStaticPublicKey
+                if (savedKey == null || presentedKey == null) savedKey == null && presentedKey == null
+                else savedKey.contentEquals(presentedKey)
+            } == true
+            val alreadyTrusted = trustedMatch != null && sameNoiseKey
+            val noiseKeyChanged = trustedMatch?.noiseStaticPublicKey != null &&
+                card.noiseStaticPublicKey != null && !sameNoiseKey
+            val noiseKeyDowngrade = trustedMatch?.noiseStaticPublicKey != null && card.noiseStaticPublicKey == null
             val hasNoiseBinding = card.noiseStaticPublicKey != null
             Card(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), colors = CardDefaults.cardColors(containerColor = Panel), border = BorderStroke(1.dp, Cyan)) {
                 Column(Modifier.padding(16.dp)) {
@@ -462,6 +470,8 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
                     } else {
                         if (noiseKeyChanged) {
                             Text("WARNING: this contact has presented a different Noise key. Only approve it if you independently re-verified the unchanged identity fingerprint with the contact.", color = Color(0xFFFFE14D), fontSize = 12.sp)
+                        } else if (noiseKeyDowngrade) {
+                            Text("WARNING: this card omits the Noise key previously bound to this identity. It cannot replace the trusted card.", color = Color(0xFFFFE14D), fontSize = 12.sp)
                         }
                         Button(enabled = fingerprintCompared && hasNoiseBinding && !saving, onClick = {
                             saving = true
