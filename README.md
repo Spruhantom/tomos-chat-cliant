@@ -19,4 +19,4 @@ Android app with one-to-one and group messaging, voice and group voice, file sha
 
 This is the planning and architecture baseline, not a working messenger yet. The next milestone is a minimal Android shell plus a Rust networking-core proof of concept. Do not describe the application as secure or production-ready until independent protocol review, threat modelling, interoperability tests, and device testing are complete.
 
-See [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), and [decisions](docs/decisions/0001-product-baseline.md).
+See [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), [decisions](docs/decisions/0001-product-baseline.md), and the proposed [TomOS Social direction](docs/tomsocial-direction.md).
