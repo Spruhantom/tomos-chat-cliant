@@ -10,6 +10,13 @@
 
 use snow::{params::NoiseParams, Builder, HandshakeState, TransportState};
 use std::fmt;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicU64, Ordering};
+use jni::objects::{JByteArray, JClass};
+use jni::sys::{jboolean, jbyteArray, jlong};
+use jni::JNIEnv;
+use zeroize::Zeroize;
 
 const PROTOCOL: &str = "Noise_XX_25519_ChaChaPoly_SHA256";
 const MAX_MESSAGE: usize = 65_535;
@@ -166,5 +173,157 @@ mod tests {
     fn validates_static_key_lengths() {
         assert!(NoiseSession::initiator(&[0; 31], &[0; 32]).is_err());
         assert!(NoiseSession::responder(&[0; 32], &[0; 33]).is_err());
+    }
+}
+
+
+// JNI boundary. Handles refer to Rust-owned sessions; Java never receives
+// Noise cipher state or key schedules. All calls are synchronous and bounded.
+static SESSIONS: OnceLock<Mutex<HashMap<u64, NoiseSession>>> = OnceLock::new();
+static NEXT_HANDLE: AtomicU64 = AtomicU64::new(1);
+
+fn sessions() -> &'static Mutex<HashMap<u64, NoiseSession>> {
+    SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn throw_java(env: &mut JNIEnv, message: &str) {
+    let _ = env.throw_new("java/lang/IllegalStateException", message);
+}
+
+fn java_bytes(env: &mut JNIEnv, value: JByteArray) -> Result<Vec<u8>, String> {
+    env.convert_byte_array(&value).map_err(|e| format!("Invalid byte array: {e}"))
+}
+
+fn return_bytes(env: &mut JNIEnv, value: Result<Vec<u8>, NoiseSessionError>) -> jbyteArray {
+    match value {
+        Ok(bytes) => match env.byte_array_from_slice(&bytes) {
+            Ok(array) => array.into_raw(),
+            Err(error) => {
+                throw_java(env, &format!("Could not return Noise bytes: {error}"));
+                std::ptr::null_mut()
+            }
+        },
+        Err(error) => {
+            throw_java(env, &error.to_string());
+            std::ptr::null_mut()
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeCreateSession(
+    mut env: JNIEnv,
+    _class: JClass,
+    initiator: jboolean,
+    local_private: JByteArray,
+    expected_peer_static: JByteArray,
+) -> jlong {
+    let mut private_key = match java_bytes(&mut env, local_private) {
+        Ok(value) => value,
+        Err(error) => { throw_java(&mut env, &error); return 0; }
+    };
+    let peer_key = match java_bytes(&mut env, expected_peer_static) {
+        Ok(value) => value,
+        Err(error) => { private_key.zeroize(); throw_java(&mut env, &error); return 0; }
+    };
+    let session = if initiator != 0 {
+        NoiseSession::initiator(&private_key, &peer_key)
+    } else {
+        NoiseSession::responder(&private_key, &peer_key)
+    };
+    private_key.zeroize();
+    let session = match session {
+        Ok(value) => value,
+        Err(error) => { throw_java(&mut env, &error.to_string()); return 0; }
+    };
+    let handle = NEXT_HANDLE.fetch_add(1, Ordering::Relaxed);
+    if handle == 0 || handle > i64::MAX as u64 {
+        throw_java(&mut env, "Noise session handle space exhausted.");
+        return 0;
+    }
+    match sessions().lock() {
+        Ok(mut map) => { map.insert(handle, session); handle as jlong }
+        Err(_) => { throw_java(&mut env, "Noise session registry is unavailable."); 0 }
+    }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeWriteHandshake(
+    mut env: JNIEnv, _class: JClass, handle: jlong, payload: JByteArray,
+) -> jbyteArray {
+    let payload = match java_bytes(&mut env, payload) {
+        Ok(value) => value,
+        Err(error) => { throw_java(&mut env, &error); return std::ptr::null_mut(); }
+    };
+    let result = sessions().lock().map_err(|_| NoiseSessionError::InvalidState("Noise session registry is unavailable."))
+        .and_then(|mut map| map.get_mut(&(handle as u64))
+            .ok_or(NoiseSessionError::InvalidState("Unknown or closed Noise session."))?
+            .write_handshake(&payload));
+    return_bytes(&mut env, result)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeReadHandshake(
+    mut env: JNIEnv, _class: JClass, handle: jlong, message: JByteArray,
+) -> jbyteArray {
+    let message = match java_bytes(&mut env, message) {
+        Ok(value) => value,
+        Err(error) => { throw_java(&mut env, &error); return std::ptr::null_mut(); }
+    };
+    let result = sessions().lock().map_err(|_| NoiseSessionError::InvalidState("Noise session registry is unavailable."))
+        .and_then(|mut map| map.get_mut(&(handle as u64))
+            .ok_or(NoiseSessionError::InvalidState("Unknown or closed Noise session."))?
+            .read_handshake(&message));
+    return_bytes(&mut env, result)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeFinishHandshake(
+    mut env: JNIEnv, _class: JClass, handle: jlong,
+) {
+    let result = sessions().lock().map_err(|_| NoiseSessionError::InvalidState("Noise session registry is unavailable."))
+        .and_then(|mut map| map.get_mut(&(handle as u64))
+            .ok_or(NoiseSessionError::InvalidState("Unknown or closed Noise session."))?
+            .finish_handshake());
+    if let Err(error) = result { throw_java(&mut env, &error.to_string()); }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeEncrypt(
+    mut env: JNIEnv, _class: JClass, handle: jlong, plaintext: JByteArray,
+) -> jbyteArray {
+    let plaintext = match java_bytes(&mut env, plaintext) {
+        Ok(value) => value,
+        Err(error) => { throw_java(&mut env, &error); return std::ptr::null_mut(); }
+    };
+    let result = sessions().lock().map_err(|_| NoiseSessionError::InvalidState("Noise session registry is unavailable."))
+        .and_then(|mut map| map.get_mut(&(handle as u64))
+            .ok_or(NoiseSessionError::InvalidState("Unknown or closed Noise session."))?
+            .encrypt(&plaintext));
+    return_bytes(&mut env, result)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeDecrypt(
+    mut env: JNIEnv, _class: JClass, handle: jlong, ciphertext: JByteArray,
+) -> jbyteArray {
+    let ciphertext = match java_bytes(&mut env, ciphertext) {
+        Ok(value) => value,
+        Err(error) => { throw_java(&mut env, &error); return std::ptr::null_mut(); }
+    };
+    let result = sessions().lock().map_err(|_| NoiseSessionError::InvalidState("Noise session registry is unavailable."))
+        .and_then(|mut map| map.get_mut(&(handle as u64))
+            .ok_or(NoiseSessionError::InvalidState("Unknown or closed Noise session."))?
+            .decrypt(&ciphertext));
+    return_bytes(&mut env, result)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_uk_co_tomos_chat_NoiseNative_nativeCloseSession(
+    mut env: JNIEnv, _class: JClass, handle: jlong,
+) {
+    match sessions().lock() {
+        Ok(mut map) => { map.remove(&(handle as u64)); }
+        Err(_) => throw_java(&mut env, "Noise session registry is unavailable."),
     }
 }
