@@ -16,6 +16,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.Image
@@ -28,6 +33,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -179,7 +186,7 @@ private fun AccountSetupScreen(onAssigned: (AccountProfile) -> Unit) {
     var assessedBand by rememberSaveable { mutableStateOf<String?>(null) }
 
     Column(
-        modifier = Modifier.fillMaxSize().background(Void).padding(horizontal = 24.dp, vertical = 28.dp),
+        modifier = Modifier.fillMaxSize().background(Void).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 28.dp),
         verticalArrangement = Arrangement.Center
     ) {
         Text("TOMCHAT", color = Pink, fontSize = 13.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
@@ -277,28 +284,55 @@ private fun AccountSetupScreen(onAssigned: (AccountProfile) -> Unit) {
 private fun TomChatApp(profile: AccountProfile, contactCard: String?) {
     var destination by rememberSaveable { mutableStateOf(Destination.Chats) }
     Surface(modifier = Modifier.fillMaxSize(), color = Void) {
-        Scaffold(
-            containerColor = Void,
-            topBar = { AppHeader() },
-            bottomBar = {
-                NavigationBar(containerColor = Panel, contentColor = TextPrimary) {
-                    Destination.entries.forEach { item ->
-                        NavigationBarItem(
-                            selected = destination == item,
-                            onClick = { destination = item },
-                            icon = { Text(item.glyph, fontSize = 20.sp) },
-                            label = { Text(item.label) }
-                        )
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val expanded = maxWidth >= 840.dp
+            val medium = maxWidth >= 600.dp
+            Row(Modifier.fillMaxSize()) {
+                if (medium) {
+                    NavigationRail(containerColor = Panel, contentColor = TextPrimary) {
+                        Destination.entries.forEach { item ->
+                            NavigationRailItem(
+                                selected = destination == item,
+                                onClick = { destination = item },
+                                icon = { Text(item.glyph, fontSize = 20.sp) },
+                                label = { Text(item.label) },
+                                alwaysShowLabel = true
+                            )
+                        }
                     }
                 }
-            }
-        ) { padding ->
-            Box(Modifier.padding(padding)) {
-                when (destination) {
-                    Destination.Chats -> ChatsScreen()
-                    Destination.Contacts -> ContactsScreen(profile, contactCard)
-                    Destination.Calls -> CallsScreen()
-                    Destination.Settings -> SettingsScreen(profile)
+                Scaffold(
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    containerColor = Void,
+                    topBar = { AppHeader() },
+                    bottomBar = {
+                        if (!medium) {
+                            NavigationBar(containerColor = Panel, contentColor = TextPrimary) {
+                                Destination.entries.forEach { item ->
+                                    NavigationBarItem(
+                                        selected = destination == item,
+                                        onClick = { destination = item },
+                                        icon = { Text(item.glyph, fontSize = 20.sp) },
+                                        label = { Text(item.label) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                ) { padding ->
+                    Box(
+                        Modifier.fillMaxSize().padding(padding),
+                        contentAlignment = Alignment.TopCenter
+                    ) {
+                        Box(Modifier.fillMaxSize().widthIn(max = if (expanded) 1200.dp else 840.dp)) {
+                            when (destination) {
+                                Destination.Chats -> ChatsScreen()
+                                Destination.Contacts -> ContactsScreen(profile, contactCard)
+                                Destination.Calls -> CallsScreen()
+                                Destination.Settings -> SettingsScreen(profile)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -413,7 +447,7 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
         return
     }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenTitle("Contacts", "People you connect with directly.")
         val safety = profile.safetyState()
         val mayExchange = AccountSafetyPolicy.allows(safety, TomChatCapability.EXCHANGE_CONTACT_CARD)
