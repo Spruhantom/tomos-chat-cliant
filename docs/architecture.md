@@ -24,6 +24,10 @@ Rust core
   |-- call signalling and media session coordinator
       |
 Direct device-to-device transports
+  |-- Bluetooth LE (nearby discovery / GATT data channel)
+  |-- Bluetooth Classic (RFCOMM where supported)
+  |-- Wi-Fi LAN (mDNS + direct sockets / QUIC)
+  |-- direct IP over internet (best effort)
       |
 Other TomChat peers
 ```
@@ -32,6 +36,8 @@ Kotlin owns Android lifecycle, permissions, notifications, audio routing, foregr
 
 ## Peer discovery without servers
 
+- Bluetooth LE advertisements and GATT can discover nearby TomChat peers and exchange bounded connection/bootstrap data directly. Use rotating privacy-preserving identifiers; do not advertise a stable public identity or personal details.
+- Bluetooth Classic RFCOMM can provide a direct byte-stream transport on compatible paired devices. Pairing and Android permission requirements must be handled explicitly.
 - Same-network discovery: mDNS / local multicast where Android permits it. This requires no central service.
 - Nearby out-of-band exchange: QR codes, NFC, Bluetooth, or a user-shared contact card containing a signed identity and connection hints.
 - Remote discovery: peers exchange signed address/contact cards directly. Existing contacts can share updated signed reachability hints peer-to-peer.
@@ -40,11 +46,21 @@ Kotlin owns Android lifecycle, permissions, notifications, audio routing, foregr
 
 ## Direct connectivity and hard limits
 
+The transport manager should select an available direct path without changing the end-to-end message protocol:
+1. Bluetooth LE for nearby discovery and small control/message payloads.
+2. Bluetooth Classic RFCOMM for nearby higher-volume data transfer where supported.
+3. Wi-Fi LAN for higher throughput and larger transfers.
+4. Direct QUIC/IP for reachable remote peers.
+
+Messages and attachments remain end-to-end encrypted and authenticated identically across every transport. Switching transports must not create a new identity or weaken session security. Support resumable chunked file transfer and transport interruption.
+
+**Bluetooth voice distinction:** Bluetooth is a supported peer transport, but BLE/GATT and RFCOMM are not assumed to provide reliable, low-latency continuous voice media on every Android handset. Initial voice calls should use a tested direct IP/Wi-Fi path; investigate direct Bluetooth media separately with real-device latency, throughput, coexistence, and battery tests. Bluetooth headsets must be supported as audio input/output for calls regardless of the peer transport.
+
 Use direct QUIC where possible, with a carefully evaluated direct TCP fallback. Investigate hole punching only as a peer-coordinated technique; do not introduce STUN, TURN, relay nodes, or a hosted signalling service.
 
 **Known limitation:** phones are commonly behind carrier-grade NAT, firewalls, and restrictive networks. Without a rendezvous service or relay, some remote device pairs cannot discover each other or establish a connection. Some carriers do not provide reachable inbound addresses. A strict zero-server product must clearly report "peer unreachable" rather than silently routing through infrastructure.
 
-The first proof of concept must be two physical Android phones on the same LAN. Remote direct-IP tests come after that and must document network conditions and failure cases.
+The first proof of concept must test two physical Android phones over Bluetooth and on the same LAN. Remote direct-IP tests come after that and must document network conditions and failure cases.
 
 ## Messaging model
 
@@ -66,7 +82,7 @@ Transport encryption (for example QUIC/TLS) is not a substitute for end-to-end e
 
 Voice media should use an audited WebRTC media stack where feasible, with DTLS-SRTP or equivalent authenticated media protection. Call signalling must travel over an already-established authenticated peer channel or be exchanged out of band. No signalling server, STUN, or TURN service is allowed. Calls may fail across NATs when direct paths cannot be established.
 
-Group voice uses a direct peer mesh for the initial design. Bandwidth and battery costs grow with participant count; establish conservative participant limits through testing. No central SFU or user-hosted forwarding server is assumed.
+Group voice uses a direct peer mesh for the initial design. Bandwidth and battery costs grow with participant count; establish conservative participant limits through testing. No central SFU or user-hosted forwarding server is assumed. Bluetooth headsets are supported for local audio routing. Direct Bluetooth peer-to-peer voice media is a separate experimental transport and must pass device testing before being advertised as supported.
 
 ## Backup and multi-device
 
@@ -79,6 +95,8 @@ Backups must not silently export plaintext keys. Restore must detect rollback/re
 ## Android lifecycle
 
 Use WorkManager for deferrable local retry/sync, not real-time calls. Use a foreground service only while an active user-visible call or explicitly enabled connection session requires it, subject to current Android policy. Do not promise reliable incoming calls while the app is force-stopped, background-restricted, or disconnected. No push notification service is permitted; incoming-call alerting depends on an already-running/reachable peer connection and Android background execution constraints.
+
+Request Bluetooth runtime permissions only when the user invokes nearby discovery or transfer. Handle Android-version differences, scan/connect permissions, user denial, Bluetooth disabled state, pairing prompts, adapter loss, MTU negotiation, and transfer interruption. Do not keep scanning continuously in the background.
 
 ## Social layer compatibility
 
