@@ -10,6 +10,7 @@ enum class PeerConnectionStatus { ENCRYPTING, CONNECTED, DISCONNECTED, FAILED }
 sealed interface PeerConversationEvent {
     data class MessageReceived(val message: StoredChatMessage) : PeerConversationEvent
     data class DeliveryConfirmed(val messageId: UUID) : PeerConversationEvent
+    data class UnmatchedDeliveryAcknowledgement(val messageId: UUID) : PeerConversationEvent
     data object DuplicateMessage : PeerConversationEvent
 }
 
@@ -78,8 +79,11 @@ class PeerConversationSession(
             when (frame.type) {
                 EncryptedAppFrame.Type.DELIVERY_ACK -> {
                     require(frame.payload.isEmpty()) { "Delivery acknowledgement must not contain a payload." }
-                    history.updateOutgoingStatus(peerFingerprint, frame.messageId, StoredMessageStatus.DELIVERED)
-                    PeerConversationEvent.DeliveryConfirmed(frame.messageId)
+                    if (history.updateOutgoingStatus(peerFingerprint, frame.messageId, StoredMessageStatus.DELIVERED)) {
+                        PeerConversationEvent.DeliveryConfirmed(frame.messageId)
+                    } else {
+                        PeerConversationEvent.UnmatchedDeliveryAcknowledgement(frame.messageId)
+                    }
                 }
                 EncryptedAppFrame.Type.TEXT -> {
                     val decoder = Charsets.UTF_8.newDecoder()
@@ -117,6 +121,8 @@ class PeerConversationSession(
         is PeerConversationEvent.MessageReceived -> event.message
         is PeerConversationEvent.DeliveryConfirmed ->
             throw IOException("A delivery acknowledgement was received while waiting for a text message.")
+        is PeerConversationEvent.UnmatchedDeliveryAcknowledgement ->
+            throw IOException("An unrecognised delivery acknowledgement was received.")
         PeerConversationEvent.DuplicateMessage ->
             throw IOException("A duplicate message was received and acknowledged.")
     }
