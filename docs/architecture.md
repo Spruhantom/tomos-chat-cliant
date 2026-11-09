@@ -125,3 +125,18 @@ TomSocial must follow the same zero-server rule. Public posts and profile update
 - Explicit contact verification and key-change warnings.
 - Secure key storage using Android Keystore where appropriate; understand hardware-backed key limitations and backup/restore semantics.
 - Threat model malicious peers, stolen devices, compromised endpoints, replay, spam/DoS, traffic analysis, metadata leakage, and malicious backup peers.
+
+## Device identity and contact cards (prototype)
+
+Each Android installation creates a P-256 ECDSA signing key pair in Android Keystore. The private key is non-exportable through the app's identity API; the public key is encoded as X.509 SubjectPublicKeyInfo. A contact card contains a version marker, display name, public key, SHA-256 fingerprint and a signature over the canonical card fields. Import-side verification checks the fingerprint and signature before presenting the card.
+
+The QR representation is generated locally using the versioned signed contact-card payload. It contains no date of birth, phone number, IP address, location, or server URL. A self-signature proves that the card fields match the included public key; it does **not** prove that the person presenting the card is the person named. Users must compare the full fingerprint through a separate trusted channel before accepting a contact. A future contact-import flow must require a clear confirmation and persist the accepted public key locally.
+
+Current implementation status:
+- Android Keystore P-256 identity creation/retrieval: implemented, physical-device testing pending.
+- Signed contact-card encoding, decoding and tamper checks: implemented with JVM tests.
+- QR image rendering: implemented.
+- Camera QR scanning, import confirmation, trusted-contact persistence and key-change/revocation UI: not implemented yet.
+- Contact-card sharing remains blocked by the central account policy while age assurance or required guardian approval is incomplete.
+
+Do not treat a valid self-signed card as a trusted contact, and do not use a display name as an identity identifier. Fingerprints are the human-verification mechanism for this prototype.
