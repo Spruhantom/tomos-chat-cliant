@@ -26,13 +26,14 @@ class EncryptedPeerChannel internal constructor(
     @Throws(IOException::class)
     fun send(frame: EncryptedAppFrame) {
         check(isOpen) { "Encrypted peer channel is closed." }
-        val plaintext = AppFrameCodec.encode(frame)
-        val ciphertext = try { noise.encrypt(plaintext) } catch (error: Exception) {
-            close(); throw IOException("Could not encrypt application frame.", error)
-        }
         synchronized(writeLock) {
             check(isOpen) { "Encrypted peer channel is closed." }
             try {
+                // Noise transport counters are ordered. Keep encryption and the
+                // corresponding socket write in one critical section so two
+                // concurrent callers cannot put ciphertext on the wire out of order.
+                val plaintext = AppFrameCodec.encode(frame)
+                val ciphertext = noise.encrypt(plaintext)
                 if (ciphertext.isEmpty() || ciphertext.size > MAX_CIPHERTEXT_BYTES) throw IOException("Encrypted frame exceeds limit.")
                 output.writeInt(ciphertext.size)
                 output.write(ciphertext)
