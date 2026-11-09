@@ -150,3 +150,18 @@ Trust is a separate explicit action. The review screen displays the full SHA-256
 Trusted contacts are stored in an app-private atomic file encrypted with AES-256-GCM under a separate Android Keystore key. The store rejects malformed counts, oversized keys, duplicate fingerprints, invalid fingerprints, trailing data, and unreadable/corrupt ciphertext. The raw QR payload is not stored. Camera permission is not requested until scanning is invoked.
 
 Remaining validation: run Android CI, test on physical devices with different camera sensor row/pixel strides and lighting, test permission denial/revocation, inspect QR readability at different display sizes, and test Keystore key invalidation/interrupted writes. This prototype is not a complete contact synchronisation, revocation, key-change or identity-assurance system.
+
+## Direct peer connection and mutual identity proof (prototype)
+
+The Android prototype now has an explicitly invoked direct TCP connector and a temporary peer listener bound to a caller-selected local interface and port. There is no registration, hosted rendezvous, relay, directory, or persistent background listener. The peer must already know the other device's reachable address and port; global reachability is not guaranteed.
+
+Before returning a connection handle, both sides exchange fresh 256-bit random nonces and sign a domain-separated transcript containing both nonces and the local identity fingerprint with the device's P-256 identity key. Each side verifies the other signature against the public key and fingerprint in its locally stored trusted-contact record. The exchange is bounded by an eight-second socket read timeout, a bounded signature length, a protocol magic value and version. Failed authentication closes the socket. A wrong-key peer is rejected.
+
+**Critical security boundary:** this is mutual proof of possession and replay-resistant connection authentication, not an encrypted application channel. The connection handle deliberately exposes no input/output streams or message-send methods. Do not send chat messages, files, call signalling, or other application data over it. The next cryptographic milestone must integrate a maintained, reviewed Noise or equivalent protocol implementation and bind its authenticated peer identity to the trusted contact before any application payload API is exposed. Do not expand this prototype into a custom encryption or key-agreement protocol.
+
+Current status:
+- Direct TCP connector and explicitly started temporary listener: implemented.
+- Mutual signed-nonce identity proof and trusted-key pinning: implemented.
+- Loopback success and unexpected-identity rejection tests: added; CI result pending.
+- End-to-end encrypted session, secure stream framing, message protocol and physical-device Wi-Fi tests: not implemented.
+- Direct internet connectivity remains best effort and depends on reachable addresses and firewall/NAT configuration.
