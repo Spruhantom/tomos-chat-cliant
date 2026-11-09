@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
-import org.webrtc.Camera1Enumerator
 import org.webrtc.JavaAudioDeviceModule
 import org.webrtc.MediaConstraints
 import org.webrtc.PeerConnection
@@ -26,14 +25,15 @@ import java.util.concurrent.atomic.AtomicBoolean
 class AndroidWebRtcMediaEngine(context: Context) : Closeable {
     private val appContext = context.applicationContext
     private val closed = AtomicBoolean(false)
-    private val audioDeviceModule = JavaAudioDeviceModule.builder(appContext)
-        .setUseHardwareAcousticEchoCanceler(true)
-        .setUseHardwareNoiseSuppressor(true)
-        .createAudioDeviceModule()
+    private val audioDeviceModule: JavaAudioDeviceModule
     private val factory: PeerConnectionFactory
 
     init {
         initialiseWebRtc(appContext)
+        audioDeviceModule = JavaAudioDeviceModule.builder(appContext)
+            .setUseHardwareAcousticEchoCanceler(true)
+            .setUseHardwareNoiseSuppressor(true)
+            .createAudioDeviceModule()
         factory = PeerConnectionFactory.builder()
             .setAudioDeviceModule(audioDeviceModule)
             .createPeerConnectionFactory()
