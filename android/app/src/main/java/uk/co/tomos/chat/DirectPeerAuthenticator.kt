@@ -132,7 +132,7 @@ class AuthenticatedPeerConnection internal constructor(
             }
             session.finishHandshake()
             socket.soTimeout = 0
-            return EncryptedPeerChannel(socket, input, output, session)
+            return EncryptedPeerChannel(socket, input, output, session, peerFingerprint)
         } catch (error: Exception) {
             try { session.close() } catch (_: Exception) { }
             close()
