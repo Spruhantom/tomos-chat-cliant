@@ -48,7 +48,7 @@ Bluetooth is a first-class direct peer transport, not a server substitute:
 - Android Bluetooth permissions, pairing, adapter state, MTU negotiation, transfer resume, and lifecycle limits must be handled.
 - Bluetooth headset audio routing is required for calls. Direct Bluetooth peer voice media remains experimental until tested on physical devices.
 
-The Rust peer engine, Android FFI, identity, cryptographic protocol, and transports are not implemented yet. The first networking milestone is two physical Android devices exchanging an authenticated test payload over Bluetooth LE, followed by Wi-Fi LAN, without any application server.
+The Android client now has device identity, signed contact cards, local QR scanning, fingerprint confirmation, and encrypted local trusted-contact storage. A direct TCP prototype performs mutual signed-nonce proof of possession against saved contacts. An isolated Rust crate now prototypes Noise XX using the Snow implementation (`Noise_XX_25519_ChaChaPoly_SHA256`) and tests pinned static-key authentication plus encrypted records. The Noise core is not yet connected to Android, its static keys are not yet bound to the existing signed contact-card identity, and the Kotlin direct transport still does not carry application data. The next networking milestone is to complete secure Noise key provisioning and signed contact-card binding, then integrate the Rust core through FFI and test two physical Android devices on a LAN without any application server.
 
 ## Planned modules
 
