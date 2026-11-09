@@ -170,7 +170,7 @@ private fun AccountSetupScreen(onAssigned: (AccountProfile) -> Unit) {
         Spacer(Modifier.height(24.dp))
         OutlinedTextField(
             value = displayName,
-            onValueChange = { displayName = it; error = null; assessedBand = null },
+            onValueChange = { displayName = it.take(64); error = null; assessedBand = null },
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Display name") },
             singleLine = true
