@@ -203,21 +203,30 @@ class AndroidVoiceAudioEngine(
         val input = recorder ?: return
         val buffer = ByteArray(VoiceAudioFormat.FRAME_BYTES)
         while (running.get()) {
-            val count = input.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
-            if (count == buffer.size) {
+            var offset = 0
+            while (offset < buffer.size && running.get()) {
+                val count = input.read(buffer, offset, buffer.size - offset, AudioRecord.READ_BLOCKING)
+                if (count < 0) {
+                    if (running.get()) {
+                        val error = IllegalStateException("Microphone capture failed (code $count).")
+                        lastError.set(error)
+                        try { onError(error) } catch (_: Throwable) { }
+                        stop()
+                    }
+                    return
+                }
+                if (count > 0) offset += count
+            }
+            if (offset == buffer.size && running.get()) {
                 val frame = if (muted.get()) ByteArray(buffer.size) else buffer.copyOf()
                 try {
                     onCapturedPcm(frame)
                 } catch (error: Throwable) {
                     lastError.set(error)
-                    running.set(false)
                     try { onError(error) } catch (_: Throwable) { }
+                    stop()
+                    return
                 }
-            } else if (count < 0 && running.get()) {
-                val error = IllegalStateException("Microphone capture failed (code $count).")
-                lastError.set(error)
-                running.set(false)
-                try { onError(error) } catch (_: Throwable) { }
             }
         }
     }
@@ -255,14 +264,16 @@ class AndroidVoiceAudioEngine(
     }
 
     private fun configureVoiceEffects(sessionId: Int) {
+        // Effects are optional hardware/OS capabilities. A device-specific
+        // effect failure must not prevent an otherwise usable audio session.
         if (AcousticEchoCanceler.isAvailable()) {
-            echoCanceler = AcousticEchoCanceler.create(sessionId)?.also { it.enabled = true }
+            echoCanceler = runCatching { AcousticEchoCanceler.create(sessionId)?.also { it.enabled = true } }.getOrNull()
         }
         if (NoiseSuppressor.isAvailable()) {
-            noiseSuppressor = NoiseSuppressor.create(sessionId)?.also { it.enabled = true }
+            noiseSuppressor = runCatching { NoiseSuppressor.create(sessionId)?.also { it.enabled = true } }.getOrNull()
         }
         if (AutomaticGainControl.isAvailable()) {
-            automaticGainControl = AutomaticGainControl.create(sessionId)?.also { it.enabled = true }
+            automaticGainControl = runCatching { AutomaticGainControl.create(sessionId)?.also { it.enabled = true } }.getOrNull()
         }
     }
 
