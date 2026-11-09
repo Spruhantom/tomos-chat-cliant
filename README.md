@@ -60,6 +60,7 @@ The Android foundation uses Kotlin, Jetpack Compose and Material 3, with an isol
 
 Current UI foundation:
 - adaptive compact/medium/expanded window navigation: bottom bar on compact windows and navigation rail on wider windows; content width is constrained on large displays, and setup/contacts can scroll on short or unfolded screens;
+- fold posture detection through Jetpack WindowManager, with book mode for half-open vertical folds and tabletop mode for half-open horizontal folds; both layouts provide a hinge gutter and companion navigation pane. Device-by-device physical validation is still required;
 - first-run display-name and date-of-birth screen with local age-band preview;
 - Chats, Contacts, Calls and Settings navigation;
 - TomOS neon visual styling;
