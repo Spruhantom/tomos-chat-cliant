@@ -7,6 +7,12 @@ import java.util.concurrent.atomic.AtomicReference
 
 enum class PeerConnectionStatus { ENCRYPTING, CONNECTED, DISCONNECTED, FAILED }
 
+sealed interface PeerConversationEvent {
+    data class MessageReceived(val message: StoredChatMessage) : PeerConversationEvent
+    data class DeliveryConfirmed(val messageId: UUID) : PeerConversationEvent
+    data object DuplicateMessage : PeerConversationEvent
+}
+
 /**
  * A conversation-scoped adapter over an already authenticated Noise channel.
  * All application frames go through EncryptedPeerChannel; callers should run
@@ -47,8 +53,10 @@ class PeerConversationSession(
         )
         history.append(message)
         return try {
-            channel.send(EncryptedAppFrame(EncryptedAppFrame.Type.TEXT, message.id, text.toByteArray(Charsets.UTF_8)))
+            // Persist SENT before writing so a very fast peer acknowledgement cannot
+            // race with a later SENT update and downgrade DELIVERED back to SENT.
             history.updateStatus(message.id, StoredMessageStatus.SENT)
+            channel.send(EncryptedAppFrame(EncryptedAppFrame.Type.TEXT, message.id, text.toByteArray(Charsets.UTF_8)))
             message.copy(status = StoredMessageStatus.SENT)
         } catch (error: Exception) {
             statusRef.set(PeerConnectionStatus.FAILED)
@@ -57,32 +65,60 @@ class PeerConversationSession(
         }
     }
 
+    /**
+     * Processes one authenticated application frame. Delivery acknowledgements
+     * are themselves sent inside the established Noise channel; no plaintext
+     * application frame is ever written to the socket.
+     */
     @Throws(IOException::class)
-    fun receiveText(): StoredChatMessage {
+    fun receiveEvent(): PeerConversationEvent {
         check(status == PeerConnectionStatus.CONNECTED) { "Encrypted peer connection is not active." }
         return try {
             val frame = channel.receive()
-            require(frame.type == EncryptedAppFrame.Type.TEXT) { "Unexpected non-text frame in a text conversation." }
-            val decoder = Charsets.UTF_8.newDecoder()
-                .onMalformedInput(CodingErrorAction.REPORT)
-                .onUnmappableCharacter(CodingErrorAction.REPORT)
-            val body = decoder.decode(java.nio.ByteBuffer.wrap(frame.payload)).toString()
-            require(body.isNotBlank()) { "Received empty text message." }
-            val message = StoredChatMessage(
-                id = frame.messageId,
-                peerFingerprint = peerFingerprint,
-                direction = StoredMessageDirection.INCOMING,
-                status = StoredMessageStatus.RECEIVED,
-                createdAtEpochMillis = clock(),
-                body = body
-            )
-            history.append(message)
-            message
+            when (frame.type) {
+                EncryptedAppFrame.Type.DELIVERY_ACK -> {
+                    require(frame.payload.isEmpty()) { "Delivery acknowledgement must not contain a payload." }
+                    history.updateStatus(frame.messageId, StoredMessageStatus.DELIVERED)
+                    PeerConversationEvent.DeliveryConfirmed(frame.messageId)
+                }
+                EncryptedAppFrame.Type.TEXT -> {
+                    val decoder = Charsets.UTF_8.newDecoder()
+                        .onMalformedInput(CodingErrorAction.REPORT)
+                        .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    val body = decoder.decode(java.nio.ByteBuffer.wrap(frame.payload)).toString()
+                    require(body.isNotBlank()) { "Received empty text message." }
+                    val message = StoredChatMessage(
+                        id = frame.messageId,
+                        peerFingerprint = peerFingerprint,
+                        direction = StoredMessageDirection.INCOMING,
+                        status = StoredMessageStatus.RECEIVED,
+                        createdAtEpochMillis = clock(),
+                        body = body
+                    )
+                    val isNew = history.append(message)
+                    // A duplicate authenticated message ID is not shown twice, but
+                    // is acknowledged again so a sender can recover after a lost ACK.
+                    channel.send(EncryptedAppFrame(EncryptedAppFrame.Type.DELIVERY_ACK, frame.messageId, byteArrayOf()))
+                    if (isNew) PeerConversationEvent.MessageReceived(message)
+                    else PeerConversationEvent.DuplicateMessage
+                }
+                else -> throw IOException("Unexpected application frame type in a text conversation.")
+            }
         } catch (error: Exception) {
             statusRef.set(PeerConnectionStatus.FAILED)
             if (error is IOException) throw error
             throw IOException("Encrypted conversation frame was rejected.", error)
         }
+    }
+
+    /** Compatibility helper for callers that expect a text-only receive. */
+    @Throws(IOException::class)
+    fun receiveText(): StoredChatMessage = when (val event = receiveEvent()) {
+        is PeerConversationEvent.MessageReceived -> event.message
+        is PeerConversationEvent.DeliveryConfirmed ->
+            throw IOException("A delivery acknowledgement was received while waiting for a text message.")
+        PeerConversationEvent.DuplicateMessage ->
+            throw IOException("A duplicate message was received and acknowledged.")
     }
 
     override fun close() {
