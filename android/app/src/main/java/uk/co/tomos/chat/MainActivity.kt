@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -44,6 +45,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
@@ -53,6 +55,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.security.KeyPair
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 
@@ -86,14 +89,23 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme(colorScheme = TomChatColors) {
                 var profile by remember { mutableStateOf<AccountProfile?>(null) }
+                var contactCard by remember { mutableStateOf<String?>(null) }
                 var loading by remember { mutableStateOf(true) }
                 var storageError by remember { mutableStateOf<String?>(null) }
                 val scope = rememberCoroutineScope()
                 val store = remember { AccountProfileStore(applicationContext.filesDir) }
+                val identityStore = remember { DeviceIdentityStore() }
 
                 LaunchedEffect(store) {
                     try {
-                        profile = withContext(Dispatchers.IO) { store.load() }
+                        val loaded = withContext(Dispatchers.IO) {
+                            val saved = store.load()
+                            val identity = identityStore.getOrCreate()
+                            val card = saved?.let { ContactCardCodec.encode(ContactCardCodec.create(it.displayName, identity)) }
+                            saved to card
+                        }
+                        profile = loaded.first
+                        contactCard = loaded.second
                     } catch (error: IOException) {
                         storageError = error.message ?: "The saved account could not be opened."
                     } finally {
@@ -104,12 +116,14 @@ class MainActivity : ComponentActivity() {
                 when {
                     loading -> ProfileStatusScreen("Opening your encrypted account…")
                     storageError != null -> ProfileErrorScreen(storageError!!)
-                    profile != null -> TomChatApp(profile!!)
+                    profile != null -> TomChatApp(profile!!, contactCard)
                     else -> AccountSetupScreen { newProfile ->
                         scope.launch {
                             try {
                                 withContext(Dispatchers.IO) { store.save(newProfile) }
                                 profile = newProfile
+                                val identity = withContext(Dispatchers.IO) { identityStore.getOrCreate() }
+                                contactCard = ContactCardCodec.encode(ContactCardCodec.create(newProfile.displayName, identity))
                                 storageError = null
                             } catch (error: IOException) {
                                 storageError = error.message ?: "The encrypted account could not be saved."
@@ -254,7 +268,7 @@ private fun AccountSetupScreen(onAssigned: (AccountProfile) -> Unit) {
 }
 
 @Composable
-private fun TomChatApp(profile: AccountProfile) {
+private fun TomChatApp(profile: AccountProfile, contactCard: String?) {
     var destination by rememberSaveable { mutableStateOf(Destination.Chats) }
     Surface(modifier = Modifier.fillMaxSize(), color = Void) {
         Scaffold(
@@ -276,7 +290,7 @@ private fun TomChatApp(profile: AccountProfile) {
             Box(Modifier.padding(padding)) {
                 when (destination) {
                     Destination.Chats -> ChatsScreen()
-                    Destination.Contacts -> ContactsScreen()
+                    Destination.Contacts -> ContactsScreen(profile, contactCard)
                     Destination.Calls -> CallsScreen()
                     Destination.Settings -> SettingsScreen(profile)
                 }
@@ -365,14 +379,30 @@ private fun StatusCard() {
 }
 
 @Composable
-private fun ContactsScreen() {
+private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
     Column(Modifier.fillMaxSize()) {
         ScreenTitle("Contacts", "People you connect with directly.")
-        EmptyState(
-            glyph = "◎",
-            title = "No contacts yet",
-            body = "Your identity and contact exchange will be stored on this device. Nearby discovery and QR exchange are coming in the networking milestone."
-        )
+        val safety = profile.safetyState()
+        val mayExchange = AccountSafetyPolicy.allows(safety, TomChatCapability.EXCHANGE_CONTACT_CARD)
+        if (contactCard == null) {
+            EmptyState("◎", "Device identity unavailable", "TomChat could not prepare this device's signed contact card.")
+        } else if (!mayExchange) {
+            EmptyState(
+                glyph = "◎",
+                title = "Contact exchange is locked",
+                body = AccountSafetyPolicy.restrictionReason(safety) + " Your device identity is generated locally; sharing it remains disabled until the account safety checks are complete."
+            )
+        } else {
+            val bitmap = remember(contactCard) { ContactQrRenderer.render(contactCard).asImageBitmap() }
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Cyan)) {
+                    Image(bitmap = bitmap, contentDescription = "Your signed TomChat contact QR code", modifier = Modifier.size(260.dp).padding(10.dp))
+                }
+                Spacer(Modifier.height(14.dp))
+                Text("YOUR SIGNED CONTACT CARD", color = Cyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("Ask the other person to verify your fingerprint in person before trusting this contact.", color = Muted, fontSize = 12.sp)
+            }
+        }
     }
 }
 
