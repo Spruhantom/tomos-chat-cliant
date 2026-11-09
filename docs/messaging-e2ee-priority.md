@@ -4,7 +4,7 @@
 **Branch:** `android-rebuild`  
 **Product constraint:** Serverless peer-to-peer. No TomChat application servers, relays, rendezvous services, hosted key directories, push gateways, or cloud message storage.
 
-Messaging and end-to-end encryption take precedence over new features, visual polish, social features, and optional platform integrations until the secure two-device text-messaging milestone is complete.
+Secure messaging, group messaging and encrypted voice calling are now the top product priorities. Work is staged so group and real-time media features build on a tested one-to-one encrypted transport rather than introducing several unverified security paths at once. Visual polish, social features and optional integrations remain secondary.
 
 ## Current position
 
@@ -77,9 +77,43 @@ Use Rust integration tests with loopback TCP and Kotlin/JVM tests for wrapper an
 - Test on two physical Android devices on the same Wi-Fi network.
 - Capture logs and test results with private keys and message contents excluded.
 
+### 6. Add end-to-end encrypted group messaging
+
+Begin after one-to-one encrypted text exchange is proven:
+
+- Use a reviewed group key-management protocol, evaluating OpenMLS for MLS rather than inventing a group cryptographic scheme.
+- Persist group state safely and restore it after app restart.
+- Test member addition/removal, stale or forked group state, key rotation, replay, duplicate delivery and concurrent membership changes.
+- Ensure removed members cannot decrypt messages sent after their removal is committed.
+- Keep group membership changes authenticated and visible to participants.
+- Test small groups across multiple physical Android devices before expanding group size.
+- Do not treat a collection of separate one-to-one chats as secure group messaging.
+
+### 7. Add encrypted one-to-one voice calls
+
+Start with direct Wi-Fi/IP calls after the secure session and text protocol are stable:
+
+- Establish call setup and teardown over the authenticated peer connection.
+- Protect voice media end-to-end; encrypting signalling alone does not encrypt audio.
+- Use an authenticated media key derived from the verified peer session, with nonce/replay protection and reviewed rekeying rules.
+- Handle microphone permission, audio focus, Bluetooth headset routing, network changes, packet loss and call interruption.
+- Add clear call states: ringing, connecting, active, reconnecting, ended and failed.
+- Test two-device call setup, two-way audio, mute, speaker/headset switching, background/foreground transitions and disconnects.
+- Keep call media direct peer-to-peer; no media server, TURN relay or cloud fallback.
+
+### 8. Add encrypted group voice calls
+
+Only after one-to-one voice and group key management have been validated:
+
+- Define authenticated group call membership and admission/removal behaviour.
+- Use reviewed group media key distribution and rotation; never reuse a one-to-one media key across a group.
+- Protect media against replay and unauthorized late joiners.
+- Test participant joins/leaves, network changes, packet loss, mute and call teardown across multiple devices.
+- Document direct-connectivity limitations: group calls may fail when peers are behind incompatible NAT/firewalls. Do not silently introduce a relay.
+
 ## Release gates
 
-The first messaging test milestone is complete only when:
+The one-to-one messaging milestone is complete only when:
 
 1. Identity and Noise key binding is verified against signed, trusted contact data.
 2. No application data can pass before the Noise handshake and peer-key pin check succeed.
@@ -88,15 +122,13 @@ The first messaging test milestone is complete only when:
 5. Two physical Android devices exchange encrypted text messages successfully over direct Wi-Fi.
 6. A code/security review has checked key handling, JNI boundaries, framing, session lifecycle and failure behaviour.
 
-Until all gates are met, messaging remains a development prototype and E2EE must not be advertised as production-ready.
+The group messaging milestone additionally requires tested group key lifecycle, membership changes and multi-device encrypted exchange. The voice milestones additionally require encrypted media tests and physical-device audio validation. Do not describe any feature as production-ready until its own gates and security review are complete.
 
-## Explicitly deferred
+## Deferred until the core communication milestones are proven
 
-- Group messaging and group key management.
-- File and voice-message transfer.
-- Voice/video calls.
-- Bluetooth transport integration.
+- File sharing and voice notes.
+- Bluetooth data transport integration (Bluetooth headset audio routing for calls remains in scope).
 - TomSocial and public discovery.
-- UI polish unrelated to the secure messaging test path.
+- UI polish unrelated to secure messaging and calling.
 
-These are deferred so the team can focus on proving a small, secure, observable end-to-end path first.
+The delivery order is one-to-one encrypted text, encrypted group messaging, encrypted one-to-one voice calls, then encrypted group voice calls. These are all priority features, but each builds on verified foundations from the previous stage.
