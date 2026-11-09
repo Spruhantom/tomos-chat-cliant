@@ -59,7 +59,7 @@ jobs:
         run: |
           set -euo pipefail
           APK="android/app/build/outputs/apk/debug/app-debug.apk"
-          NDK_NM="$(find "$ANDROID_HOME/ndk" -type f -name llvm-nm | head -n 1)"
+          NDK_NM="$(find "$ANDROID_HOME/ndk" -type f -name llvm-nm -print -quit)"
           test -n "$NDK_NM"
           test -f "$APK"
           TMP="$(mktemp -d)"
