@@ -332,7 +332,7 @@ private fun TomChatApp(
                         }
                     },
                     bottomBar = {
-                        if (!medium || foldPosture == FoldPosture.BOOK) {
+                        if (!medium && foldPosture != FoldPosture.BOOK && foldPosture != FoldPosture.TABLETOP) {
                             NavigationBar(containerColor = Panel, contentColor = TextPrimary) {
                                 Destination.entries.forEach { item ->
                                     NavigationBarItem(
