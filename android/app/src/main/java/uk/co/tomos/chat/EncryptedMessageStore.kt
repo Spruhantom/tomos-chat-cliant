@@ -76,6 +76,34 @@ class EncryptedMessageStore(filesDir: File) {
         decryptSnapshot().any { it.peerFingerprint == peerFingerprint && it.id == messageId }
     }
 
+    /**
+     * Applies an outgoing delivery transition only to a message belonging to
+     * this peer. An authenticated peer cannot acknowledge another contact's
+     * message by guessing or replaying a UUID.
+     */
+    @Throws(IOException::class)
+    fun updateOutgoingStatus(peerFingerprint: String, messageId: UUID, status: StoredMessageStatus): Boolean = synchronized(lock) {
+        require(status in setOf(StoredMessageStatus.SENT, StoredMessageStatus.DELIVERED, StoredMessageStatus.FAILED))
+        if (!file.baseFile.exists()) return@synchronized false
+        val records = decryptSnapshot().toMutableList()
+        val index = records.indexOfFirst {
+            it.id == messageId && it.peerFingerprint == peerFingerprint && it.direction == StoredMessageDirection.OUTGOING
+        }
+        if (index < 0) return@synchronized false
+        val current = records[index].status
+        val allowed = when (current) {
+            StoredMessageStatus.QUEUED -> status == StoredMessageStatus.SENT || status == StoredMessageStatus.FAILED
+            StoredMessageStatus.SENT -> status == StoredMessageStatus.DELIVERED || status == StoredMessageStatus.FAILED
+            StoredMessageStatus.DELIVERED -> status == StoredMessageStatus.DELIVERED
+            StoredMessageStatus.FAILED -> status == StoredMessageStatus.FAILED
+            StoredMessageStatus.RECEIVED -> false
+        }
+        if (!allowed) return@synchronized false
+        records[index] = records[index].copy(status = status)
+        writeSnapshot(records)
+        true
+    }
+
     @Throws(IOException::class)
     fun updateStatus(messageId: UUID, status: StoredMessageStatus) = synchronized(lock) {
         if (!file.baseFile.exists()) return@synchronized
