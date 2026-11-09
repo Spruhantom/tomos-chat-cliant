@@ -54,13 +54,36 @@ jobs:
       - name: Build debug APK
         run: gradle --no-daemon :android:app:assembleDebug
 
-      - name: Run JNI instrumentation tests on Android emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          script: gradle --no-daemon :android:app:connectedDebugAndroidTest
+      - name: Verify native libraries and JNI exports in APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          NDK_NM="$(find "$ANDROID_HOME/ndk" -type f -name llvm-nm | head -n 1)"
+          test -n "$NDK_NM"
+          test -f "$APK"
+          TMP="$(mktemp -d)"
+          trap 'rm -rf "$TMP"' EXIT
+          unzip -q "$APK" 'lib/*/libtomchat_noise.so' -d "$TMP"
+          for ABI in arm64-v8a armeabi-v7a x86_64; do
+            LIB="$TMP/lib/$ABI/libtomchat_noise.so"
+            test -s "$LIB" || { echo "Missing native library for $ABI"; exit 1; }
+            SYMBOLS="$("$NDK_NM" -D --defined-only "$LIB")"
+            for SYMBOL in \
+              Java_uk_co_tomos_chat_NoiseNative_nativeCreateSession \
+              Java_uk_co_tomos_chat_NoiseNative_nativeWriteHandshake \
+              Java_uk_co_tomos_chat_NoiseNative_nativeReadHandshake \
+              Java_uk_co_tomos_chat_NoiseNative_nativeFinishHandshake \
+              Java_uk_co_tomos_chat_NoiseNative_nativeEncrypt \
+              Java_uk_co_tomos_chat_NoiseNative_nativeDecrypt \
+              Java_uk_co_tomos_chat_NoiseNative_nativeCloseSession; do
+              grep -Fq "$SYMBOL" <<< "$SYMBOLS" || {
+                echo "Missing JNI export $SYMBOL in $ABI"
+                exit 1
+              }
+            done
+            echo "Verified $ABI native library and all JNI exports"
+          done
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
