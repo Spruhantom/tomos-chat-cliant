@@ -48,7 +48,7 @@ Any proposed verification mechanism must be assessed against TomChat's strict no
 - File sharing and voice messages.
 - Direct Bluetooth and Wi-Fi LAN connections, plus direct IP connections where reachable.
 - Automatic selection of the best available direct route, based on latency, throughput, stability and battery impact.
-- Device-local P-256 signing identity protected by Android Keystore, plus versioned signed contact cards and local QR rendering. Camera scanning, import confirmation and trusted-contact persistence remain under development.
+- Device-local P-256 signing identity protected by Android Keystore, plus versioned signed contact cards and local QR rendering. Camera scanning, fingerprint approval and encrypted trusted-contact persistence are implemented. A direct TCP peer transport with mutual signed-nonce identity proof is now prototyped; it does not yet carry application data or provide an encrypted session.
 - Encrypted local backup and encrypted peer-to-peer replication to explicitly trusted devices.
 - TomSocial integration as a later, carefully scoped decentralised social layer.
 
