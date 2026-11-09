@@ -1,5 +1,13 @@
 # TomChat architecture
 
+## Non-negotiable zero-server policy
+
+TomChat and the planned TomSocial layer are designed to run without any server, whether operated by TomOS, a third party, a community, or the user. No server is a required or optional network component in the product architecture.
+
+Prohibited dependencies include hosted rendezvous, bootstrap nodes, DHT bootstrap services, relays, TURN, STUN services, push gateways, central directories, cloud databases, hosted object storage, and central message or feed stores. Do not add a fallback that silently contacts any such service.
+
+The internet's routers and carrier networks are still infrastructure, but TomChat does not deploy or depend on application-layer servers. The app may use local network infrastructure and direct public IP connectivity.
+
 ## High-level design
 
 ```text
@@ -15,22 +23,28 @@ Rust core
   |-- group state / MLS adapter
   |-- call signalling and media session coordinator
       |
-Direct peer transports: QUIC first, TCP fallback where supported
+Direct device-to-device transports
       |
 Other TomChat peers
 ```
 
 Kotlin owns Android lifecycle, permissions, notifications, audio routing, foreground-service policy, and UI. Rust owns protocol state, peer networking, message validation, and cryptographic integration. Keep the FFI surface small, typed, versioned, and asynchronous.
 
-## Strict network policy
+## Peer discovery without servers
 
-- Local discovery: mDNS on the same LAN, subject to Android multicast and network lifecycle restrictions.
-- Remote peer discovery: exchange signed peer cards through QR, NFC, Bluetooth, or another user-controlled out-of-band channel. A future optional distributed DHT may be evaluated, but must not introduce mandatory bootstrap operators or central indexes.
-- Connectivity: direct QUIC with TCP fallback if the selected implementation supports it. Use NAT mapping / hole punching only where available and permitted.
-- No relay, TURN, hosted rendezvous, central bootstrap, central directory, or push provider in strict mode.
-- A user may operate their own always-on peer device, but the app must not require one.
+- Same-network discovery: mDNS / local multicast where Android permits it. This requires no central service.
+- Nearby out-of-band exchange: QR codes, NFC, Bluetooth, or a user-shared contact card containing a signed identity and connection hints.
+- Remote discovery: peers exchange signed address/contact cards directly. Existing contacts can share updated signed reachability hints peer-to-peer.
+- No DHT bootstrap service, hosted rendezvous, central index, public peer directory, or server-seeded discovery.
+- A device may discover peers it already knows or peers on its local network. Finding an arbitrary stranger across the global internet without any shared discovery path is not guaranteed.
 
-**Known limitation:** phones are commonly behind carrier-grade NAT, firewalls, and restrictive networks. Without a relay or public rendezvous/bootstrap infrastructure, some remote peers cannot discover or reach one another. LAN communication and explicitly exchanged reachable addresses are the first reliable targets.
+## Direct connectivity and hard limits
+
+Use direct QUIC where possible, with a carefully evaluated direct TCP fallback. Investigate hole punching only as a peer-coordinated technique; do not introduce STUN, TURN, relay nodes, or a hosted signalling service.
+
+**Known limitation:** phones are commonly behind carrier-grade NAT, firewalls, and restrictive networks. Without a rendezvous service or relay, some remote device pairs cannot discover each other or establish a connection. Some carriers do not provide reachable inbound addresses. A strict zero-server product must clearly report "peer unreachable" rather than silently routing through infrastructure.
+
+The first proof of concept must be two physical Android phones on the same LAN. Remote direct-IP tests come after that and must document network conditions and failure cases.
 
 ## Messaging model
 
@@ -38,8 +52,9 @@ Kotlin owns Android lifecycle, permissions, notifications, audio routing, foregr
 - Signed envelopes; encrypt payloads end-to-end before transport.
 - Per-conversation ordering metadata, acknowledgements, and replay protection.
 - Peer-to-peer synchronisation when both peers are reachable.
-- No global delivery guarantee while recipients are offline. Trusted devices can optionally hold encrypted mailbox copies, but they are not a universal substitute for a relay.
+- No global delivery guarantee while recipients are offline. The sender retains encrypted pending messages locally and retries when the peer becomes reachable. No server-side mailbox exists.
 - Group state must converge safely; membership changes are authenticated and auditable.
+- A trusted device can receive a user-authorised encrypted backup, but it is another user's device, not a hosted service or guaranteed always-on mailbox.
 
 ## Cryptography
 
@@ -49,9 +64,9 @@ Transport encryption (for example QUIC/TLS) is not a substitute for end-to-end e
 
 ## Voice
 
-Voice media should use an audited WebRTC media stack where feasible, with DTLS-SRTP or equivalent authenticated media protection. Call signalling must travel over an already-established authenticated peer channel or be exchanged out of band. No mandatory signalling server or TURN service is allowed. Calls may fail across NATs when direct paths cannot be established.
+Voice media should use an audited WebRTC media stack where feasible, with DTLS-SRTP or equivalent authenticated media protection. Call signalling must travel over an already-established authenticated peer channel or be exchanged out of band. No signalling server, STUN, or TURN service is allowed. Calls may fail across NATs when direct paths cannot be established.
 
-Group voice needs a separate topology decision (peer mesh versus a user-hosted forwarding peer). Mesh has bandwidth and battery costs that grow with participant count; no central SFU is assumed.
+Group voice uses a direct peer mesh for the initial design. Bandwidth and battery costs grow with participant count; establish conservative participant limits through testing. No central SFU or user-hosted forwarding server is assumed.
 
 ## Backup and multi-device
 
@@ -59,11 +74,15 @@ Support both:
 1. Local encrypted export, protected by a user-chosen passphrase and a modern password KDF.
 2. Encrypted replication to explicitly trusted devices, with per-device authorization, revocation, and clear retention controls.
 
-Backups must not silently export plaintext keys. Restore must detect rollback/replay where the protocol supports it. Losing all devices and the backup secret may mean permanent loss of identity and history; communicate this clearly.
+Backups must not silently export plaintext keys. Restore must detect rollback/replay where the protocol supports it. Losing all devices and the backup secret may mean permanent loss of identity and history; communicate this clearly. Trusted-device replication requires both devices to be reachable and is not cloud backup.
 
 ## Android lifecycle
 
-Use WorkManager for deferrable sync, not real-time calls. Use a foreground service only while an active user-visible call or explicitly enabled connection session requires it, subject to current Android policy. Do not promise reliable incoming calls while the app is force-stopped, background-restricted, or disconnected.
+Use WorkManager for deferrable local retry/sync, not real-time calls. Use a foreground service only while an active user-visible call or explicitly enabled connection session requires it, subject to current Android policy. Do not promise reliable incoming calls while the app is force-stopped, background-restricted, or disconnected. No push notification service is permitted; incoming-call alerting depends on an already-running/reachable peer connection and Android background execution constraints.
+
+## Social layer compatibility
+
+TomSocial must follow the same zero-server rule. Public posts and profile updates are signed objects exchanged directly between peers. A user's devices keep local copies. Users may explicitly replicate selected public content to their own trusted devices, but there is no shared relay, public content host, global index, or central feed database. Public discovery is limited to known peers, local discovery, and user-shared invitations. Global searchable discovery is not promised.
 
 ## Security and privacy requirements
 
