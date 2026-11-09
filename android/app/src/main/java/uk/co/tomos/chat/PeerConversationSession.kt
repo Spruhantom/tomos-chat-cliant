@@ -12,6 +12,8 @@ sealed interface PeerConversationEvent {
     data class DeliveryConfirmed(val messageId: UUID) : PeerConversationEvent
     data class UnmatchedDeliveryAcknowledgement(val messageId: UUID) : PeerConversationEvent
     data object DuplicateMessage : PeerConversationEvent
+    data class VoiceSignalReceived(val callId: UUID, val signal: PeerVoiceSignal) : PeerConversationEvent
+    data class VoiceFrameReceived(val callId: UUID, val pcm: ByteArray) : PeerConversationEvent
 }
 
 /**
@@ -67,6 +69,18 @@ class PeerConversationSession(
         }
     }
 
+    /** Sends call control inside the established Noise channel. */
+    fun sendVoiceSignal(callId: UUID, signal: PeerVoiceSignal) {
+        check(status == PeerConnectionStatus.CONNECTED) { "Encrypted peer connection is not active." }
+        channel.send(EncryptedAppFrame(EncryptedAppFrame.Type.VOICE_SIGNAL, callId, PeerVoiceCallCodec.encodeSignal(signal)))
+    }
+
+    /** Sends one 20 ms PCM frame; EncryptedPeerChannel encrypts it before socket I/O. */
+    fun sendVoiceFrame(callId: UUID, pcm: ByteArray) {
+        check(status == PeerConnectionStatus.CONNECTED) { "Encrypted peer connection is not active." }
+        channel.send(EncryptedAppFrame(EncryptedAppFrame.Type.VOICE_SIGNAL, callId, PeerVoiceCallCodec.encodeMedia(pcm)))
+    }
+
     /**
      * Processes one authenticated application frame. Delivery acknowledgements
      * are themselves sent inside the established Noise channel; no plaintext
@@ -87,6 +101,10 @@ class PeerConversationSession(
                             PeerConversationEvent.UnmatchedDeliveryAcknowledgement(frame.messageId)
                         }
                     }
+                }
+                EncryptedAppFrame.Type.VOICE_SIGNAL -> when (val voice = PeerVoiceCallCodec.decode(frame.payload)) {
+                    is PeerVoicePayload.Signal -> PeerConversationEvent.VoiceSignalReceived(frame.messageId, voice.signal)
+                    is PeerVoicePayload.Media -> PeerConversationEvent.VoiceFrameReceived(frame.messageId, voice.pcm)
                 }
                 EncryptedAppFrame.Type.TEXT -> {
                     val decoder = Charsets.UTF_8.newDecoder()
@@ -128,6 +146,9 @@ class PeerConversationSession(
             throw IOException("An unrecognised delivery acknowledgement was received.")
         PeerConversationEvent.DuplicateMessage ->
             throw IOException("A duplicate message was received and acknowledged.")
+        is PeerConversationEvent.VoiceSignalReceived,
+        is PeerConversationEvent.VoiceFrameReceived ->
+            throw IOException("A voice frame was received while waiting for a text message.")
     }
 
     override fun close() {
