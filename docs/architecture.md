@@ -165,3 +165,29 @@ Current status:
 - Loopback success and unexpected-identity rejection tests: added; CI result pending.
 - End-to-end encrypted session, secure stream framing, message protocol and physical-device Wi-Fi tests: not implemented.
 - Direct internet connectivity remains best effort and depends on reachable addresses and firewall/NAT configuration.
+
+## Experimental Noise session core
+
+An isolated Rust crate at `android/native/tomchat-noise` now prototypes the Noise
+XX pattern using Snow 0.10.0 and the fixed suite
+`Noise_XX_25519_ChaChaPoly_SHA256` (X25519, ChaCha20-Poly1305, SHA-256).
+The wrapper requires the caller to provide a local 32-byte X25519 static
+private key and a pinned 32-byte peer static public key. It completes the
+three-message XX handshake, checks the remote static key against the pin, and
+only then permits Noise transport records. The Noise transport provides
+authenticated encryption and ordered nonce state; callers cannot use transport
+before handshake completion and pin verification.
+
+The crate is isolated and is not yet connected to the Android app, the direct
+TCP adapter, or the Kotlin identity store. Existing signed QR cards contain a
+P-256 ECDSA identity key, not the Noise X25519 static key. Before integrating
+the session, the contact format must carry a signed binding from the ECDSA
+identity to the Noise static public key; private Noise keys need an Android
+Keystore-protected persistence design. JNI/UniFFI is still pending.
+
+Snow explicitly states that it has not received a formal security audit. The
+TomChat wrapper and identity-binding design are also unaudited. This is an
+experimental protocol integration, not production-ready E2EE. Do not enable
+messaging over it until independent security review, official Noise test-vector
+coverage, malformed-input tests, key lifecycle design, FFI integration and
+physical-device validation are complete.
