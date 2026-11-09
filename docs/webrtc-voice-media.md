@@ -11,8 +11,8 @@ Use `io.getstream:stream-webrtc-android:1.3.10`, pinned rather than a dynamic ve
 ## Transport and trust boundaries
 
 - WebRTC carries real-time audio using its built-in DTLS-SRTP media protection. Do not invent a codec or wrap plaintext PCM in the app's TCP protocol.
-- SDP offers/answers and ICE candidates are signalling metadata, not voice media. The next signalling adapter must send them only over the existing authenticated Noise peer channel, after verifying the peer's pinned contact-card identity.
-- Never accept a remote SDP/candidate before the Noise session has authenticated the expected peer static key and identity binding.
+- SDP offers/answers, ICE candidates and call-control events are signalling metadata, not voice media. `PeerCallSignalling` serializes bounded call messages into `VOICE_SIGNAL` application frames; those frames can only be transported by `EncryptedPeerChannel` after mutual ECDSA identity proof and the pinned Noise static-key handshake.
+- `EncryptedPeerChannel` exposes the identity fingerprint established by the direct-peer proof and pinned Noise handshake. `PeerCallSignalling` checks every inbound signal against that authenticated fingerprint, call ID and strictly increasing sequence number. Spoofed identities, cross-call messages, duplicate/replayed and out-of-order signals are rejected.\n- SDP is required to contain one consistent SHA-256 DTLS fingerprint. Conflicting, malformed or unsupported fingerprint attributes are rejected. The verified SDP is passed unchanged to WebRTC; WebRTC's DTLS implementation checks the presented certificate against the fingerprint during the DTLS handshake. The authenticated Noise channel binds that SDP/fingerprint to the trusted contact identity.
 - Configure no ICE servers. This means host candidates only: same-LAN or otherwise directly reachable peers may connect, but NAT, carrier-grade NAT, restrictive Wi-Fi, and firewalls can prevent calls. There is deliberately no STUN, TURN, relay, SFU, rendezvous, push, or cloud fallback.
 - The direct TCP Noise channel is signalling-only. It must never carry RTP, encoded audio, or PCM.
 - The WebRTC audio device module owns microphone capture and playback during a call. Do not run `AndroidVoiceAudioEngine` concurrently; it remains a lower-level prototype/test foundation and will be retired or repurposed after the WebRTC path is validated.
@@ -28,9 +28,9 @@ Use `io.getstream:stream-webrtc-android:1.3.10`, pinned rather than a dynamic ve
 
 ## Not implemented / release gates
 
-1. Authenticated SDP/ICE signalling over the existing Noise peer channel, including bounded payloads, replay/call-ID checks, glare handling, candidate buffering, timeouts, and cancellation.
+1. Integrate the signalling adapter into a single-owner receive loop and WebRTC call coordinator; add offer glare handling, early ICE candidate buffering, per-call cancellation and bounded call timeouts.
 2. Runtime microphone permission UX and a foreground call service with correct notification lifecycle.
-3. DTLS certificate/fingerprint verification policy tied to the authenticated contact identity, or a documented proof that the authenticated Noise signalling channel plus WebRTC DTLS-SRTP provides the intended peer binding. Do not claim identity-bound media until reviewed.
+3. Independent security review of the identity-bound DTLS fingerprint path, including certificate rotation, renegotiation and malicious SDP cases. Do not claim production-secure calls until reviewed.
 4. Mute, hold, audio route, Bluetooth, interruption, process-death, and network-change integration.
 5. Two-physical-device tests on Wi-Fi and mobile networks, including the expected no-route failure cases.
 6. Security review, dependency/licence inventory, and Android APK size/ABI review.
