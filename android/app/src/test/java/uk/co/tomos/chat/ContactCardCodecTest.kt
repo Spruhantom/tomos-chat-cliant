@@ -7,6 +7,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.security.KeyPairGenerator
+import java.security.SecureRandom
+import org.bouncycastle.crypto.params.X25519PrivateKeyParameters
 import java.security.spec.ECGenParameterSpec
 
 class ContactCardCodecTest {
@@ -28,6 +30,16 @@ class ContactCardCodecTest {
     @Test fun signatureCoversNoiseStaticPublicKey() {
         val card = ContactCardCodec.create("Alice", identity(), noiseKey())
         assertFalse(ContactCardCodec.verify(card.copy(noiseStaticPublicKey = noiseKey(19))))
+    }
+
+
+    @Test fun realX25519PublicKeyCanBeBoundToP256Identity() {
+        val noisePrivate = X25519PrivateKeyParameters(SecureRandom())
+        val noisePublic = noisePrivate.generatePublicKey().encoded
+        val card = ContactCardCodec.create("Peer device", identity(), noisePublic)
+        val decoded = ContactCardCodec.decode(ContactCardCodec.encode(card))
+        assertArrayEquals(noisePublic, decoded.noiseStaticPublicKey)
+        assertTrue(ContactCardCodec.verify(decoded))
     }
 
     @Test fun rejectsMissingOrWrongLengthNoiseKeyOnCreation() {
