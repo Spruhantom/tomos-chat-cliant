@@ -60,6 +60,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
@@ -302,6 +303,16 @@ private fun TomChatApp(
 ) {
     var destination by rememberSaveable { mutableStateOf(Destination.Chats) }
     val foldPosture = remember(foldingFeature) { FoldPosture.from(foldingFeature) }
+    val density = LocalDensity.current
+    val hingeGutter = remember(foldingFeature, density) {
+        with(density) {
+            val reportedPx = foldingFeature?.let {
+                if (it.orientation == FoldingFeature.Orientation.VERTICAL) it.bounds.width()
+                else it.bounds.height()
+            } ?: 0
+            reportedPx.toDp().coerceIn(8.dp, 48.dp)
+        }
+    }
 
     Surface(modifier = Modifier.fillMaxSize(), color = Void) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -357,7 +368,7 @@ private fun TomChatApp(
                                     Box(Modifier.weight(1.15f).fillMaxHeight()) {
                                         DestinationScreen(destination, profile, contactCard)
                                     }
-                                    Spacer(Modifier.width(12.dp))
+                                    Spacer(Modifier.width(hingeGutter))
                                     FoldCompanionPane(
                                         modifier = Modifier.weight(0.85f).fillMaxHeight(),
                                         title = "BOOK MODE",
@@ -368,7 +379,7 @@ private fun TomChatApp(
                                     Box(Modifier.weight(1.15f).fillMaxWidth()) {
                                         DestinationScreen(destination, profile, contactCard)
                                     }
-                                    Spacer(Modifier.height(12.dp))
+                                    Spacer(Modifier.height(hingeGutter))
                                     FoldCompanionPane(
                                         modifier = Modifier.weight(0.85f).fillMaxWidth(),
                                         title = "TABLETOP MODE",
