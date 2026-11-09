@@ -111,8 +111,50 @@ class AuthenticatedPeerConnection internal constructor(
     private val closed = AtomicBoolean(false)
     val isConnected: Boolean get() = !closed.get() && socket.isConnected && !socket.isClosed
 
-    /** Close the authenticated transport. No application data methods exist until E2EE is integrated. */
+    /** Complete Noise XX on this authenticated socket before application data is allowed. */
+    @Synchronized
+    @Throws(IOException::class)
+    fun establishEncryptedChannel(session: NoisePeerSession, initiator: Boolean, handshakeTimeoutMs: Int = 8_000): EncryptedPeerChannel {
+        check(!closed.get() && isConnected) { "Peer connection is closed." }
+        require(handshakeTimeoutMs in 1..30_000)
+        val input = DataInputStream(socket.getInputStream())
+        val output = DataOutputStream(socket.getOutputStream())
+        try {
+            socket.soTimeout = handshakeTimeoutMs
+            if (initiator) {
+                writeBounded(output, session.writeHandshake(), MAX_NOISE_HANDSHAKE_BYTES)
+                session.readHandshake(readBounded(input, MAX_NOISE_HANDSHAKE_BYTES))
+                writeBounded(output, session.writeHandshake(), MAX_NOISE_HANDSHAKE_BYTES)
+            } else {
+                session.readHandshake(readBounded(input, MAX_NOISE_HANDSHAKE_BYTES))
+                writeBounded(output, session.writeHandshake(), MAX_NOISE_HANDSHAKE_BYTES)
+                session.readHandshake(readBounded(input, MAX_NOISE_HANDSHAKE_BYTES))
+            }
+            session.finishHandshake()
+            socket.soTimeout = 0
+            return EncryptedPeerChannel(socket, input, output, session)
+        } catch (error: Exception) {
+            try { session.close() } catch (_: Exception) { }
+            close()
+            if (error is IOException) throw error
+            throw IOException("End-to-end encrypted peer handshake failed.", error)
+        }
+    }
+
     override fun close() {
         if (closed.compareAndSet(false, true)) socket.close()
+    }
+
+    companion object {
+        private const val MAX_NOISE_HANDSHAKE_BYTES = 1024
+        internal fun writeBounded(output: DataOutputStream, bytes: ByteArray, max: Int) {
+            require(bytes.isNotEmpty() && bytes.size <= max) { "Invalid peer frame size." }
+            output.writeInt(bytes.size); output.write(bytes); output.flush()
+        }
+        internal fun readBounded(input: DataInputStream, max: Int): ByteArray {
+            val size = input.readInt()
+            if (size !in 1..max) throw IOException("Peer frame length is invalid.")
+            return ByteArray(size).also(input::readFully)
+        }
     }
 }
