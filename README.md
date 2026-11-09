@@ -21,6 +21,6 @@ TomChat follows the [TomOS visual design system](docs/design-system.md): Tom OS 
 
 ## Repository status
 
-This is the planning and architecture baseline, not a working messenger yet. The next milestone is a minimal Android shell plus a Rust networking-core proof of concept. Do not describe the application as secure or production-ready until independent protocol review, threat modelling, interoperability tests, and device testing are complete.
+The native Android foundation is now scaffolded under `android/app`: TomOS neon styling, Chats / Contacts / Calls / Settings navigation, Gradle configuration, unit-test scaffold, and Android CI. It is not a working messenger yet: identity, encrypted storage, Bluetooth/Wi-Fi transports, messaging, and calls remain future implementation milestones. The Android build and test workflow is being validated. Do not describe the application as secure or production-ready until independent protocol review, threat modelling, interoperability tests, and device testing are complete.
 
 See [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), [decisions](docs/decisions/0001-product-baseline.md), and the proposed [TomOS Social direction](docs/tomsocial-direction.md).
