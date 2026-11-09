@@ -5,7 +5,6 @@ import java.io.DataOutputStream
 import java.io.IOException
 import java.net.Socket
 import java.security.KeyPair
-import java.security.MessageDigest
 import java.security.Signature
 import java.security.spec.X509EncodedKeySpec
 import java.security.KeyFactory
@@ -42,6 +41,14 @@ class DirectPeerAuthenticator(
             throw IOException("Unsupported TomChat peer handshake.")
         }
         val remoteNonce = ByteArray(NONCE_SIZE).also(input::readFully)
+
+        val localFingerprint = ContactCardCodec.fingerprint(localIdentity.public.encoded)
+        val localSignature = sign(localIdentity, transcript(localNonce, remoteNonce, localFingerprint))
+        output.writeUTF(localFingerprint)
+        output.writeInt(localSignature.size)
+        output.write(localSignature)
+        output.flush()
+
         val remoteFingerprint = input.readUTF()
         if (remoteFingerprint != expectedPeer.fingerprint) {
             throw IOException("Peer identity does not match the trusted contact.")
@@ -52,13 +59,6 @@ class DirectPeerAuthenticator(
         if (!verify(expectedPeer.encodedPublicKey, remoteSignature, transcript(remoteNonce, localNonce, remoteFingerprint))) {
             throw IOException("Peer failed identity proof verification.")
         }
-
-        val localFingerprint = ContactCardCodec.fingerprint(localIdentity.public.encoded)
-        val localSignature = sign(localIdentity, transcript(localNonce, remoteNonce, localFingerprint))
-        output.writeUTF(localFingerprint)
-        output.writeInt(localSignature.size)
-        output.write(localSignature)
-        output.flush()
 
         // This socket remains private to this object; no plaintext data API is exposed.
         return AuthenticatedPeerConnection(socket, expectedPeer.fingerprint)
