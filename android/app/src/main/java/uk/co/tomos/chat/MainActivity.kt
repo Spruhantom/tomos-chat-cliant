@@ -668,7 +668,7 @@ private fun ChatsScreen(profile: AccountProfile) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     TextButton(
                         enabled = mayCall && session?.status == PeerConnectionStatus.CONNECTED &&
-                            (callSnapshot == null || callSnapshot?.state in setOf(PeerCallState.ENDED, PeerCallState.FAILED)),
+                            (callSnapshot == null || callSnapshot?.state == PeerCallState.ENDED || callSnapshot?.state == PeerCallState.FAILED),
                         onClick = {
                             pendingCallAction = "call"
                             if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
