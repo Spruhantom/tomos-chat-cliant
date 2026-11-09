@@ -194,11 +194,28 @@ persists the bound Noise public key and can read the previous V1 store format.
 Legacy V1 cards remain readable for compatibility, but are clearly marked and
 cannot be saved as Noise-capable contacts in the new UI.
 
-The Rust crate and direct TCP adapter are still not connected through JNI/UniFFI.
-The Kotlin identity store currently prepares the persistent key material and
-the signed card binding; integration must pass the private key into Rust without
-logging or copying it unnecessarily, and pin the saved contact's Noise public
-key during the handshake.
+The Rust core is now exposed through a narrow JNI boundary. Rust owns
+Noise handshake and transport state behind opaque session handles; Kotlin can
+only exchange bounded handshake messages, finish the handshake, encrypt,
+decrypt, and close a session. The JNI entry point copies the local private
+scalar into Rust, zeroizes its temporary copy, and does not return cipher state
+or key schedules to Kotlin. The Kotlin wrapper copies the private scalar only
+for the native call and clears that temporary array afterward. The trusted
+contact's saved signed Noise public key is passed as the expected remote static
+key, and the Rust core refuses to enable transport records until the remote
+static key matches it.
+
+The Android Gradle build now invokes cargo-ndk to package the Rust library for
+arm64-v8a, armeabi-v7a and x86_64. Android CI installs the NDK and Rust targets,
+checks formatting, runs host-side Rust tests, and builds the native library as
+part of the APK build. Android instrumentation tests exercise the JNI handshake,
+peer-key pinning and bidirectional encrypted records on a device/emulator.
+
+This is a cryptographic core integration only. It is not yet connected to the
+direct TCP socket, has no bounded stream framing or application message
+protocol, and the legacy identity-proof socket still must not carry chat data.
+The next step is to connect a framed handshake exchange to the direct transport
+without exposing plaintext APIs, then validate two physical Android devices.
 
 Snow explicitly states that it has not received a formal security audit. The
 TomChat wrapper and identity-binding design are also unaudited. This is an
@@ -216,6 +233,7 @@ physical-device validation are complete.
 - [x] Add V2 signed contact cards that include the Noise public key in the P-256 signature.
 - [x] Persist the bound peer Noise key with trusted contacts; retain V1 encrypted-store read compatibility.
 - [x] Keep legacy V1 cards readable but prevent treating them as Noise-authenticated contacts.
-- [ ] Connect the identity store and Noise session core through a narrow JNI/UniFFI boundary.
-- [ ] Add Android instrumentation tests for Keystore persistence, invalidation, and recovery.
-- [ ] Run Noise test vectors, malformed handshake tests, and physical-device peer tests.
+- [x] Connect the identity store and Noise session core through a narrow JNI boundary.
+- [x] Add Android instrumentation tests for JNI Noise handshake, key pinning and encrypted records.
+- [ ] Add Keystore invalidation/recovery instrumentation tests.
+- [ ] Run official Noise test vectors, malformed handshake tests, and physical-device peer tests.
