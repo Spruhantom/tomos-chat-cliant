@@ -16,6 +16,8 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
+private const val MAX_STORED_MESSAGE_BODY_BYTES = 16 * 1024
+
 enum class StoredMessageDirection { INCOMING, OUTGOING }
 enum class StoredMessageStatus { RECEIVED, QUEUED, SENT, FAILED }
 
@@ -29,7 +31,7 @@ data class StoredChatMessage(
 ) {
     init {
         require(peerFingerprint.isNotBlank() && peerFingerprint.length <= 128)
-        require(body.isNotBlank() && body.toByteArray(Charsets.UTF_8).size <= MAX_BODY_BYTES)
+        require(body.isNotBlank() && body.toByteArray(Charsets.UTF_8).size <= MAX_STORED_MESSAGE_BODY_BYTES)
         require(createdAtEpochMillis >= 0)
     }
 }
@@ -129,7 +131,7 @@ class EncryptedMessageStore(filesDir: File) {
                 out.writeByte(message.status.ordinal)
                 out.writeLong(message.createdAtEpochMillis)
                 val body = message.body.toByteArray(Charsets.UTF_8)
-                require(body.size <= MAX_BODY_BYTES)
+                require(body.size <= MAX_STORED_MESSAGE_BODY_BYTES)
                 out.writeInt(body.size)
                 out.write(body)
             }
@@ -150,7 +152,7 @@ class EncryptedMessageStore(filesDir: File) {
                 ?: throw IOException("Invalid message status.")
             val timestamp = input.readLong()
             val length = input.readInt()
-            require(length in 1..MAX_BODY_BYTES && length <= input.available()) { "Invalid stored message length." }
+            require(length in 1..MAX_STORED_MESSAGE_BODY_BYTES && length <= input.available()) { "Invalid stored message length." }
             val body = ByteArray(length).also(input::readFully).toString(Charsets.UTF_8)
             StoredChatMessage(id, peer, direction, status, timestamp, body)
         }
