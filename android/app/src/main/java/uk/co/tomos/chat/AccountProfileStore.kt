@@ -71,26 +71,31 @@ class AccountProfileStore(filesDir: File) {
     @Synchronized
     @Throws(IOException::class)
     fun save(profile: AccountProfile) {
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
-        cipher.updateAAD(FORMAT_VERSION_AAD)
-        val encrypted = cipher.doFinal(AccountProfileCodec.encode(profile))
-        val output = ByteArrayOutputStream()
-        DataOutputStream(output).use { data ->
-            data.writeInt(FORMAT_VERSION)
-            val iv = cipher.iv
-            data.writeInt(iv.size)
-            data.write(iv)
-            data.write(encrypted)
-        }
-        val stream = file.startWrite()
         try {
-            stream.write(output.toByteArray())
-            stream.fd.sync()
-            file.finishWrite(stream)
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
+            cipher.updateAAD(FORMAT_VERSION_AAD)
+            val encrypted = cipher.doFinal(AccountProfileCodec.encode(profile))
+            val output = ByteArrayOutputStream()
+            DataOutputStream(output).use { data ->
+                data.writeInt(FORMAT_VERSION)
+                val iv = cipher.iv
+                data.writeInt(iv.size)
+                data.write(iv)
+                data.write(encrypted)
+            }
+            val stream = file.startWrite()
+            try {
+                stream.write(output.toByteArray())
+                stream.fd.sync()
+                file.finishWrite(stream)
+            } catch (e: Exception) {
+                file.failWrite(stream)
+                throw e
+            }
         } catch (e: Exception) {
-            file.failWrite(stream)
-            throw IOException("Could not save the encrypted account profile.", e)
+            if (e is IOException) throw e
+            throw IOException("Could not encrypt or save the account profile.", e)
         }
     }
 
