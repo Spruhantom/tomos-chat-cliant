@@ -26,6 +26,7 @@
 - LAN discovery and direct peer connection between two physical Android devices.
 - Authenticated peer handshake and protocol version negotiation, shared across transports.
 - Explicit address/contact exchange for remote peers.
+- Implement automatic fastest-direct-path selection using measured latency, throughput, packet loss, stability, and battery cost; expose automatic/Bluetooth/Wi-Fi preferences.
 - Test transport switching, disconnect/reconnect, MTU negotiation, large transfers, permissions, and battery use.
 - Test QUIC and TCP fallback, network changes, IPv4/IPv6, Wi-Fi and mobile data.
 - Demonstrate no central service, relay, DHT bootstrap, or account registration.
