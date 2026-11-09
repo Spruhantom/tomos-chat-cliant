@@ -59,3 +59,11 @@ A domain-level policy now separates three inputs:
 - Under 5: independent account setup and capabilities remain blocked.
 
 These are initial product rules for review, not a claim of legal compliance. Before release, the matrix needs a safeguarding review and enforcement at every use-case boundary. UI visibility alone is not a security control. Tests cover unverified accounts, pending/denied guardian approval, age-specific capabilities and inconsistent adult guardian state.
+
+## Encrypted local account profile (prototype)
+
+The Android first-run flow now saves a minimal profile in the app's private files directory. The profile contains only the display name, assigned age band, age-assurance status and guardian-consent status. The raw date of birth is not included in the profile model or serialized payload.
+
+The profile is encrypted with AES-256-GCM. Its random IV and ciphertext are stored in an atomic file, and the AES key is generated and held by Android Keystore. The format version is authenticated as GCM additional authenticated data. Reads fail closed if the profile cannot be decrypted or the original Keystore key is missing; the app does not silently create a replacement key or overwrite an unreadable profile.
+
+The profile codec has JVM unit tests for round-trip serialization, trailing-data rejection and invalid age/guardian combinations. The Keystore and atomic-file integration still needs Android instrumentation/device testing, including app restart, app-data restore behaviour, key invalidation, interrupted writes and device migration. This is local encrypted storage, not yet a complete identity, backup or recovery system.
