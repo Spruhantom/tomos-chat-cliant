@@ -24,11 +24,11 @@ The first-run screen collects a display name and a date of birth in `YYYY-MM-DD`
 ## Current Android screens
 
 - Chats: zero-server connection status and empty conversation state.
-- Contacts: placeholder for local identity and QR contact exchange.
+- Contacts: signed QR contact cards, fingerprint confirmation, trusted-contact persistence, and a signed binding between the P-256 device identity and the X25519 Noise static key.
 - Calls: placeholder for authenticated direct voice calls.
 - Settings: zero-server policy, automatic route preference, identity, backups, and future TomSocial direction.
 
-These screens establish navigation and visual foundations; they do not yet implement messaging, calling, identity, or networking.
+The Android foundation still does not implement real messaging or calling. The current direct TCP connection proves peer identity but deliberately exposes no application data stream.
 
 ## Visual design
 
@@ -48,7 +48,7 @@ Bluetooth is a first-class direct peer transport, not a server substitute:
 - Android Bluetooth permissions, pairing, adapter state, MTU negotiation, transfer resume, and lifecycle limits must be handled.
 - Bluetooth headset audio routing is required for calls. Direct Bluetooth peer voice media remains experimental until tested on physical devices.
 
-The Android client now has device identity, signed contact cards, local QR scanning, fingerprint confirmation, and encrypted local trusted-contact storage. A direct TCP prototype performs mutual signed-nonce proof of possession against saved contacts. An isolated Rust crate now prototypes Noise XX using the Snow implementation (`Noise_XX_25519_ChaChaPoly_SHA256`) and tests pinned static-key authentication plus encrypted records. The Noise core is not yet connected to Android, its static keys are not yet bound to the existing signed contact-card identity, and the Kotlin direct transport still does not carry application data. The next networking milestone is to complete secure Noise key provisioning and signed contact-card binding, then integrate the Rust core through FFI and test two physical Android devices on a LAN without any application server.
+The Android client now creates a persistent X25519 static key. Its private scalar is encrypted at rest with AES-256-GCM using a non-exportable Android Keystore wrapping key. New V2 QR cards include the Noise public key in the P-256 identity signature, and the trusted-contact store persists that binding. Legacy V1 cards remain readable but cannot be trusted as Noise-capable contacts. The Rust Noise XX core is still isolated and is not connected to Android or the direct TCP adapter. The next networking milestone is a narrow JNI/UniFFI integration that passes local key material into Rust and pins the trusted contact's signed Noise key during the handshake, followed by physical-device LAN testing.
 
 ## Planned modules
 
