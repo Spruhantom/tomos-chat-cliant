@@ -56,8 +56,18 @@ class DirectPeerAuthenticator(
         val signatureLength = input.readInt()
         if (signatureLength !in 1..MAX_SIGNATURE_SIZE) throw IOException("Invalid peer proof size.")
         val remoteSignature = ByteArray(signatureLength).also(input::readFully)
-        if (!verify(expectedPeer.encodedPublicKey, remoteSignature, transcript(remoteNonce, localNonce, remoteFingerprint))) {
-            throw IOException("Peer failed identity proof verification.")
+        val peerProofValid = verify(
+            expectedPeer.encodedPublicKey,
+            remoteSignature,
+            transcript(remoteNonce, localNonce, remoteFingerprint)
+        )
+        // Both sides acknowledge the result so a peer cannot mistake one-sided
+        // authentication for a mutually authenticated connection.
+        output.writeByte(if (peerProofValid) AUTH_OK else AUTH_FAILED)
+        output.flush()
+        val remoteStatus = input.readUnsignedByte()
+        if (!peerProofValid || remoteStatus != AUTH_OK) {
+            throw IOException("Mutual peer identity verification failed.")
         }
 
         // This socket remains private to this object; no plaintext data API is exposed.
@@ -87,6 +97,8 @@ class DirectPeerAuthenticator(
         private const val PROTOCOL_VERSION = 1
         private const val NONCE_SIZE = 32
         private const val MAX_SIGNATURE_SIZE = 144
+        private const val AUTH_OK = 1
+        private const val AUTH_FAILED = 0
         private const val HANDSHAKE_TIMEOUT_MS = 8_000
         private val DOMAIN = "TOMCHAT-DIRECT-PEER-PROOF-V1".toByteArray(Charsets.US_ASCII)
     }
