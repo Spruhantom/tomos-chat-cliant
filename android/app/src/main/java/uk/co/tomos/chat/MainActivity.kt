@@ -1,8 +1,12 @@
 package uk.co.tomos.chat
 
 import android.os.Bundle
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -61,6 +65,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.LocalDensity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -502,6 +507,38 @@ private fun ChatsScreen(profile: AccountProfile) {
     var working by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf("Preparing device encryption…") }
     var errorText by remember { mutableStateOf<String?>(null) }
+    var callSnapshot by remember { mutableStateOf<PeerCallSnapshot?>(null) }
+    var pendingCallAction by remember { mutableStateOf("call") }
+    var callMuted by remember { mutableStateOf(false) }
+    var callSpeaker by remember { mutableStateOf(false) }
+
+    val callController = remember(session, selectedContact) {
+        val activeSession = session
+        val peer = selectedContact
+        if (activeSession != null && peer != null) {
+            PeerVoiceCallController(context, activeSession, peer.fingerprint, onError = { error ->
+                scope.launch { errorText = error.message ?: "Voice call audio failed." }
+            })
+        } else null
+    }
+    val microphonePermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            try {
+                if (pendingCallAction == "accept") callController?.acceptIncoming()
+                else callController?.startOutgoing()
+                callSnapshot = callController?.snapshot
+                callMuted = false
+                callSpeaker = false
+                errorText = null
+            } catch (error: Exception) {
+                errorText = error.message ?: "Could not start the voice call."
+            }
+        } else {
+            errorText = "Microphone permission is required to make or answer a voice call."
+        }
+    }
 
     LaunchedEffect(context.filesDir) {
         try {
@@ -521,17 +558,26 @@ private fun ChatsScreen(profile: AccountProfile) {
 
     DisposableEffect(coordinator) { onDispose { coordinator?.close() } }
     DisposableEffect(session) { onDispose { session?.close() } }
+    DisposableEffect(callController) {
+        callSnapshot = callController?.snapshot
+        onDispose { callController?.close() }
+    }
 
     LaunchedEffect(session) {
         val active = session ?: return@LaunchedEffect
         val peer = selectedContact ?: return@LaunchedEffect
         while (true) {
             try {
-                when (withContext(Dispatchers.IO) { active.receiveEvent() }) {
+                val event = withContext(Dispatchers.IO) { active.receiveEvent() }
+                callController?.handle(event)
+                callSnapshot = callController?.snapshot
+                when (event) {
                     is PeerConversationEvent.MessageReceived,
                     is PeerConversationEvent.DeliveryConfirmed,
                     is PeerConversationEvent.UnmatchedDeliveryAcknowledgement,
-                    PeerConversationEvent.DuplicateMessage -> Unit
+                    PeerConversationEvent.DuplicateMessage,
+                    is PeerConversationEvent.VoiceSignalReceived,
+                    is PeerConversationEvent.VoiceFrameReceived -> Unit
                 }
                 messages = withContext(Dispatchers.IO) { coordinator?.loadHistory(peer.fingerprint).orEmpty() }
             } catch (error: Exception) {
@@ -544,6 +590,7 @@ private fun ChatsScreen(profile: AccountProfile) {
     }
 
     val mayMessage = AccountSafetyPolicy.allows(profile.safetyState(), TomChatCapability.MESSAGE_APPROVED_CONTACT)
+    val mayCall = AccountSafetyPolicy.allows(profile.safetyState(), TomChatCapability.VOICE_CALL_APPROVED_CONTACT)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 20.dp)) {
         ScreenTitle("Your chats", "Encrypted, direct conversations between trusted devices.")
         StatusCard()
@@ -614,7 +661,74 @@ private fun ChatsScreen(profile: AccountProfile) {
         selectedContact?.let { contact ->
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
                 Text("CONVERSATION WITH ${contact.displayName.uppercase()}", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                if (session == null) Text("Messages can only be sent after mutual identity verification and the Noise XX handshake complete.", color = Muted, fontSize = 11.sp)
+                if (session == null) Text("Messages and calls require mutual identity verification and an established Noise XX channel.", color = Muted, fontSize = 11.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                        enabled = mayCall && session?.status == PeerConnectionStatus.CONNECTED &&
+                            (callSnapshot == null || callSnapshot?.state in setOf(PeerCallState.ENDED, PeerCallState.FAILED)),
+                        onClick = {
+                            pendingCallAction = "call"
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                try {
+                                    callController?.startOutgoing()
+                                    callSnapshot = callController?.snapshot
+                                    errorText = null
+                                } catch (error: Exception) { errorText = error.message ?: "Could not start the call." }
+                            } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    ) { Text("Voice call") }
+                    callSnapshot?.let { call ->
+                        Text(
+                            when (call.state) {
+                                PeerCallState.OUTGOING -> "Calling…"
+                                PeerCallState.INCOMING -> "Incoming call"
+                                PeerCallState.CONNECTING -> "Connecting audio…"
+                                PeerCallState.ACTIVE -> "Call active"
+                                PeerCallState.RECONNECTING -> "Reconnecting…"
+                                PeerCallState.ENDED -> "Call ended"
+                                PeerCallState.FAILED -> "Call failed"
+                                PeerCallState.IDLE -> "Idle"
+                            },
+                            color = if (call.state == PeerCallState.ACTIVE) Green else Muted,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+                if (callSnapshot?.state == PeerCallState.INCOMING) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(enabled = mayCall, onClick = {
+                            pendingCallAction = "accept"
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                try {
+                                    callController?.acceptIncoming()
+                                    callSnapshot = callController?.snapshot
+                                    errorText = null
+                                } catch (error: Exception) { errorText = error.message ?: "Could not answer the call." }
+                            } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                        }) { Text("Answer") }
+                        TextButton(onClick = {
+                            runCatching { callController?.rejectIncoming() }
+                            callSnapshot = callController?.snapshot
+                        }) { Text("Reject") }
+                    }
+                }
+                if (callSnapshot?.state == PeerCallState.ACTIVE) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = {
+                            callMuted = !callMuted
+                            runCatching { callController?.setMuted(callMuted) }
+                        }) { Text(if (callMuted) "Unmute" else "Mute") }
+                        TextButton(onClick = {
+                            callSpeaker = !callSpeaker
+                            val routed = runCatching { callController?.setSpeakerphoneEnabled(callSpeaker) == true }.getOrDefault(false)
+                            if (!routed) { callSpeaker = false; errorText = "That audio route is not available on this device." }
+                        }) { Text(if (callSpeaker) "Earpiece" else "Speaker") }
+                        Button(onClick = {
+                            callController?.hangUp()
+                            callSnapshot = callController?.snapshot
+                        }) { Text("Hang up") }
+                    }
+                }
                 messages.forEach { message ->
                     Card(Modifier.fillMaxWidth().padding(vertical = 3.dp), colors = CardDefaults.cardColors(containerColor = if (message.direction == StoredMessageDirection.OUTGOING) Raised else Panel)) {
                         Column(Modifier.padding(10.dp)) {
