@@ -58,7 +58,7 @@ impl NoiseSession {
             return Err(NoiseSessionError::InvalidState("Noise X25519 static keys must be 32 bytes."));
         }
         let params: NoiseParams = PROTOCOL.parse().map_err(|_| NoiseSessionError::InvalidState("Invalid fixed Noise suite."))?;
-        let builder = Builder::new(params).local_private_key(local_private);
+        let builder = Builder::new(params)?.local_private_key(local_private);
         let state = if initiator { builder.build_initiator()? } else { builder.build_responder()? };
         Ok(Self { state: State::Handshake(state), expected_peer_static: expected_peer_static.to_vec() })
     }
