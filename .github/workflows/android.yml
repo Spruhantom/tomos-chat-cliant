@@ -14,7 +14,6 @@ jobs:
   android:
     name: Build and test Android app
     runs-on: ubuntu-latest
-    env:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -33,7 +32,6 @@ jobs:
           accept-android-sdk-licenses: true
 
       - name: Set up Gradle
-
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
