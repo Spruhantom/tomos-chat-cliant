@@ -67,6 +67,8 @@ import java.io.IOException
 import java.security.KeyPair
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
+import androidx.window.layout.FoldingFeature
+import androidx.window.layout.WindowInfoTracker
 
 private val Void = Color(0xFF0A0A12)
 private val Panel = Color(0xFF14141F)
@@ -101,6 +103,17 @@ class MainActivity : ComponentActivity() {
                 var contactCard by remember { mutableStateOf<String?>(null) }
                 var loading by remember { mutableStateOf(true) }
                 var storageError by remember { mutableStateOf<String?>(null) }
+                var foldingFeature by remember { mutableStateOf<FoldingFeature?>(null) }
+                val windowInfoTracker = remember { WindowInfoTracker.getOrCreate(this@MainActivity) }
+
+                LaunchedEffect(windowInfoTracker) {
+                    windowInfoTracker.windowLayoutInfo(this@MainActivity).collect { layoutInfo ->
+                        foldingFeature = layoutInfo.displayFeatures
+                            .filterIsInstance<FoldingFeature>()
+                            .firstOrNull { it.isSeparating }
+                            ?: layoutInfo.displayFeatures.filterIsInstance<FoldingFeature>().firstOrNull()
+                    }
+                }
                 val scope = rememberCoroutineScope()
                 val store = remember { AccountProfileStore(applicationContext.filesDir) }
                 val identityStore = remember { DeviceIdentityStore() }
@@ -127,7 +140,7 @@ class MainActivity : ComponentActivity() {
                 when {
                     loading -> ProfileStatusScreen("Opening your encrypted account…")
                     storageError != null -> ProfileErrorScreen(storageError!!)
-                    profile != null -> TomChatApp(profile!!, contactCard)
+                    profile != null -> TomChatApp(profile!!, contactCard, foldingFeature)
                     else -> AccountSetupScreen { newProfile ->
                         scope.launch {
                             try {
@@ -281,14 +294,20 @@ private fun AccountSetupScreen(onAssigned: (AccountProfile) -> Unit) {
 }
 
 @Composable
-private fun TomChatApp(profile: AccountProfile, contactCard: String?) {
+private fun TomChatApp(
+    profile: AccountProfile,
+    contactCard: String?,
+    foldingFeature: FoldingFeature?
+) {
     var destination by rememberSaveable { mutableStateOf(Destination.Chats) }
+    val foldPosture = remember(foldingFeature) { FoldPosture.from(foldingFeature) }
+
     Surface(modifier = Modifier.fillMaxSize(), color = Void) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val expanded = maxWidth >= 840.dp
             val medium = maxWidth >= 600.dp
             Row(Modifier.fillMaxSize()) {
-                if (medium) {
+                if (medium && foldPosture != FoldPosture.BOOK) {
                     NavigationRail(containerColor = Panel, contentColor = TextPrimary) {
                         Destination.entries.forEach { item ->
                             NavigationRailItem(
@@ -304,9 +323,16 @@ private fun TomChatApp(profile: AccountProfile, contactCard: String?) {
                 Scaffold(
                     modifier = Modifier.weight(1f).fillMaxHeight(),
                     containerColor = Void,
-                    topBar = { AppHeader() },
+                    topBar = {
+                        Column {
+                            AppHeader()
+                            if (foldPosture == FoldPosture.BOOK || foldPosture == FoldPosture.TABLETOP) {
+                                FoldPostureBanner(foldPosture)
+                            }
+                        }
+                    },
                     bottomBar = {
-                        if (!medium) {
+                        if (!medium || foldPosture == FoldPosture.BOOK) {
                             NavigationBar(containerColor = Panel, contentColor = TextPrimary) {
                                 Destination.entries.forEach { item ->
                                     NavigationBarItem(
@@ -325,15 +351,80 @@ private fun TomChatApp(profile: AccountProfile, contactCard: String?) {
                         contentAlignment = Alignment.TopCenter
                     ) {
                         Box(Modifier.fillMaxSize().widthIn(max = if (expanded) 1200.dp else 840.dp)) {
-                            when (destination) {
-                                Destination.Chats -> ChatsScreen()
-                                Destination.Contacts -> ContactsScreen(profile, contactCard)
-                                Destination.Calls -> CallsScreen()
-                                Destination.Settings -> SettingsScreen(profile)
+                            when (foldPosture) {
+                                FoldPosture.BOOK -> Row(Modifier.fillMaxSize()) {
+                                    Box(Modifier.weight(1.15f).fillMaxHeight()) {
+                                        DestinationScreen(destination, profile, contactCard)
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                    FoldCompanionPane(
+                                        modifier = Modifier.weight(0.85f).fillMaxHeight(),
+                                        title = "BOOK MODE",
+                                        description = "TomChat keeps the main workspace on one side of the fold and quick navigation on the other."
+                                    ) { destination = it }
+                                }
+                                FoldPosture.TABLETOP -> Column(Modifier.fillMaxSize()) {
+                                    Box(Modifier.weight(1.15f).fillMaxWidth()) {
+                                        DestinationScreen(destination, profile, contactCard)
+                                    }
+                                    Spacer(Modifier.height(12.dp))
+                                    FoldCompanionPane(
+                                        modifier = Modifier.weight(0.85f).fillMaxWidth(),
+                                        title = "TABLETOP MODE",
+                                        description = "Use this lower panel to switch between chats, contacts, calls and settings while the main view stays above the hinge."
+                                    ) { destination = it }
+                                }
+                                else -> DestinationScreen(destination, profile, contactCard)
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DestinationScreen(destination: Destination, profile: AccountProfile, contactCard: String?) {
+    when (destination) {
+        Destination.Chats -> ChatsScreen()
+        Destination.Contacts -> ContactsScreen(profile, contactCard)
+        Destination.Calls -> CallsScreen()
+        Destination.Settings -> SettingsScreen(profile)
+    }
+}
+
+@Composable
+private fun FoldPostureBanner(posture: FoldPosture) {
+    val label = if (posture == FoldPosture.BOOK) "BOOK POSTURE DETECTED" else "TABLETOP POSTURE DETECTED"
+    Text(
+        label,
+        color = Cyan,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 1.sp,
+        modifier = Modifier.fillMaxWidth().background(Panel).padding(horizontal = 18.dp, vertical = 8.dp)
+    )
+}
+
+@Composable
+private fun FoldCompanionPane(
+    modifier: Modifier,
+    title: String,
+    description: String,
+    onDestinationSelected: (Destination) -> Unit
+) {
+    Column(
+        modifier.background(Panel, RoundedCornerShape(18.dp)).padding(16.dp),
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(title, color = Cyan, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+        Spacer(Modifier.height(8.dp))
+        Text(description, color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
+        Spacer(Modifier.height(12.dp))
+        Destination.entries.forEach { item ->
+            TextButton(onClick = { onDestinationSelected(item) }, modifier = Modifier.fillMaxWidth()) {
+                Text("${item.glyph}  ${item.label}", color = if (item == Destination.Chats) Pink else TextPrimary)
             }
         }
     }
