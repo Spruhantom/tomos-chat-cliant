@@ -2,7 +2,7 @@
 
 **TomChat** is an Android-first project to build a decentralised, peer-to-peer messaging and voice app that keeps identity and communication under the user's control.
 
-> **Development status:** early Android foundation. The current app contains first-run age-band setup, local encrypted profile storage, a device signing identity, signed QR contact cards, and a direct TCP identity-proof prototype. It is not yet a functioning messenger. The Snow-based Noise XX core is now exposed to Android through JNI, with a Gradle cargo-ndk build for ARM and x86-64. Android instrumentation tests cover handshake, peer-key pinning and encrypted records. It is not yet connected to the direct socket or messaging UI, and end-to-end encrypted messaging is not yet available.
+> **Development status:** Android messaging prototype integration is in progress. The Compose Chats screen now has user-invoked direct TCP listen/connect controls for independently trusted contacts. A successful connection performs mutual signed identity proof followed by a pinned-key Noise XX handshake; text frames and delivery acknowledgements then travel only inside the encrypted channel. Conversation history is protected at rest with Android Keystore AES-256-GCM. This is an early prototype, not a production-ready messenger: CI validation, physical two-device tests, protocol review and independent security review remain outstanding. The account safety policy intentionally keeps messaging disabled until age assurance (and guardian approval where required) is complete.
 
 ## Project principles
 
@@ -56,13 +56,14 @@ All networking must use the same authenticated peer identity and end-to-end encr
 
 ## Android application
 
-The Android foundation uses Kotlin, Jetpack Compose and Material 3, with an isolated Rust Noise XX prototype using Snow at `android/native/tomchat-noise`. The Rust Noise session is connected through a narrow JNI API; Rust owns session state, and Kotlin passes the signed contact key pin. The JNI session is not yet wired to the direct TCP transport. See [docs/architecture.md](docs/architecture.md) for remaining security work. The TomOS visual design is documented in [docs/design-system.md](docs/design-system.md). Tom OS Hyprland 1 is the primary brand reference; TomOS Android SIP informs Android interaction patterns, without importing SIP or Linphone functionality.
+The Android foundation uses Kotlin, Jetpack Compose and Material 3, with the Rust Noise XX core using Snow at `android/native/tomchat-noise`. Rust owns Noise session state behind a narrow JNI API. The messaging prototype connects the direct TCP identity-proof socket to the pinned Noise XX handshake, then exposes only encrypted application frames to the conversation session. The Compose chat screen can initiate or accept a direct connection to an independently trusted contact and displays encrypted local history. See [docs/architecture.md](docs/architecture.md) for remaining security work. The TomOS visual design is documented in [docs/design-system.md](docs/design-system.md). Tom OS Hyprland 1 is the primary brand reference; TomOS Android SIP informs Android interaction patterns, without importing SIP or Linphone functionality.
 
 Current UI foundation:
 - adaptive compact/medium/expanded window navigation: bottom bar on compact windows and navigation rail on wider windows; content width is constrained on large displays, and setup/contacts can scroll on short or unfolded screens;
 - fold posture detection through Jetpack WindowManager, with book mode for half-open vertical folds and tabletop mode for half-open horizontal folds; both layouts provide a hinge gutter and companion navigation pane. Device-by-device physical validation is still required;
 - first-run display-name and date-of-birth screen with local age-band preview;
 - Chats, Contacts, Calls and Settings navigation;
+- prototype chat flow with manual direct-IP connection/listen, trusted-contact selection, Noise XX gating, encrypted text frames, encrypted delivery receipts and local history; the composer stays locked until the account safety policy allows messaging and the Noise session is established;
 - TomOS neon visual styling;
 - account experience and zero-server policy status placeholders.
 
