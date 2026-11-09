@@ -26,23 +26,53 @@ internal object NoiseNative {
     external fun nativeCloseSession(handle: Long)
 }
 
+/** Narrow seam so the Kotlin lifecycle/guard logic can be tested on the JVM. */
+internal interface NoiseSessionBackend {
+    fun writeHandshake(handle: Long, payload: ByteArray): ByteArray
+    fun readHandshake(handle: Long, message: ByteArray): ByteArray
+    fun finishHandshake(handle: Long)
+    fun encrypt(handle: Long, plaintext: ByteArray): ByteArray
+    fun decrypt(handle: Long, ciphertext: ByteArray): ByteArray
+    fun closeSession(handle: Long)
+}
+
+private object JniNoiseSessionBackend : NoiseSessionBackend {
+    override fun writeHandshake(handle: Long, payload: ByteArray) =
+        NoiseNative.nativeWriteHandshake(handle, payload)
+
+    override fun readHandshake(handle: Long, message: ByteArray) =
+        NoiseNative.nativeReadHandshake(handle, message)
+
+    override fun finishHandshake(handle: Long) = NoiseNative.nativeFinishHandshake(handle)
+    override fun encrypt(handle: Long, plaintext: ByteArray) =
+        NoiseNative.nativeEncrypt(handle, plaintext)
+
+    override fun decrypt(handle: Long, ciphertext: ByteArray) =
+        NoiseNative.nativeDecrypt(handle, ciphertext)
+
+    override fun closeSession(handle: Long) = NoiseNative.nativeCloseSession(handle)
+}
+
 /**
  * Owns one Rust-side Noise session. This wrapper deliberately provides no
  * transport integration; the app cannot accidentally send plaintext through
  * the legacy identity-proof socket.
  */
-class NoisePeerSession private constructor(private var nativeHandle: Long) : AutoCloseable {
+class NoisePeerSession internal constructor(
+    private var nativeHandle: Long,
+    private val backend: NoiseSessionBackend
+) : AutoCloseable {
     @Synchronized
     fun writeHandshake(payload: ByteArray = byteArrayOf()): ByteArray =
-        NoiseNative.nativeWriteHandshake(requireHandle(), payload)
+        backend.writeHandshake(requireHandle(), payload)
 
     @Synchronized
     fun readHandshake(message: ByteArray): ByteArray =
-        NoiseNative.nativeReadHandshake(requireHandle(), message)
+        backend.readHandshake(requireHandle(), message)
 
     @Synchronized
     fun finishHandshake() {
-        NoiseNative.nativeFinishHandshake(requireHandle())
+        backend.finishHandshake(requireHandle())
         ready = true
     }
 
@@ -52,13 +82,13 @@ class NoisePeerSession private constructor(private var nativeHandle: Long) : Aut
     @Synchronized
     fun encrypt(plaintext: ByteArray): ByteArray {
         check(ready) { "Noise handshake is not complete." }
-        return NoiseNative.nativeEncrypt(requireHandle(), plaintext)
+        return backend.encrypt(requireHandle(), plaintext)
     }
 
     @Synchronized
     fun decrypt(ciphertext: ByteArray): ByteArray {
         check(ready) { "Noise handshake is not complete." }
-        return NoiseNative.nativeDecrypt(requireHandle(), ciphertext)
+        return backend.decrypt(requireHandle(), ciphertext)
     }
 
     @Synchronized
@@ -71,7 +101,7 @@ class NoisePeerSession private constructor(private var nativeHandle: Long) : Aut
         if (handle != 0L) {
             nativeHandle = 0L
             ready = false
-            NoiseNative.nativeCloseSession(handle)
+            backend.closeSession(handle)
         }
     }
 
@@ -91,7 +121,7 @@ class NoisePeerSession private constructor(private var nativeHandle: Long) : Aut
             return try {
                 val handle = NoiseNative.nativeCreateSession(initiator, privateCopy, peerKey.copyOf())
                 check(handle != 0L) { "Rust Noise core did not create a session." }
-                NoisePeerSession(handle)
+                NoisePeerSession(handle, JniNoiseSessionBackend)
             } finally {
                 privateCopy.fill(0)
             }
