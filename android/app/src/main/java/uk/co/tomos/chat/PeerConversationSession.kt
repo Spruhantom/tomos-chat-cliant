@@ -55,12 +55,12 @@ class PeerConversationSession(
         return try {
             // Persist SENT before writing so a very fast peer acknowledgement cannot
             // race with a later SENT update and downgrade DELIVERED back to SENT.
-            history.updateStatus(message.id, StoredMessageStatus.SENT)
+            history.updateOutgoingStatus(peerFingerprint, message.id, StoredMessageStatus.SENT)
             channel.send(EncryptedAppFrame(EncryptedAppFrame.Type.TEXT, message.id, text.toByteArray(Charsets.UTF_8)))
             message.copy(status = StoredMessageStatus.SENT)
         } catch (error: Exception) {
             statusRef.set(PeerConnectionStatus.FAILED)
-            try { history.updateStatus(message.id, StoredMessageStatus.FAILED) } catch (_: IOException) { }
+            try { history.updateOutgoingStatus(peerFingerprint, message.id, StoredMessageStatus.FAILED) } catch (_: IOException) { }
             throw error
         }
     }
@@ -78,7 +78,7 @@ class PeerConversationSession(
             when (frame.type) {
                 EncryptedAppFrame.Type.DELIVERY_ACK -> {
                     require(frame.payload.isEmpty()) { "Delivery acknowledgement must not contain a payload." }
-                    history.updateStatus(frame.messageId, StoredMessageStatus.DELIVERED)
+                    history.updateOutgoingStatus(peerFingerprint, frame.messageId, StoredMessageStatus.DELIVERED)
                     PeerConversationEvent.DeliveryConfirmed(frame.messageId)
                 }
                 EncryptedAppFrame.Type.TEXT -> {
