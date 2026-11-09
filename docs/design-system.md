@@ -58,6 +58,12 @@ Communication screens can adapt familiar SIP patterns:
 
 Messaging should have its own purpose-built layout: readable conversation bubbles, clear delivery/encryption status, attachment and voice-message controls, and a composer that remains usable with Android accessibility and keyboard features.
 
+## Foldables and adaptive window layouts
+
+TomChat must adapt to the available app window rather than maintain a hard-coded list of foldable models. The Android shell now switches between bottom navigation on compact windows and a navigation rail on medium/expanded windows, constrains content width on large displays, and makes first-run setup and the contacts screen vertically scrollable. The activity is explicitly resizable for split-screen and fold/unfold window changes.
+
+The next foldable milestone is hinge/posture awareness with Jetpack WindowManager: keep critical controls and content out of occluding hinges, and add book/tabletop-specific layouts where they improve messaging, QR scanning and calls. Preserve navigation, form and conversation state across posture changes. Validate both cover and inner displays, portrait/landscape, multi-window and external display windows. Do not identify devices by brand/model; use current window dimensions and reported folding features.
+
 ## Accessibility and responsive behaviour
 
 - Meet WCAG-style contrast targets for text and essential controls; neon accents are not a substitute for readable contrast.
