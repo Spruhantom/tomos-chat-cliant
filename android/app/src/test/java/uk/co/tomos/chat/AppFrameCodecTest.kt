@@ -20,6 +20,16 @@ class AppFrameCodecTest {
         assertArrayEquals(payload, decoded.payload)
     }
 
+    @Test fun roundTripsDeliveryAcknowledgementWithoutPayload() {
+        val id = UUID.randomUUID()
+        val decoded = AppFrameCodec.decode(AppFrameCodec.encode(
+            EncryptedAppFrame(EncryptedAppFrame.Type.DELIVERY_ACK, id, byteArrayOf())
+        ))
+        assertEquals(EncryptedAppFrame.Type.DELIVERY_ACK, decoded.type)
+        assertEquals(id, decoded.messageId)
+        assertArrayEquals(byteArrayOf(), decoded.payload)
+    }
+
     @Test fun rejectsOversizedPayloadOnEncode() {
         assertThrows(IllegalArgumentException::class.java) {
             AppFrameCodec.encode(EncryptedAppFrame(
