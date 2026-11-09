@@ -2,7 +2,7 @@
 
 **TomChat** is an Android-first project to build a decentralised, peer-to-peer messaging and voice app that keeps identity and communication under the user's control.
 
-> **Development status:** early Android foundation. The current app contains first-run age-band setup, local encrypted profile storage, a device signing identity, signed QR contact cards, and a direct TCP identity-proof prototype. It is not yet a functioning messenger. The Noise XX Rust core remains isolated from the Android transport, and end-to-end encrypted messaging is not yet available.
+> **Development status:** early Android foundation. The current app contains first-run age-band setup, local encrypted profile storage, a device signing identity, signed QR contact cards, and a direct TCP identity-proof prototype. It is not yet a functioning messenger. The Snow-based Noise XX core is now exposed to Android through JNI, with a Gradle cargo-ndk build for ARM and x86-64. Android instrumentation tests cover handshake, peer-key pinning and encrypted records. It is not yet connected to the direct socket or messaging UI, and end-to-end encrypted messaging is not yet available.
 
 ## Project principles
 
@@ -56,7 +56,7 @@ All networking must use the same authenticated peer identity and end-to-end encr
 
 ## Android application
 
-The Android foundation uses Kotlin, Jetpack Compose and Material 3, with an isolated Rust Noise XX prototype using Snow at `android/native/tomchat-noise`. The Rust Noise session is not yet connected to Android via JNI/UniFFI. See [docs/architecture.md](docs/architecture.md) for the signed identity binding and remaining security work. The TomOS visual design is documented in [docs/design-system.md](docs/design-system.md). Tom OS Hyprland 1 is the primary brand reference; TomOS Android SIP informs Android interaction patterns, without importing SIP or Linphone functionality.
+The Android foundation uses Kotlin, Jetpack Compose and Material 3, with an isolated Rust Noise XX prototype using Snow at `android/native/tomchat-noise`. The Rust Noise session is connected through a narrow JNI API; Rust owns session state, and Kotlin passes the signed contact key pin. The JNI session is not yet wired to the direct TCP transport. See [docs/architecture.md](docs/architecture.md) for remaining security work. The TomOS visual design is documented in [docs/design-system.md](docs/design-system.md). Tom OS Hyprland 1 is the primary brand reference; TomOS Android SIP informs Android interaction patterns, without importing SIP or Linphone functionality.
 
 Current UI foundation:
 - first-run display-name and date-of-birth screen with local age-band preview;
@@ -68,7 +68,7 @@ The age-band classifier, central capability policy and unit tests are under `and
 
 ## Build
 
-Requirements: Java 17, Android SDK 35 and Gradle 8.9.
+Requirements: Java 17, Android SDK 35, Android NDK 27.2.12479018, Gradle 8.9, Rust stable with Android targets, and `cargo-ndk` (`cargo install cargo-ndk --locked`).
 
 From the repository root:
 
