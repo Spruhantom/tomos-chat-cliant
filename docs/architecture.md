@@ -208,8 +208,9 @@ static key matches it.
 The Android Gradle build now invokes cargo-ndk to package the Rust library for
 arm64-v8a, armeabi-v7a and x86_64. Android CI installs the NDK and Rust targets,
 checks formatting, runs host-side Rust tests, and builds the native library as
-part of the APK build. Android instrumentation tests exercise the JNI handshake,
-peer-key pinning and bidirectional encrypted records on a device/emulator.
+part of the APK build. Android instrumentation tests have been added for the JNI handshake,
+peer-key pinning and bidirectional encrypted records. Their emulator CI run is
+pending; physical-device testing has not yet been performed.
 
 This is a cryptographic core integration only. It is not yet connected to the
 direct TCP socket, has no bounded stream framing or application message
