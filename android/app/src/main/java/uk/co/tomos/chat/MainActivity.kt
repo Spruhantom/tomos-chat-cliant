@@ -33,6 +33,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +49,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.IOException
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 
@@ -79,11 +85,37 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme(colorScheme = TomChatColors) {
-                var assignedBand by rememberSaveable { mutableStateOf<String?>(null) }
-                if (assignedBand == null) {
-                    AccountSetupScreen { band -> assignedBand = band.name }
-                } else {
-                    TomChatApp(AgeBand.valueOf(assignedBand!!))
+                var profile by remember { mutableStateOf<AccountProfile?>(null) }
+                var loading by remember { mutableStateOf(true) }
+                var storageError by remember { mutableStateOf<String?>(null) }
+                val scope = rememberCoroutineScope()
+                val store = remember { AccountProfileStore(applicationContext.filesDir) }
+
+                LaunchedEffect(store) {
+                    try {
+                        profile = withContext(Dispatchers.IO) { store.load() }
+                    } catch (error: IOException) {
+                        storageError = error.message ?: "The saved account could not be opened."
+                    } finally {
+                        loading = false
+                    }
+                }
+
+                when {
+                    loading -> ProfileStatusScreen("Opening your encrypted account…")
+                    storageError != null -> ProfileErrorScreen(storageError!!)
+                    profile != null -> TomChatApp(profile!!)
+                    else -> AccountSetupScreen { newProfile ->
+                        scope.launch {
+                            try {
+                                withContext(Dispatchers.IO) { store.save(newProfile) }
+                                profile = newProfile
+                                storageError = null
+                            } catch (error: IOException) {
+                                storageError = error.message ?: "The encrypted account could not be saved."
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -99,7 +131,28 @@ private enum class Destination(val label: String, val glyph: String) {
 
 
 @Composable
-private fun AccountSetupScreen(onAssigned: (AgeBand) -> Unit) {
+private fun ProfileStatusScreen(message: String) {
+    Box(Modifier.fillMaxSize().background(Void), contentAlignment = Alignment.Center) {
+        Text(message, color = Muted)
+    }
+}
+
+@Composable
+private fun ProfileErrorScreen(message: String) {
+    Column(
+        Modifier.fillMaxSize().background(Void).padding(24.dp),
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text("Account storage unavailable", color = Pink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
+        Text(message, color = Muted, fontSize = 13.sp)
+        Spacer(Modifier.height(12.dp))
+        Text("TomChat has not replaced or reset your saved profile. Resolve the storage/key problem before continuing.", color = Color(0xFFFFE14D), fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun AccountSetupScreen(onAssigned: (AccountProfile) -> Unit) {
     var displayName by rememberSaveable { mutableStateOf("") }
     var dateOfBirth by rememberSaveable { mutableStateOf("") }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
@@ -181,7 +234,17 @@ private fun AccountSetupScreen(onAssigned: (AgeBand) -> Unit) {
         ) { Text("Determine account experience") }
         if (assessedBand != null) {
             Spacer(Modifier.height(8.dp))
-            Button(onClick = { onAssigned(AgeBand.valueOf(assessedBand!!)) }, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = {
+                val band = AgeBand.valueOf(assessedBand!!)
+                onAssigned(
+                    AccountProfile(
+                        displayName = displayName.trim(),
+                        ageBand = band,
+                        ageAssurance = AgeAssuranceStatus.NOT_VERIFIED,
+                        guardianConsent = if (band == AgeBand.ADULT_18_PLUS) GuardianConsentStatus.NOT_REQUIRED else GuardianConsentStatus.PENDING
+                    )
+                )
+            }, modifier = Modifier.fillMaxWidth()) {
                 Text("Continue to TomChat")
             }
         }
@@ -191,7 +254,7 @@ private fun AccountSetupScreen(onAssigned: (AgeBand) -> Unit) {
 }
 
 @Composable
-private fun TomChatApp(ageBand: AgeBand) {
+private fun TomChatApp(profile: AccountProfile) {
     var destination by rememberSaveable { mutableStateOf(Destination.Chats) }
     Surface(modifier = Modifier.fillMaxSize(), color = Void) {
         Scaffold(
@@ -215,7 +278,7 @@ private fun TomChatApp(ageBand: AgeBand) {
                     Destination.Chats -> ChatsScreen()
                     Destination.Contacts -> ContactsScreen()
                     Destination.Calls -> CallsScreen()
-                    Destination.Settings -> SettingsScreen(ageBand)
+                    Destination.Settings -> SettingsScreen(profile)
                 }
             }
         }
@@ -326,7 +389,7 @@ private fun CallsScreen() {
 }
 
 @Composable
-private fun SettingsScreen(ageBand: AgeBand) {
+private fun SettingsScreen(profile: AccountProfile) {
     Column(Modifier.fillMaxSize()) {
         ScreenTitle("Settings", "Your device. Your identity. Your connections.")
         LazyColumn(
@@ -335,13 +398,13 @@ private fun SettingsScreen(ageBand: AgeBand) {
         ) {
             item {
                 val safetyState = AccountSafetyState(
-                    ageBand = ageBand,
-                    ageAssurance = AgeAssuranceStatus.NOT_VERIFIED,
-                    guardianConsent = if (ageBand == AgeBand.ADULT_18_PLUS) GuardianConsentStatus.NOT_REQUIRED else GuardianConsentStatus.PENDING
+                    ageBand = profile.ageBand,
+                    ageAssurance = profile.ageAssurance,
+                    guardianConsent = profile.guardianConsent
                 )
                 SettingCard(
                     "Account experience",
-                    "${ageBand.title}: ${ageBand.description} ${AccountSafetyPolicy.restrictionReason(safetyState)}",
+                    "${profile.displayName} • ${profile.ageBand.title}: ${profile.ageBand.description} ${AccountSafetyPolicy.restrictionReason(safetyState)}",
                     "LOCKED"
                 )
                 SettingCard(
