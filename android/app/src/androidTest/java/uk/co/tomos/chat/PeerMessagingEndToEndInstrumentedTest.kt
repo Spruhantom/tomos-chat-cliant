@@ -86,25 +86,29 @@ class PeerMessagingEndToEndInstrumentedTest {
             connectedAlice.sendVoiceSignal(callId, PeerVoiceSignal.INVITE)
             val invite = connectedBob.receiveEvent()
             assertTrue(invite is PeerConversationEvent.VoiceSignalReceived)
-            assertEquals(PeerVoiceSignal.INVITE, (invite as PeerConversationEvent.VoiceSignalReceived).signal)
-            assertEquals(callId, invite.callId)
+            val receivedInvite = invite as PeerConversationEvent.VoiceSignalReceived
+            assertEquals(PeerVoiceSignal.INVITE, receivedInvite.signal)
+            assertEquals(callId, receivedInvite.callId)
 
             connectedBob.sendVoiceSignal(callId, PeerVoiceSignal.ACCEPT)
             val accepted = connectedAlice.receiveEvent()
             assertTrue(accepted is PeerConversationEvent.VoiceSignalReceived)
-            assertEquals(PeerVoiceSignal.ACCEPT, (accepted as PeerConversationEvent.VoiceSignalReceived).signal)
+            val receivedAccept = accepted as PeerConversationEvent.VoiceSignalReceived
+            assertEquals(PeerVoiceSignal.ACCEPT, receivedAccept.signal)
 
             val pcm = ByteArray(VoiceAudioFormat.FRAME_BYTES) { index -> (index % 127).toByte() }
             connectedAlice.sendVoiceFrame(callId, pcm)
             val voice = connectedBob.receiveEvent()
             assertTrue(voice is PeerConversationEvent.VoiceFrameReceived)
-            assertEquals(callId, (voice as PeerConversationEvent.VoiceFrameReceived).callId)
-            assertTrue(pcm.contentEquals(voice.pcm))
+            val receivedVoice = voice as PeerConversationEvent.VoiceFrameReceived
+            assertEquals(callId, receivedVoice.callId)
+            assertTrue(pcm.contentEquals(receivedVoice.pcm))
 
             connectedBob.sendVoiceSignal(callId, PeerVoiceSignal.HANGUP)
             val hangup = connectedAlice.receiveEvent()
             assertTrue(hangup is PeerConversationEvent.VoiceSignalReceived)
-            assertEquals(PeerVoiceSignal.HANGUP, (hangup as PeerConversationEvent.VoiceSignalReceived).signal)
+            val receivedHangup = hangup as PeerConversationEvent.VoiceSignalReceived
+            assertEquals(PeerVoiceSignal.HANGUP, receivedHangup.signal)
         } finally {
             aliceSession?.close()
             bobSession?.close()
