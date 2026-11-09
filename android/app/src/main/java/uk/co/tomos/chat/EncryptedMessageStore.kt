@@ -72,7 +72,7 @@ class EncryptedMessageStore(filesDir: File) {
     }
 
     private fun decryptSnapshot(): List<StoredChatMessage> {
-        try {
+        return try {
             val raw = file.openRead().use { it.readBytes() }
             val input = DataInputStream(ByteArrayInputStream(raw))
             require(input.readInt() == FILE_VERSION) { "Unsupported message history version." }
