@@ -11,6 +11,33 @@ import java.util.UUID
 @RunWith(AndroidJUnit4::class)
 class EncryptedMessageStoreInstrumentedTest {
     @Test
+    fun duplicateMessageIdsAreIdempotentAndDeliveryAckIsPeerScoped() {
+        val directory = File(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "message-dedupe-test").apply {
+            deleteRecursively()
+            mkdirs()
+        }
+        try {
+            val store = EncryptedMessageStore(directory)
+            val id = UUID.randomUUID()
+            val outgoing = StoredChatMessage(
+                id, "peer-a", StoredMessageDirection.OUTGOING,
+                StoredMessageStatus.QUEUED, 100L, "hello"
+            )
+            assertTrue(store.append(outgoing))
+            assertTrue(!store.append(outgoing.copy(createdAtEpochMillis = 200L)))
+            assertEquals(1, store.load("peer-a").size)
+
+            assertTrue(!store.updateOutgoingStatus("peer-b", id, StoredMessageStatus.DELIVERED))
+            assertTrue(store.updateOutgoingStatus("peer-a", id, StoredMessageStatus.SENT))
+            assertTrue(store.updateOutgoingStatus("peer-a", id, StoredMessageStatus.DELIVERED))
+            assertTrue(!store.updateOutgoingStatus("peer-a", id, StoredMessageStatus.SENT))
+            assertEquals(StoredMessageStatus.DELIVERED, store.load("peer-a").single().status)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
     fun persistsMessagesAcrossStoreInstancesAndFiltersByPeer() {
         val directory = File(androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "message-store-test").apply {
             deleteRecursively()
