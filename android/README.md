@@ -17,6 +17,10 @@ The debug APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 GitHub Actions workflow `.github/workflows/android.yml` runs the unit tests, builds the debug APK, and uploads it as a workflow artifact. The existing Rust desktop CI remains separate and continues to validate the preserved desktop code.
 
+## Age-aware account setup
+
+The first-run screen collects a display name and a date of birth in `YYYY-MM-DD` format, then assigns the 5–8, 9–12, 13–17 or 18+ experience band. Independent setup for under-fives is blocked pending a guardian-led flow. The classifier is covered by unit tests. This is only a self-declared local preview: age assurance and guardian consent are not implemented, and the selected band must not unlock restricted production features yet. See [account age and safety requirements](../docs/account-age-safety.md).
+
 ## Current Android screens
 
 - Chats: zero-server connection status and empty conversation state.
