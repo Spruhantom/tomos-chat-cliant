@@ -15,6 +15,10 @@ TomChat is an Android-first, decentralised messaging and voice application. This
 
 Android app with one-to-one and group messaging, voice and group voice, file sharing, QR/contact exchange, local encrypted backups, and encrypted peer-to-peer backup to trusted devices.
 
+## Age-aware account setup
+
+TomChat uses one app with automatic age-band assignment during first-run setup. The current local classifier is a prototype only; age assurance and guardian consent are separate, not yet implemented checks. See [age-aware account and child safety requirements](docs/account-age-safety.md).
+
 ## Visual design
 
 TomChat follows the [TomOS visual design system](docs/design-system.md): Tom OS Hyprland 1 supplies the branding and colour palette, while TomOS Android SIP informs Android interaction patterns.
