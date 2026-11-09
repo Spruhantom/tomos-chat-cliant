@@ -13,8 +13,9 @@ class EncryptedPeerChannelTest {
     /** Test double only: this verifies channel wiring, not cryptography. */
     private class TestBackend : NoiseSessionBackend {
         override fun writeHandshake(handle: Long, payload: ByteArray) = byteArrayOf(0x41)
-        override fun readHandshake(handle: Long, message: ByteArray) {
+        override fun readHandshake(handle: Long, message: ByteArray): ByteArray {
             require(message.contentEquals(byteArrayOf(0x41)))
+            return byteArrayOf()
         }
         override fun finishHandshake(handle: Long) = Unit
         override fun encrypt(handle: Long, plaintext: ByteArray) = plaintext.reversedArray()
