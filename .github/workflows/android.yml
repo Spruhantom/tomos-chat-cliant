@@ -63,6 +63,9 @@ jobs:
           JAVA_TOOL_OPTIONS: -Djava.library.path=${{ runner.temp }}/tomchat-noise-host/release
         run: gradle --no-daemon :android:app:testDebugUnitTest
 
+      - name: Compile Android instrumentation tests without booting an emulator
+        run: gradle --no-daemon :android:app:compileDebugAndroidTestKotlin
+
       - name: Build debug APK
         run: gradle --no-daemon :android:app:assembleDebug
 
