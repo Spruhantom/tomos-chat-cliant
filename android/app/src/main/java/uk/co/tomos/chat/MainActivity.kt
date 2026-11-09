@@ -334,7 +334,21 @@ private fun SettingsScreen(ageBand: AgeBand) {
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             item {
-                SettingCard("Account experience", "${ageBand.title}: ${ageBand.description} Age assurance and guardian consent are not connected yet; this is only a local, self-declared age-band preview.", "VERIFICATION PENDING")
+                val safetyState = AccountSafetyState(
+                    ageBand = ageBand,
+                    ageAssurance = AgeAssuranceStatus.NOT_VERIFIED,
+                    guardianConsent = if (ageBand == AgeBand.ADULT_18_PLUS) GuardianConsentStatus.NOT_REQUIRED else GuardianConsentStatus.PENDING
+                )
+                SettingCard(
+                    "Account experience",
+                    "${ageBand.title}: ${ageBand.description} ${AccountSafetyPolicy.restrictionReason(safetyState)}",
+                    "LOCKED"
+                )
+                SettingCard(
+                    "Safety permissions",
+                    "Messaging, calls, file sharing and social capabilities are checked by the central account policy. They remain disabled in this prototype until age assurance (and guardian approval for minors) is completed.",
+                    "RESTRICTED"
+                )
             }
             item {
                 SettingCard("Network policy", "Strict peer-to-peer. No application servers, relays, push gateways or hosted discovery.", "ZERO SERVER")
