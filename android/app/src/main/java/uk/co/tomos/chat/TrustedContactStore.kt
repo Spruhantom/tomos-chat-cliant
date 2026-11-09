@@ -15,9 +15,18 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-data class TrustedContact(val displayName: String, val encodedPublicKey: ByteArray, val fingerprint: String) {
+data class TrustedContact(
+    val displayName: String,
+    val encodedPublicKey: ByteArray,
+    val fingerprint: String,
+    val noiseStaticPublicKey: ByteArray? = null
+) {
     override fun equals(other: Any?): Boolean = other is TrustedContact &&
-        displayName == other.displayName && encodedPublicKey.contentEquals(other.encodedPublicKey) && fingerprint == other.fingerprint
+        displayName == other.displayName && encodedPublicKey.contentEquals(other.encodedPublicKey) &&
+        fingerprint == other.fingerprint &&
+        ((noiseStaticPublicKey == null && other.noiseStaticPublicKey == null) ||
+            (noiseStaticPublicKey != null && other.noiseStaticPublicKey != null &&
+                noiseStaticPublicKey.contentEquals(other.noiseStaticPublicKey)))
     override fun hashCode(): Int = 31 * displayName.hashCode() + encodedPublicKey.contentHashCode()
 }
 
@@ -31,15 +40,16 @@ class TrustedContactStore(filesDir: File) {
         if (!file.baseFile.exists()) return emptyList()
         try {
             val input = DataInputStream(ByteArrayInputStream(file.openRead().use { it.readBytes() }))
-            require(input.readInt() == VERSION) { "Unsupported trusted-contact store version." }
+            val version = input.readInt()
+            require(version in LEGACY_VERSION..VERSION) { "Unsupported trusted-contact store version." }
             val ivSize = input.readInt()
             require(ivSize == 12) { "Invalid trusted-contact store header." }
             val iv = ByteArray(ivSize).also(input::readFully)
             val encrypted = ByteArray(input.available()).also(input::readFully)
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, existingKey(), GCMParameterSpec(128, iv))
-            cipher.updateAAD(byteArrayOf(VERSION.toByte()))
-            return decode(cipher.doFinal(encrypted))
+            cipher.updateAAD(byteArrayOf(version.toByte()))
+            decode(cipher.doFinal(encrypted), version)
         } catch (error: Exception) {
             throw IOException("Trusted contacts could not be decrypted; existing data was not changed.", error)
         }
@@ -53,7 +63,7 @@ class TrustedContactStore(filesDir: File) {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
             cipher.updateAAD(byteArrayOf(VERSION.toByte()))
-            val encrypted = cipher.doFinal(encode(contacts))
+            val encrypted = cipher.doFinal(encodeV2(contacts))
             val output = ByteArrayOutputStream()
             DataOutputStream(output).use {
                 it.writeInt(VERSION); it.writeInt(cipher.iv.size); it.write(cipher.iv); it.write(encrypted)
@@ -70,32 +80,47 @@ class TrustedContactStore(filesDir: File) {
         }
     }
 
-    private fun encode(contacts: List<TrustedContact>): ByteArray {
+    private fun encodeV2(contacts: List<TrustedContact>): ByteArray {
         val bytes = ByteArrayOutputStream()
         DataOutputStream(bytes).use { out ->
             out.writeInt(contacts.size)
             contacts.forEach {
                 require(it.displayName.isNotBlank() && it.displayName.length <= 64)
-                require(it.encodedPublicKey.size <= 512)
-                out.writeUTF(it.displayName); out.writeInt(it.encodedPublicKey.size)
-                out.write(it.encodedPublicKey); out.writeUTF(it.fingerprint)
+                require(it.encodedPublicKey.size in 1..512)
+                require(ContactCardCodec.fingerprint(it.encodedPublicKey) == it.fingerprint)
+                require(it.noiseStaticPublicKey == null || it.noiseStaticPublicKey.size == 32)
+                out.writeUTF(it.displayName)
+                out.writeInt(it.encodedPublicKey.size); out.write(it.encodedPublicKey)
+                out.writeUTF(it.fingerprint)
+                val noiseKey = it.noiseStaticPublicKey
+                out.writeInt(noiseKey?.size ?: -1)
+                if (noiseKey != null) out.write(noiseKey)
             }
         }
         return bytes.toByteArray()
     }
 
-    private fun decode(bytes: ByteArray): List<TrustedContact> {
+    private fun decode(bytes: ByteArray, version: Int): List<TrustedContact> {
         val input = DataInputStream(ByteArrayInputStream(bytes))
         val count = input.readInt()
         require(count in 0..1000)
         val contacts = List(count) {
             val name = input.readUTF()
+            require(name.isNotBlank() && name.length <= 64)
             val size = input.readInt()
             require(size in 1..512)
             val key = ByteArray(size).also(input::readFully)
             val fingerprint = input.readUTF()
             require(ContactCardCodec.fingerprint(key) == fingerprint)
-            TrustedContact(name, key, fingerprint)
+            val noiseKey = if (version >= VERSION) {
+                val noiseSize = input.readInt()
+                when (noiseSize) {
+                    -1 -> null
+                    32 -> ByteArray(32).also(input::readFully)
+                    else -> throw IllegalArgumentException("Invalid trusted Noise public key length.")
+                }
+            } else null
+            TrustedContact(name, key, fingerprint, noiseKey)
         }
         require(input.available() == 0)
         require(contacts.map { it.fingerprint }.distinct().size == contacts.size)
@@ -118,7 +143,8 @@ class TrustedContactStore(filesDir: File) {
     }
 
     private companion object {
-        const val VERSION = 1
+        const val LEGACY_VERSION = 1
+        const val VERSION = 2
         const val TRANSFORMATION = "AES/GCM/NoPadding"
     }
 }
