@@ -29,11 +29,11 @@ class EncryptedPeerChannelTest {
             try {
                 val serverFuture = executor.submit<EncryptedPeerChannel> {
                     val accepted = listener.accept()
-                    val peer = AuthenticatedPeerConnection(accepted, "client")
+                    val peer = AuthenticatedPeerConnection(TcpPeerTransportSocket(accepted), "client")
                     peer.establishEncryptedChannel(NoisePeerSession(2L, TestBackend()), false)
                 }
                 Socket("127.0.0.1", listener.localPort).use { socket ->
-                    val client = AuthenticatedPeerConnection(socket, "server")
+                    val client = AuthenticatedPeerConnection(TcpPeerTransportSocket(socket), "server")
                     client.establishEncryptedChannel(NoisePeerSession(1L, TestBackend()), true).use { channel ->
                         val serverChannel = serverFuture.get(5, TimeUnit.SECONDS)
                         try {
