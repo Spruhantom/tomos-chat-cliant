@@ -70,6 +70,16 @@ impl NoiseIdentity {
         use std::io::Write;
         use std::process::{Command, Stdio};
 
+        let mut existing = Command::new("secret-tool")
+            .args(["lookup", "application", "tomchat", "key", "noise-static-v1"])
+            .stdin(Stdio::null()).stderr(Stdio::null()).output()
+            .map_err(|error| format!("Could not check Secret Service: {error}"))?;
+        let already_exists = existing.status.success();
+        existing.stdout.zeroize();
+        if already_exists {
+            return Err("A Noise identity already exists; refusing to replace it.".into());
+        }
+
         let mut child = Command::new("secret-tool")
             .args(["store", "--label=TomChat Noise identity",
                 "application", "tomchat", "key", "noise-static-v1"])
