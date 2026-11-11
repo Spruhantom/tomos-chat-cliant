@@ -1,6 +1,3 @@
-pub mod identity;
-pub mod peer_transport;
-
 //! Experimental Noise session core for TomChat.
 //!
 //! Uses Noise XX with Noise_XX_25519_ChaChaPoly_SHA256. The caller must
@@ -10,6 +7,9 @@ pub mod peer_transport;
 //!
 //! Prototype only; not independently audited. Do not enable app messaging
 //! until key provisioning, identity binding, FFI and security review complete.
+
+pub mod identity;
+pub mod peer_transport;
 
 use snow::{params::NoiseParams, Builder, HandshakeState, TransportState};
 use std::fmt;
