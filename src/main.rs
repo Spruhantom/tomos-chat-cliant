@@ -269,6 +269,87 @@ fn build_contacts(app: &adw::Application) {
     page.set_content(Some(&shell));
     window.set_content(Some(&page));
 
+    let qr_status = status.clone();
+    let qr_card_view = own_card.clone();
+    let qr_parent = window.clone();
+    show_qr.connect_clicked(move |_| {
+        let buffer = qr_card_view.buffer();
+        let encoded = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false).to_string();
+        if !encoded.starts_with("TOMCHAT-CONTACT-V2.") {
+            qr_status.set_text("Create or recover your device identity before displaying a QR code.");
+            return;
+        }
+        match qr::write_png(encoded.trim()) {
+            Ok(path) => {
+                let qr_window = gtk::Window::builder()
+                    .title("Your TomChat contact QR code")
+                    .transient_for(&qr_parent)
+                    .modal(true)
+                    .default_width(440)
+                    .default_height(520)
+                    .build();
+                let panel = gtk::Box::new(gtk::Orientation::Vertical, 12);
+                panel.set_margin_top(20);
+                panel.set_margin_bottom(20);
+                panel.set_margin_start(20);
+                panel.set_margin_end(20);
+                let picture = gtk::Picture::for_filename(&path);
+                picture.set_can_shrink(true);
+                picture.set_content_fit(gtk::ContentFit::Contain);
+                picture.set_size_request(360, 360);
+                panel.append(&picture);
+                let hint = gtk::Label::new(Some("Let another TomChat user scan this code, then compare fingerprints before trusting the contact."));
+                hint.set_wrap(true);
+                panel.append(&hint);
+                let close = gtk::Button::with_label("Close");
+                let close_window = qr_window.clone();
+                close.connect_clicked(move |_| close_window.close());
+                panel.append(&close);
+                qr_window.set_child(Some(&panel));
+                let cleanup = path.clone();
+                qr_window.connect_close_request(move |_| {
+                    let _ = std::fs::remove_file(&cleanup);
+                    glib::Propagation::Proceed
+                });
+                qr_window.present();
+            }
+            Err(error) => qr_status.set_text(&format!("Could not generate contact QR code: {error}")),
+        }
+    });
+
+    let scan_status = status.clone();
+    let scan_parent = window.clone();
+    let scan_input = import_input.clone();
+    let scan_confirm = fingerprint_confirm.clone();
+    scan_qr.connect_clicked(move |_| {
+        let chooser = gtk::FileChooserNative::new(
+            Some("Choose an image containing a TomChat QR code"),
+            Some(&scan_parent),
+            gtk::FileChooserAction::Open,
+            Some("Open"),
+            Some("Cancel"),
+        );
+        let input = scan_input.clone();
+        let status = scan_status.clone();
+        let confirm = scan_confirm.clone();
+        chooser.connect_response(move |dialog, response| {
+            if response == gtk::ResponseType::Accept {
+                if let Some(path) = dialog.file().and_then(|file| file.path()) {
+                    match qr::decode_image(&path) {
+                        Ok(payload) => {
+                            input.buffer().set_text(&payload);
+                            confirm.set_active(false);
+                            status.set_text("QR decoded. Compare the displayed fingerprint with the person, tick the confirmation box, then verify and trust the contact.");
+                        }
+                        Err(error) => status.set_text(&format!("Could not read a TomChat QR code from that image: {error}")),
+                    }
+                }
+            }
+            dialog.destroy();
+        });
+        chooser.show();
+    });
+
     let create_status = status.clone();
     let signing_for_create = signing_identity.clone();
     let noise_for_create = noise_identity.clone();
