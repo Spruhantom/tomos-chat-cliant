@@ -1,3 +1,4 @@
+pub mod contact_card;
 pub mod conversations;
 pub mod messaging;
 pub mod realtime;
