@@ -27,9 +27,10 @@ out-of-order/replayed records through the protocol nonce sequence.
 - The existing QR contact card currently signs an ECDSA identity key, not a
   Noise X25519 static key. A signed binding between those keys must be designed
   and added before this crate can authenticate existing trusted contacts.
-- JNI/UniFFI integration and the direct TCP adapter are not implemented.
+- A reusable Rust direct TCP adapter now performs the three-message Noise XX handshake, pins the remote static key, and carries length-bounded encrypted frames. It is covered by loopback integration tests.
+- The Android JNI wrapper does not yet route Kotlin sockets through this adapter; that cross-platform integration remains future work.
 - The existing Kotlin signed-nonce handshake is not replaced yet.
-- There is no application UI or message path using this crate.
+- The Linux GTK UI and Android application message paths do not yet use this shared TCP adapter.
 
 ## Security status
 
