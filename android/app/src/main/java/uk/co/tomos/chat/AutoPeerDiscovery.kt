@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.wifi.WifiManager
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.os.Build
 import java.io.IOException
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
@@ -136,15 +137,28 @@ class AutoPeerDiscovery(
                 if (advertisedFingerprint == localFingerprint) return
                 if (advertisedFingerprint != contact.fingerprint) return
                 if (!PeerConnectionRole.shouldInitiate(localFingerprint, contact.fingerprint)) return
-                val host = info.host?.hostAddress ?: return
                 val port = info.port
                 if (port !in 1..65535) return
+                val hosts = if (Build.VERSION.SDK_INT >= 34) {
+                    info.hostAddresses.map { it.hostAddress }
+                } else {
+                    listOfNotNull(info.host?.hostAddress)
+                }.distinct()
+                if (hosts.isEmpty()) return
                 executor.execute {
-                    try {
-                        val session = coordinator.connect(host, port, contact)
-                        publishConnected(session)
-                    } catch (error: Exception) {
-                        if (!closed.get() && !completed.get()) fail(error)
+                    var lastError: Exception? = null
+                    for (host in hosts) {
+                        if (closed.get() || completed.get()) return@execute
+                        try {
+                            val session = coordinator.connect(host, port, contact)
+                            publishConnected(session)
+                            return@execute
+                        } catch (error: Exception) {
+                            lastError = error
+                        }
+                    }
+                    if (!closed.get() && !completed.get()) {
+                        fail(lastError ?: IOException("No usable local address was found for this trusted peer."))
                     }
                 }
             }
