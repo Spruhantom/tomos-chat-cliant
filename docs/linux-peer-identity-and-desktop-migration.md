@@ -1,51 +1,73 @@
-# Linux peer identity and desktop migration
+# Linux peer identity and desktop client
 
-## Existing identity contract
+## Current implementation
 
-Android already defines the contact identity format that Linux must interoperate with:
+The Linux desktop client is now part of `main` in the same repository as the Android client. It is a native Rust GTK4/libadwaita application using the shared Rust Noise transport core.
 
-- V2 contact cards are self-signed with ECDSA P-256 (`SHA256withECDSA`).
-- The canonical signed fields include the display name, encoded P-256 public key, its SHA-256 fingerprint, and the 32-byte Noise X25519 static public key.
+The active Linux UI currently supports:
+- loading or creating a local signing and Noise identity;
+- storing identity material and trusted contacts through the desktop Secret Service (`secret-tool`);
+- generating a signed V2 contact card;
+- importing and verifying a signed V2 contact card;
+- requiring explicit user confirmation after out-of-band fingerprint comparison;
+- listing/removing trusted contacts;
+- direct TCP connect/listen to a selected trusted contact;
+- pinned Noise XX handshake before encrypted peer chat.
+
+The Linux client is a prototype. It has not yet passed real-world installation and Android/Linux interoperability testing across supported distributions and physical devices.
+
+## Shared identity contract
+
+- V2 contact cards use ECDSA P-256 with SHA-256.
+- Canonical signed fields include the display name, encoded P-256 public key, SHA-256 fingerprint and 32-byte Noise X25519 static public key.
 - The encoded V2 card is prefixed `TOMCHAT-CONTACT-V2`.
-- A V1 card can still be imported for migration, but it has no Noise key binding and must never be accepted as an encrypted peer identity.
-- Android's trusted-contact store persists the Noise key binding in its encrypted version-2 format.
+- V1 cards may be read for migration, but have no Noise-key binding and must not be accepted as encrypted peer identities.
+- The Noise public key is trusted only after signature/fingerprint verification and explicit user trust.
 
-Linux must use the same canonicalisation, fingerprint formatting, signature algorithm, and V1/V2 rules. It must not invent a second contact-card format.
+Android and Linux must preserve identical canonicalisation, fingerprint formatting, signature algorithm and V1/V2 rules. Use the shared test vector at `android/app/src/test/resources/contact-card-v2.txt` for compatibility checks.
 
-## Linux identity storage requirements
+## Linux identity storage
 
-The Linux client must hold two distinct keys:
+The client stores two distinct identities:
+1. P-256 signing identity for contact-card signatures.
+2. Noise X25519 static identity for Noise XX.
 
-1. P-256 signing identity, used to sign and verify contact cards.
-2. Noise X25519 static identity, used by the Noise XX transport.
+Private identity material must remain in the desktop Secret Service/keyring. The application must fail closed when secure storage is unavailable; it must not write private keys to plaintext files, environment variables, command-line arguments or logs. Key rotation requires a new signed V2 card and renewed contact verification.
 
-The Noise public key must be included in the signed V2 contact card. A contact's Noise public key is trusted only after the contact-card signature and fingerprint have been verified and the user has explicitly trusted that fingerprint.
-
-Private key persistence must use the desktop Secret Service API (for example GNOME Keyring or another compatible Secret Service provider). The application must fail closed when no secure key store is available. It must not silently write private keys to plaintext files, environment variables, command-line arguments, or logs. Key rotation must create a new signed V2 card and require contacts to re-verify the changed fingerprint/key binding.
+Runtime dependency: `secret-tool` (Debian/Ubuntu package `libsecret-tools`; Arch package `libsecret`) and an unlocked Secret Service provider in the desktop session.
 
 ## Direct peer connection contract
 
 - A peer address is a transport hint, never an identity.
-- The Noise XX handshake must complete before application payloads are accepted.
-- The remote Noise static key must match the key in the verified, trusted V2 contact card.
-- Frames are length-bounded and encrypted/authenticated by the Noise transport state.
-- Discovery may be manual QR/contact-card exchange or local-network discovery; discovery results are untrusted until identity verification.
-- No central account, login endpoint, hosted directory, relay dependency, or global user database is part of this client contract.
+- The Noise XX handshake and pinned remote static-key check must succeed before application payloads are accepted.
+- Frames are length-bounded and encrypted/authenticated by Noise.
+- Manual contact-card exchange and local discovery results remain untrusted until identity verification.
+- No central account, login endpoint, hosted directory, relay or global user database is part of the client contract.
+- Direct reachability is best-effort and depends on firewall, NAT, carrier and local network conditions.
 
-## Desktop migration sequence
+## Build and install
 
-1. Shared Rust Noise identity primitive and encrypted TCP channel (in progress in PR #19).
-2. Linux Secret Service-backed identity and trusted-contact store.
-3. Rust V2 contact-card codec with cross-language test vectors shared with Android.
-4. Linux onboarding: create/load identity, display own contact QR, import a contact card, verify fingerprint, and explicitly trust.
-5. Replace the existing GTK sign-in screen with a peer/contact home screen.
-6. Connect GTK conversations to authenticated direct peer sessions; do not display a successful connection until the pinned-key Noise handshake succeeds.
-7. Add Android/Linux interoperability tests and only then remove the legacy REST/WebSocket UI modules.
+From the repository root:
 
-## Security gates
+```bash
+cargo build --release --locked
+cargo test --locked
+```
 
-- Never downgrade a V2 trusted contact to an unbound V1 card.
-- Never accept a caller-provided Noise key without verifying the signed card and checking the trusted fingerprint.
-- Never claim end-to-end encryption for a UI path that still displays or sends opaque legacy envelopes.
-- Do not enable message composition until the selected peer has an authenticated Noise transport and message payload encryption is wired end-to-end.
-- Do not merge the desktop migration until key storage, contact verification, handshake mismatch, malformed frame, reconnect, and interoperability tests pass.
+The executable is `target/release/tomchat-client`. For Arch/Omarchy, Debian and Ubuntu, use the root installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Spruhantom/tomos-chat-cliant/main/install.sh | bash
+```
+
+See [README](../README.md) and [CONTRIBUTING](../CONTRIBUTING.md) for prerequisites and contributor checks.
+
+## Remaining validation
+
+- [ ] Test identity creation/load and contact import/removal on Arch/Omarchy.
+- [ ] Test identity creation/load and contact import/removal on Debian/Ubuntu.
+- [ ] Verify locked/missing Secret Service behaviour fails safely.
+- [ ] Verify Android and Linux accept the same V2 test vector.
+- [ ] Demonstrate Android/Linux Noise handshake and encrypted bidirectional messages.
+- [ ] Exercise wrong-key, malformed-frame, tampered-frame and reconnect cases.
+- [ ] Review the implementation independently before production claims.
