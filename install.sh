@@ -3,7 +3,6 @@
 # Supports Arch Linux/Omarchy and Debian/Ubuntu.
 set -Eeuo pipefail
 
-APP_NAME="TomChat"
 BIN_NAME="tomchat-client"
 REPO_URL="https://github.com/Spruhantom/tomos-chat-cliant.git"
 INSTALL_DIR="${HOME}/.local/bin"
@@ -30,20 +29,15 @@ fi
 
 command -v git >/dev/null 2>&1 || die "git is required. Install git and run this script again."
 command -v curl >/dev/null 2>&1 || die "curl is required. Install curl and run this script again."
-
-SUDO=""
-if [[ "${EUID}" -ne 0 ]]; then
-  command -v sudo >/dev/null 2>&1 || die "sudo is required to install system build dependencies."
-  SUDO="sudo"
-fi
+command -v sudo >/dev/null 2>&1 || die "sudo is required to install system build dependencies."
 
 if command -v pacman >/dev/null 2>&1; then
   log "Detected Arch Linux or Omarchy."
-  $SUDO pacman -Sy --needed --noconfirm base-devel pkgconf gtk4 libadwaita git curl
+  sudo pacman -Sy --needed --noconfirm base-devel pkgconf gtk4 libadwaita git curl
 elif command -v apt-get >/dev/null 2>&1; then
   log "Detected Debian or Ubuntu."
-  $SUDO apt-get update
-  $SUDO apt-get install -y build-essential pkg-config libgtk-4-dev libadwaita-1-dev git curl ca-certificates
+  sudo apt-get update
+  sudo apt-get install -y build-essential pkg-config libgtk-4-dev libadwaita-1-dev git curl ca-certificates
 else
   die "Unsupported distribution. Supported package managers: pacman (Arch/Omarchy) and apt-get (Debian/Ubuntu)."
 fi
@@ -55,9 +49,11 @@ if ! command -v cargo >/dev/null 2>&1; then
   source "${HOME}/.cargo/env"
 fi
 
-command -v cargo >/dev/null 2>&1 || die "Rust installation did not provide cargo. Open a new terminal and retry."
-rustup toolchain install stable --profile minimal
-rustup default stable
+command -v cargo >/dev/null 2>&1 || die "Rust installation did not provide cargo."
+if command -v rustup >/dev/null 2>&1; then
+  rustup toolchain install stable --profile minimal
+  rustup default stable
+fi
 
 TMP_DIR="$(mktemp -d -t tomchat-install.XXXXXX)"
 log "Downloading TomChat source."
@@ -90,5 +86,5 @@ if [[ ":${PATH}:" != *":${INSTALL_DIR}:"* ]]; then
   log "Add ~/.local/bin to PATH, or launch using: ${INSTALL_DIR}/${BIN_NAME}"
 fi
 log "Desktop launcher: ${DESKTOP_FILE}"
-log "To uninstall: bash install.sh --uninstall (from a downloaded copy), or remove the binary and desktop file shown above."
+log "To uninstall: download install.sh and run: bash install.sh --uninstall"
 log "Note: this installs the Linux desktop client currently present in this repository; it does not install the Android app."
