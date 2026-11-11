@@ -23,7 +23,7 @@
 - [ ] Explicit listen/connect for user-supplied direct addresses.
 - [ ] Encrypted one-to-one text messages and delivery acknowledgements.
 - [ ] Local encrypted history and outbox with bounded retry while peers are reachable.
-- [ ] No server, relay, push gateway, hosted discovery or server-side mailbox.
+- [ ] No centralised service, relay, push gateway, hosted discovery or remote mailbox.
 
 ## Milestone 4 — discovery and richer features
 
