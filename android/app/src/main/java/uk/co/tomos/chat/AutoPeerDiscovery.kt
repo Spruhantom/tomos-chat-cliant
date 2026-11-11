@@ -10,6 +10,7 @@ import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * LAN-only automatic peer discovery. NSD is used solely to find a trusted
@@ -35,7 +36,7 @@ class AutoPeerDiscovery(
     private val executor: ScheduledExecutorService = Executors.newScheduledThreadPool(2)
     private val closed = AtomicBoolean(false)
     private val completed = AtomicBoolean(false)
-    private val resolving = AtomicBoolean(false)
+    private val resolvingServices = ConcurrentHashMap.newKeySet<String>()
     private var timeout: ScheduledFuture<*>? = null
     private var registration: NsdManager.RegistrationListener? = null
     private var discovery: NsdManager.DiscoveryListener? = null
@@ -121,13 +122,14 @@ class AutoPeerDiscovery(
 
     @Suppress("DEPRECATION")
     private fun resolve(found: NsdServiceInfo) {
-        if (closed.get() || completed.get() || !resolving.compareAndSet(false, true)) return
+        val serviceKey = found.serviceName + "|" + (found.host?.hostAddress ?: "")
+        if (closed.get() || completed.get() || !resolvingServices.add(serviceKey)) return
         nsd.resolveService(found, object : NsdManager.ResolveListener {
             override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) {
-                resolving.set(false)
+                resolvingServices.remove(serviceKey)
             }
             override fun onServiceResolved(info: NsdServiceInfo) {
-                resolving.set(false)
+                resolvingServices.remove(serviceKey)
                 if (closed.get() || completed.get()) return
                 val advertisedFingerprint = info.attributes["fp"]
                     ?.toString(Charsets.US_ASCII)
