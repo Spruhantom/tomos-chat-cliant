@@ -44,6 +44,15 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Temporary test-release signing: use Android's standard debug key so a
+    // release-variant APK can be installed and tested without private secrets.
+    // Replace with a protected production keystore before a public production release.
+    buildTypes {
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
