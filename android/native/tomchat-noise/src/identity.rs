@@ -81,12 +81,13 @@ impl NoiseIdentity {
         let mut secret = [0u8; 64];
         secret[..32].copy_from_slice(&self.private_key);
         secret[32..].copy_from_slice(&self.public_key);
-        let encoded = hex_encode(&secret);
+        let mut encoded = hex_encode(&secret);
         secret.zeroize();
 
         if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(encoded.as_bytes())
-                .map_err(|error| format!("Could not pass identity to Secret Service: {error}"))?;
+            let result = stdin.write_all(encoded.as_bytes());
+            encoded.zeroize();
+            result.map_err(|error| format!("Could not pass identity to Secret Service: {error}"))?;
         }
         let status = child.wait()
             .map_err(|error| format!("Could not save identity in Secret Service: {error}"))?;
@@ -172,4 +173,18 @@ mod tests {
         assert_ne!(first.public_key(), second.public_key());
         first.with_private_key(|key| assert_eq!(key.len(), 32));
     }
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn secret_encoding_round_trips_without_changing_key_bytes() {
+        let identity = NoiseIdentity::generate().unwrap();
+        let mut raw = [0u8; 64];
+        identity.with_private_key(|private| raw[..32].copy_from_slice(private));
+        raw[32..].copy_from_slice(identity.public_key());
+        let encoded = hex_encode(&raw);
+        let decoded = hex_decode(&encoded).unwrap();
+        assert_eq!(decoded.as_slice(), raw);
+        assert!(hex_decode("not-hex").is_err());
+        raw.zeroize();
+    }
+
 }
