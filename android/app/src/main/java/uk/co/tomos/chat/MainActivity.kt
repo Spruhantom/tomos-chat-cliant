@@ -253,7 +253,7 @@ private fun AccountSetupScreen(onAssigned: (AccountProfile) -> Unit) {
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii)
         )
         Spacer(Modifier.height(10.dp))
-        Text("Your full date of birth should not be retained in the finished account. Age assurance and guardian consent will be separate steps.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
+        Text("Your date of birth is used only to assign an age band. It is not saved in your account; guardian approval is handled separately for minor accounts.", color = Muted, fontSize = 11.sp, lineHeight = 17.sp)
         if (error != null) {
             Spacer(Modifier.height(10.dp))
             Text(error!!, color = Color(0xFFFF6B83), fontSize = 12.sp)
