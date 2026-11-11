@@ -1,7 +1,7 @@
 //! Direct, contact-authenticated TCP connections for the Linux client.
 
 use crate::contact_card::ContactCard;
-use std::net::{TcpListener, TcpStream, ToSocketAddrs};
+use std::net::{TcpListener, TcpStream};
 use std::time::Duration;
 use tomchat_noise::identity::NoiseIdentity;
 use tomchat_noise::peer_transport::EncryptedPeerChannel;
