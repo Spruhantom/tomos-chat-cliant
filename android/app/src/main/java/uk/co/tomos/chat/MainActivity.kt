@@ -188,9 +188,9 @@ private fun AdultDebugTestBanner() {
         border = BorderStroke(1.dp, Color(0xFFFFC857))
     ) {
         Column(Modifier.padding(12.dp)) {
-            Text("DEBUG TEST MODE — ADULT ACCOUNTS ONLY", color = Color(0xFFFFD477), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text("AGE-BAND SAFETY MODE", color = Color(0xFFFFD477), fontSize = 11.sp, fontWeight = FontWeight.Bold)
             Text(
-                "Age assurance is bypassed only in this debug build for adult-classified accounts. Use only with consenting adult testers. Release builds keep the normal age and guardian checks.",
+                "Age bands determine available features. Minor accounts still require guardian approval; age assurance is not required by the app.",
                 color = TextPrimary, fontSize = 11.sp, lineHeight = 16.sp
             )
         }
@@ -655,12 +655,10 @@ private fun ChatsScreen(profile: AccountProfile) {
     }
 
     val mayMessage = AccountSafetyPolicy.allows(
-        profile.safetyState(), TomChatCapability.MESSAGE_APPROVED_CONTACT,
-        allowUnverifiedAdultDebug = BuildConfig.DEBUG
+        profile.safetyState(), TomChatCapability.MESSAGE_APPROVED_CONTACT
     )
     val mayCall = AccountSafetyPolicy.allows(
-        profile.safetyState(), TomChatCapability.VOICE_CALL_APPROVED_CONTACT,
-        allowUnverifiedAdultDebug = BuildConfig.DEBUG
+        profile.safetyState(), TomChatCapability.VOICE_CALL_APPROVED_CONTACT
     )
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 20.dp)) {
         if (BuildConfig.DEBUG) AdultDebugTestBanner()
@@ -871,8 +869,7 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
         ScreenTitle("Contacts", "People you connect with directly.")
         val safety = profile.safetyState()
         val mayExchange = AccountSafetyPolicy.allows(
-            safety, TomChatCapability.EXCHANGE_CONTACT_CARD,
-            allowUnverifiedAdultDebug = BuildConfig.DEBUG
+            safety, TomChatCapability.EXCHANGE_CONTACT_CARD
         )
         if (contactCard == null) {
             EmptyState("◎", "Device identity unavailable", "TomChat could not prepare this device's signed contact card.")
@@ -998,15 +995,15 @@ private fun SettingsScreen(profile: AccountProfile) {
                 SettingCard(
                     "Account experience",
                     "${profile.displayName} • ${profile.ageBand.title}: ${profile.ageBand.description} ${AccountSafetyPolicy.restrictionReason(safetyState)}",
-                    "LOCKED"
+                    "AGE BAND"
                 )
                 SettingCard(
                     "Safety permissions",
-                    if (BuildConfig.DEBUG && profile.ageBand == AgeBand.ADULT_18_PLUS && profile.guardianConsent == GuardianConsentStatus.NOT_REQUIRED)
-                        "DEBUG TEST MODE: private contact exchange, messaging and voice calls are enabled for adult-classified test accounts without age assurance. This bypass is absent from release builds. Minor accounts still require verified age and guardian approval."
+                    if (profile.ageBand == AgeBand.ADULT_18_PLUS)
+                        "Age assurance is not required. Adult accounts receive the standard adult capabilities."
                     else
-                        "Messaging, calls, file sharing and social capabilities are checked by the central account policy. They remain disabled until age assurance (and guardian approval for minors) is completed.",
-                    if (BuildConfig.DEBUG) "DEBUG TEST MODE" else "RESTRICTED"
+                        "Age assurance is not required. Minor accounts retain age-band restrictions and must have guardian approval before communication features are enabled.",
+                    "AGE-BAND POLICY"
                 )
             }
             item {
