@@ -91,8 +91,10 @@ fn build_contacts(app: &adw::Application) {
     let show_qr = gtk::Button::with_label("Show my QR code");
     show_qr.add_css_class("suggested-action");
     let scan_qr = gtk::Button::with_label("Scan QR from image");
+    let webcam_qr = gtk::Button::with_label("Scan with webcam");
     qr_actions.append(&show_qr);
     qr_actions.append(&scan_qr);
+    qr_actions.append(&webcam_qr);
 
     let create_confirm = gtk::CheckButton::with_label(
         "This is a new device. I understand creating a new identity will not recover an existing one."
@@ -347,6 +349,45 @@ fn build_contacts(app: &adw::Application) {
             dialog.destroy();
         });
         chooser.show();
+    });
+
+    let webcam_status = status.clone();
+    let webcam_input = import_input.clone();
+    let webcam_confirm = fingerprint_confirm.clone();
+    let webcam_button = webcam_qr.clone();
+    webcam_qr.connect_clicked(move |_| {
+        webcam_button.set_sensitive(false);
+        webcam_status.set_text("Opening your webcam for a QR code…");
+        let (tx, rx) = mpsc::channel::<Result<String, String>>();
+        std::thread::spawn(move || {
+            let _ = tx.send(qr::scan_webcam_once());
+        });
+        let status = webcam_status.clone();
+        let input = webcam_input.clone();
+        let confirm = webcam_confirm.clone();
+        let button = webcam_button.clone();
+        glib::timeout_add_local(Duration::from_millis(100), move || {
+            match rx.try_recv() {
+                Ok(Ok(payload)) => {
+                    input.buffer().set_text(&payload);
+                    confirm.set_active(false);
+                    status.set_text("Webcam QR decoded. Compare the fingerprint with the person, then confirm before trusting the contact.");
+                    button.set_sensitive(true);
+                    glib::ControlFlow::Break
+                }
+                Ok(Err(error)) => {
+                    status.set_text(&format!("Webcam QR scan failed: {error}"));
+                    button.set_sensitive(true);
+                    glib::ControlFlow::Break
+                }
+                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    status.set_text("Webcam QR scanner stopped unexpectedly.");
+                    button.set_sensitive(true);
+                    glib::ControlFlow::Break
+                }
+            }
+        });
     });
 
     let create_status = status.clone();
