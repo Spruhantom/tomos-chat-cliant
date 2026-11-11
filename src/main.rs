@@ -80,6 +80,7 @@ fn build_contacts(app: &adw::Application) {
 
     let contact_picker = gtk::ComboBoxText::new();
     populate_contact_picker(&contact_picker, &contacts.borrow());
+    let remove_contact = gtk::Button::with_label("Remove selected contact");
 
     let peer_address = gtk::Entry::builder()
         .placeholder_text("Peer IP address:port (for example 192.168.1.20:46321)")
@@ -134,6 +135,7 @@ fn build_contacts(app: &adw::Application) {
 
     content.append(&heading("Direct connection"));
     content.append(&contact_picker);
+    content.append(&remove_contact);
     content.append(&peer_address);
     let connection_buttons = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     connection_buttons.append(&connect);
@@ -232,6 +234,26 @@ fn build_contacts(app: &adw::Application) {
                 status_for_import.set_text("Contact signature verified and contact saved. Encrypted connections require a V2 card and a matching Noise handshake.");
             }
             Err(error) => status_for_import.set_text(&format!("Contact was not imported: {error}")),
+        }
+    });
+
+
+    let remove_store = store.clone();
+    let remove_contacts = contacts.clone();
+    let remove_picker = contact_picker.clone();
+    let remove_status = status.clone();
+    remove_contact.connect_clicked(move |_| {
+        let Some(contact) = selected_contact(&remove_picker, &remove_contacts.borrow()) else {
+            remove_status.set_text("Select a trusted V2 contact to remove.");
+            return;
+        };
+        match remove_store.remove(&contact.fingerprint) {
+            Ok(updated) => {
+                *remove_contacts.borrow_mut() = updated;
+                populate_contact_picker(&remove_picker, &remove_contacts.borrow());
+                remove_status.set_text("Trusted contact removed from this device.");
+            }
+            Err(error) => remove_status.set_text(&format!("Could not remove contact: {error}")),
         }
     });
 
