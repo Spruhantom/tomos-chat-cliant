@@ -37,7 +37,9 @@ Supported package managers: `pacman` (Arch Linux and Omarchy) and `apt-get` (Deb
 
 ### Android
 
-Download an APK from the repository's [GitHub Releases](https://github.com/Spruhantom/tomos-chat-cliant/releases) when a release is published. Debug builds are CI artifacts and are not the same as a signed production release. Enable installation from the source you trust only when installing an APK manually.
+**Android test builds:** [Download from GitHub Releases](https://github.com/Spruhantom/tomos-chat-cliant/releases).
+
+Successful Android CI runs on `main` automatically publish a prerelease containing both the debug APK and the release-variant APK signed with the Android debug key. These are test builds, not production-signed releases. Check the release notes and APK checksum before installing. Enable installation only from a source you trust.
 
 ## Build from source
 
