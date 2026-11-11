@@ -47,7 +47,7 @@ pkg-config --atleast-version=1.5 libadwaita-1 || die "libadwaita 1.5 or newer is
 if ! command -v cargo >/dev/null 2>&1; then
   log "Installing the Rust stable toolchain for this user."
   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-  # shellcheck disable=SC1090
+  # shellcheck disable=SC1090,SC1091
   source "${HOME}/.cargo/env"
 fi
 
