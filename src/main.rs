@@ -53,9 +53,6 @@ fn build_contacts(app: &adw::Application) {
         );
     }
     let header = adw::HeaderBar::new();
-    let title = gtk::Label::new(Some("TomChat · Peer chat"));
-    title.add_css_class("title-1");
-
     let status = gtk::Label::new(Some("Loading local identity and trusted contacts…"));
     status.set_wrap(true);
     status.set_xalign(0.0);
