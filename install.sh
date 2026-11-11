@@ -42,6 +42,8 @@ else
   die "Unsupported distribution. Supported package managers: pacman (Arch/Omarchy) and apt-get (Debian/Ubuntu)."
 fi
 
+pkg-config --atleast-version=1.5 libadwaita-1 || die "libadwaita 1.5 or newer is required. Use a current Arch/Omarchy, Debian 13+, or Ubuntu 24.04+ system."
+
 if ! command -v cargo >/dev/null 2>&1; then
   log "Installing the Rust stable toolchain for this user."
   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
