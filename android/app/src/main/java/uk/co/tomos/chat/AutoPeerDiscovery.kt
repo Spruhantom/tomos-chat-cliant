@@ -122,7 +122,7 @@ class AutoPeerDiscovery(
 
     @Suppress("DEPRECATION")
     private fun resolve(found: NsdServiceInfo) {
-        val serviceKey = found.serviceName + "|" + (found.host?.hostAddress ?: "")
+        val serviceKey = found.serviceName + "|" + (found.hostName ?: "")
         if (closed.get() || completed.get() || !resolvingServices.add(serviceKey)) return
         nsd.resolveService(found, object : NsdManager.ResolveListener {
             override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) {
