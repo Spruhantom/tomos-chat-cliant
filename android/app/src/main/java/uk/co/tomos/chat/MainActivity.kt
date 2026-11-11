@@ -983,7 +983,7 @@ private fun SettingsScreen(profile: AccountProfile) {
                 SettingCard("Network policy", "Strict peer-to-peer. No application servers, relays, push gateways or hosted discovery.", "ZERO SERVER")
             }
             item {
-                SettingCard("Connection preference", "Automatic fastest direct route. Bluetooth and Wi-Fi options will appear when transport support is implemented.", "AUTOMATIC")
+                SettingCard("Connection preference", "TomChat automatically discovers trusted devices on the same Wi-Fi network and authenticates the direct connection. Wi-Fi Direct, Bluetooth and reachable IPv6 routes are still being developed. No relay is used.", "AUTOMATIC")
             }
             item {
                 SettingCard("Identity and security", "P-256 signing identity is bound to a persistent X25519 Noise key. Both private identities are protected by Android Keystore-backed storage; contact cards sign the binding.", "PROTOTYPE")
