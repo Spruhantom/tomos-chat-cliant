@@ -1,66 +1,70 @@
-# TomChat E2EE threat model and implementation decision
+# TomChat end-to-end encryption threat model
 
-Status: design baseline for review. This document is not an audit or a claim that E2EE is implemented.
+Status: design and implementation boundary. This document is not an independent security audit and does not claim production-ready end-to-end encryption.
 
-## Decision
+## Architecture and trust boundaries
 
-Use the IETF Messaging Layer Security protocol (MLS, RFC 9420) for direct and group conversations. Evaluate OpenMLS as the Rust implementation. It is a maintained Rust implementation of RFC 9420 with Linux support and multiple ciphersuites. Its current 0.9.x line is pre-1.0, so pin an exact release and isolate it behind an internal adapter. Do not expose OpenMLS types in GTK or REST modules.
+TomChat is a decentralised peer-to-peer application. Devices discover and connect directly over available local or reachable network paths. There is no central message broker, account directory, hosted key store, relay, or cloud message store in the product architecture.
 
-Candidate initial ciphersuite: `MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519`. The crypto review must confirm this choice against platform support, dependency provenance, security advisories and interoperability requirements before release. No runtime fallback to an unapproved suite.
+Treat every remote peer, discovery hint, network packet, and imported contact card as untrusted until authenticated. Local Wi-Fi, Bluetooth, TCP, and other transports provide connectivity only; they do not establish identity or message confidentiality.
 
 ## Assets
 
-- Device signing private keys and MLS init/epoch secrets.
-- MLS group state, ratchet state and transcript hashes.
-- User-authored plaintext and attachments.
-- Public device credentials, KeyPackages and device revocation state.
-- Recovery secret and encrypted backup material.
+- Device signing private keys and Noise static/ephemeral key material.
+- Conversation keys, session state, and any future MLS group/epoch secrets.
+- User-authored plaintext, attachments, and locally queued messages.
+- Public identity credentials, trusted-contact records, and revocation state.
+- User-held recovery material and encrypted local backups.
 
-## Adversary and trust assumptions
+## Adversaries
 
-The server/delivery service is untrusted for message confidentiality and integrity. Assume it can read all API metadata, suppress, reorder, replay, delay or inject opaque messages, present stale or inconsistent device-directory data, and deny service. Network attackers may observe and alter traffic; TLS remains mandatory for transport security.
+Assume an attacker can observe, delay, drop, reorder, replay, modify, or inject network traffic; spoof discovery advertisements; present a false peer address; attempt identity substitution; and cause denial of service. A malicious or compromised peer can send malformed protocol data, lie about its identity, or disclose messages it legitimately receives.
 
-Clients, their OS account, the desktop secret service and verified device endpoints are trusted. A compromised endpoint or OS administrator can read plaintext and keys and is outside the cryptographic protection boundary.
+A compromised endpoint, operating system administrator, malware, screenshots, coercion, or a person with access to an unlocked device can expose plaintext and keys. End-to-end encryption cannot protect a compromised endpoint.
 
 ## Security goals
 
-- Only authenticated, currently authorised group members/devices can decrypt application messages.
-- Membership changes are cryptographically authenticated and advance the MLS epoch.
-- Forward secrecy and post-compromise security follow the guarantees and limits of the selected MLS ciphersuite and update cadence.
-- Device credentials bind a device signing key to an account/device identifier.
-- Users can detect unexpected device additions and removals through explicit verification and change notices.
-- Private keys and plaintext never reach the server.
-- State updates survive crashes without rolling the client back to an older epoch.
+- Authenticate the peer identity independently of its IP address, Bluetooth address, or discovery metadata.
+- Bind every encrypted session to a user-approved, pinned identity key.
+- Protect message and call-control content against network observation and modification.
+- Reject unauthenticated frames, replayed or malformed protocol messages, and unexpected identity changes.
+- Keep private keys and plaintext on the participating devices.
+- Persist cryptographic state safely and prevent rollback after crashes or updates.
+- Make unavailable direct paths visible; never silently route through hosted infrastructure.
 
-## Explicit non-goals / leakage
+## Current implementation boundary
 
-The server necessarily sees account and device identifiers, conversation membership, delivery timing, message sizes, IP/network metadata and availability. Initial release does not hide traffic patterns or protect against compromised endpoints, screenshots, malicious accessibility tooling, malware, coercion or denial of service. MLS does not by itself solve identity proofing: clients need an authenticated credential and device verification model.
+The Android prototype includes signed peer identity proof and a pinned-key Noise XX session for direct transport. Encrypted application frames and local message storage foundations exist. Android peer discovery uses local network and nearby Bluetooth mechanisms; discovery data is only a hint and is not authentication.
 
-## Device lifecycle
+The project also has an OpenMLS 0.9.2 integration baseline and direct WebRTC voice foundations. These are not evidence that durable MLS group state, multi-device recovery, or production E2EE has been completed. Production E2EE claims remain blocked until persistent OpenMLS storage, authenticated state restoration after restart, replay protection, and real two-device validation have passed review.
 
-1. Enrolment: a logged-in account creates a device locally; an existing verified device approves its credential, or the user completes a documented recovery flow.
-2. Publication: the client uploads only public credential material and signed, single-use KeyPackages. Private init/signing keys remain local.
-3. Verification: compare a QR code or safety code through an authenticated out-of-band channel. Until verified, clearly label the device as unverified and require explicit approval before it receives conversation keys.
-4. Addition: add the device to each MLS group with authenticated MLS proposals/commits. Do not simply copy a group secret over the account session.
-5. Revocation: revoke the directory credential, remove the leaf from every group, commit a new epoch, and show the change to remaining members. Revocation cannot retract plaintext already read or data copied by the lost device.
-6. Recovery: require a user-held recovery secret or an existing trusted device. Backups are encrypted client-side and must not become server escrow. If all keys and recovery material are lost, encrypted history is unrecoverable.
+## Device and contact lifecycle
+
+1. Generate device identity material locally and protect private keys using platform secure storage.
+2. Exchange a signed contact card out of band, then compare and approve the full identity fingerprint.
+3. Persist the approved public key locally; do not trust a display name or discovery address as proof of identity.
+4. Authenticate a direct peer connection before accepting application frames.
+5. For future MLS groups, authenticate credentials and membership changes, persist commits transactionally, and reject stale or forked state.
+6. On device loss, require a user-held recovery secret or an existing trusted device. Encrypted backups remain under user control.
+7. Make identity changes and unverified contacts explicit in the interface.
 
 ## Local persistence requirements
 
-- Keep private key material in the OS Secret Service; never in plaintext configuration, logs, crash dumps or source control.
-- Store larger serialized MLS state encrypted under a random local wrapping key protected by Secret Service.
-- Commit group state, replay protection state and outbound messages atomically. If a storage transaction fails or an async operation is cancelled, discard the in-memory group and reload from durable state.
-- Prevent backup rollback from silently restoring an old epoch. Bind backup metadata to group ID, epoch and transcript hash; require authenticated rejoin/recovery if state is stale.
-- Never enable OpenMLS content-debug or crypto-debug features in release builds.
+- Keep private key material in platform secure storage; never write it to plaintext configuration, logs, crash dumps, or source control.
+- Encrypt durable conversation and cryptographic state under a locally protected key.
+- Commit message state, replay protection, and future MLS state atomically before acknowledging success.
+- On failed writes or interrupted updates, reload the last authenticated durable state rather than continuing with uncertain in-memory state.
+- Detect stale backups and prevent rollback to an older conversation epoch.
+- Disable cryptographic debug output in release builds.
 
 ## Required verification before launch
 
-MLS test vectors; multi-client and multi-device interoperability; concurrent commit/fork handling; replay, reorder and duplicate delivery; stale KeyPackage rejection; device revocation; storage corruption and crash injection; backup rollback; fuzzing of all untrusted MLS and directory inputs; dependency/SBOM review; independent cryptographic review; and a documented incident/recovery process.
+Test protocol vectors; two-device identity verification; Noise handshake failure cases; replay, reorder, duplicate and malformed frame handling; contact-key changes; local storage corruption; process termination during state updates; backup rollback; Android lifecycle and network changes; and real Wi-Fi/Bluetooth device interoperability. Complete independent cryptographic review before making production security claims.
 
-## Implementation phases
+## Implementation gates
 
-A. Device directory API and protocol schemas (public material only).
-B. OpenMLS adapter and transactional encrypted storage.
-C. Verification, device changes, revocation and recovery UX.
-D. Multi-device E2EE integration tests and independent review.
-E. Enable composer only after all gates pass.
+A. Finish persistent cryptographic storage and restore tests.
+B. Integrate the selected MLS implementation behind a narrow, reviewed adapter for group messaging.
+C. Complete contact verification, device revocation, and recovery flows.
+D. Validate direct transports on multiple physical devices and supported Android versions.
+E. Enable production messaging only after the security and recovery gates pass.
