@@ -33,11 +33,11 @@ done
 
 if command -v pacman >/dev/null 2>&1; then
   log "Installing Arch Linux/Omarchy build and runtime dependencies."
-  sudo pacman -Syu --needed --noconfirm base-devel pkgconf gtk4 libadwaita libsecret git curl ca-certificates
+  sudo pacman -Syu --needed --noconfirm base-devel pkgconf gtk4 libadwaita libsecret qrencode zbar git curl ca-certificates
 elif command -v apt-get >/dev/null 2>&1; then
   log "Installing Debian/Ubuntu build and runtime dependencies."
   sudo apt-get update
-  sudo apt-get install -y build-essential pkg-config libgtk-4-dev libadwaita-1-dev libsecret-tools git curl ca-certificates
+  sudo apt-get install -y build-essential pkg-config libgtk-4-dev libadwaita-1-dev libsecret-tools qrencode zbar-tools git curl ca-certificates
 else
   die "Unsupported distribution. Supported package managers: pacman (Arch/Omarchy) and apt-get (Debian/Ubuntu)."
 fi
