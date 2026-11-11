@@ -5,8 +5,8 @@ use crate::contact_card::{ContactCard, ContactCardError};
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-const ATTRS: [&str; 6] = [
-    "lookup", "application", "tomchat", "key", "trusted-contact-cards-v1", "unused",
+const ATTRS: [&str; 5] = [
+    "lookup", "application", "tomchat", "key", "trusted-contact-cards-v1",
 ];
 
 #[derive(Debug)]
@@ -33,7 +33,7 @@ pub struct TrustedContactStore;
 impl TrustedContactStore {
     pub fn load(&self) -> Result<Vec<ContactCard>, ContactStoreError> {
         let output = Command::new("secret-tool")
-            .args(&ATTRS[..5])
+            .args(ATTRS)
             .stdin(Stdio::null()).stderr(Stdio::null()).output()
             .map_err(|error| ContactStoreError::KeyStore(error.to_string()))?;
         if !output.status.success() {
