@@ -6,12 +6,12 @@
 
 ## Project principles
 
-- **Strict peer-to-peer:** TomChat will not deploy or depend on application servers, account servers, relays, push gateways, hosted discovery, central directories or hosted message storage.
+- **Strict peer-to-peer:** TomChat will not deploy or depend on centralised application infrastructure, centralised account infrastructure, relays, push gateways, hosted discovery, central directories or hosted message storage.
 - **Device-controlled identity:** the intended design keeps identity keys under the user's control on their devices.
 - **End-to-end encryption:** message and call content must be protected independently of the transport. The protocol is not yet implemented or security-reviewed.
 - **Local-first data:** conversations and account data should remain on the user's devices, with encrypted local backup and explicitly trusted-device replication planned.
-- **Honest connectivity:** direct connections are best-effort. NAT, carrier restrictions, firewalls, device sleep and offline peers can prevent remote connections. Without relays or mailbox servers, TomChat cannot promise global reachability or offline delivery.
-- **No silent fallback:** if a direct connection cannot be made, the app must explain the limitation rather than quietly using a server.
+- **Honest connectivity:** direct connections are best-effort. NAT, carrier restrictions, firewalls, device sleep and offline peers can prevent remote connections. Without relays or hosted message storage, TomChat cannot promise global reachability or offline delivery.
+- **No silent fallback:** if a direct connection cannot be made, the app must explain the limitation rather than quietly using a centralised service.
 
 ## One app, age-aware account setup
 
@@ -39,7 +39,7 @@ The production design must:
 - provide clear block/report controls and age-appropriate contact approval;
 - meet applicable child privacy, age-assurance, consent and online-safety requirements in each launch jurisdiction.
 
-Any proposed verification mechanism must be assessed against TomChat's strict no-application-server requirement. A local date-of-birth calculation alone is not trustworthy age assurance. See [Account age and child safety](docs/account-age-safety.md).
+Any proposed verification mechanism must be assessed against TomChat's strict fully decentralised architecture requirement. A local date-of-birth calculation alone is not trustworthy age assurance. See [Account age and child safety](docs/account-age-safety.md).
 
 ## Planned features
 
@@ -67,7 +67,7 @@ Current UI foundation:
 - prototype one-to-one voice calls from an active encrypted chat, with incoming-call invite/accept/reject, hang-up, mute, speaker/earpiece routing, runtime microphone permission and PCM media frames carried only through the Noise channel;
 - messaging and calling remain locked until the account safety policy allows the relevant capability and the Noise session is established;
 - TomOS neon visual styling;
-- account experience and zero-server policy status placeholders.
+- account experience and decentralised peer-to-peer policy status placeholders.
 
 The age-band classifier, central capability policy and unit tests are under `android/app/src/main` and `android/app/src/test`. The prototype defaults to unverified accounts, so communication capabilities remain locked; minors additionally require guardian approval. This is domain-policy scaffolding, not a connected age-verification or consent flow. Account setup persists a minimal profile using AES-256-GCM with a device-held Android Keystore key; the full date of birth is not saved. The persistent Noise X25519 private scalar is wrapped with AES-256-GCM and is not stored in plaintext. Keystore/atomic-file behaviour still requires physical-device testing.
 
