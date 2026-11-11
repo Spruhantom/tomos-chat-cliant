@@ -2,6 +2,7 @@ mod contact_card;
 mod contact_store;
 mod peer;
 mod peer_chat;
+mod qr;
 
 use adw::prelude::*;
 use gtk::glib;
@@ -24,14 +25,34 @@ fn build_contacts(app: &adw::Application) {
     let window = adw::ApplicationWindow::builder()
         .application(app)
         .title("TomChat")
-        .default_width(720)
-        .default_height(860)
+        .default_width(1080)
+        .default_height(760)
         .build();
 
+    adw::StyleManager::default().set_color_scheme(adw::ColorScheme::ForceDark);
+    let css = gtk::CssProvider::new();
+    css.load_from_data(
+        "window { background: #0a0a12; color: #e8e8f0; } \
+         headerbar { background: #14141f; border-bottom: 1px solid #30243d; } \
+         .title-1 { color: #ff2d96; font-weight: 800; } \
+         .heading { color: #00f0ff; font-weight: 700; } \
+         button { border-radius: 12px; padding: 8px 14px; } \
+         button.suggested-action { background: #ff2d96; color: #ffffff; } \
+         entry, textview, combobox, scrolledwindow { background: #14141f; color: #e8e8f0; border-color: #39304a; border-radius: 10px; } \
+         checkbutton { color: #c9c9d8; } \
+         separator { background: #30243d; } \
+         .flat { color: #c9c9d8; text-align: left; } \
+         .flat:hover { background: #1d1d2b; color: #00f0ff; } \
+         .dim-label { color: #8a8aa0; font-size: 10px; letter-spacing: 2px; }"
+    );
+    if let Some(display) = gtk::gdk::Display::default() {
+        gtk::style_context_add_provider_for_display(
+            &display,
+            &css,
+            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
+    }
     let header = adw::HeaderBar::new();
-    let title = gtk::Label::new(Some("TomChat · Peer chat"));
-    title.add_css_class("title-1");
-
     let status = gtk::Label::new(Some("Loading local identity and trusted contacts…"));
     status.set_wrap(true);
     status.set_xalign(0.0);
@@ -65,6 +86,15 @@ fn build_contacts(app: &adw::Application) {
         &signing_identity.borrow(),
         &noise_identity.borrow(),
     );
+
+    let qr_actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let show_qr = gtk::Button::with_label("Show my QR code");
+    show_qr.add_css_class("suggested-action");
+    let scan_qr = gtk::Button::with_label("Scan QR from image");
+    let webcam_qr = gtk::Button::with_label("Scan with webcam");
+    qr_actions.append(&show_qr);
+    qr_actions.append(&scan_qr);
+    qr_actions.append(&webcam_qr);
 
     let create_confirm = gtk::CheckButton::with_label(
         "This is a new device. I understand creating a new identity will not recover an existing one."
@@ -126,52 +156,239 @@ fn build_contacts(app: &adw::Application) {
     message_row.append(&message_input);
     message_row.append(&send);
 
-    let content = gtk::Box::new(gtk::Orientation::Vertical, 12);
-    content.set_margin_top(20);
-    content.set_margin_bottom(20);
-    content.set_margin_start(20);
-    content.set_margin_end(20);
-    content.append(&title);
-    content.append(&status);
+    let contacts_page = gtk::Box::new(gtk::Orientation::Vertical, 14);
+    contacts_page.set_margin_top(24);
+    contacts_page.set_margin_bottom(24);
+    contacts_page.set_margin_start(24);
+    contacts_page.set_margin_end(24);
+    let title = gtk::Label::new(Some("TomChat"));
+    title.add_css_class("title-1");
+    title.set_xalign(0.0);
+    contacts_page.append(&title);
+    contacts_page.append(&status);
 
-    let identity_heading = heading("Your signed contact card");
-    content.append(&identity_heading);
+    contacts_page.append(&heading("Your signed contact card"));
     let own_scroll = gtk::ScrolledWindow::builder()
         .child(&own_card)
         .min_content_height(90)
         .build();
-    content.append(&own_scroll);
-    content.append(&create_confirm);
-    content.append(&create_identity);
+    contacts_page.append(&own_scroll);
+    contacts_page.append(&qr_actions);
+    contacts_page.append(&create_confirm);
+    contacts_page.append(&create_identity);
 
-    content.append(&heading("Add a trusted contact"));
+    contacts_page.append(&heading("Add a trusted contact"));
     let import_instructions = gtk::Label::new(Some(
-        "Paste a signed V2 contact card. The signature is checked locally and its Noise key is bound to the signing identity. V1 cards can be imported for reference but cannot start encrypted sessions."
+        "Scan a contact QR image or paste a signed V2 contact card. The signature is verified locally and the Noise key is bound to the signing identity. Compare the fingerprint with the person before trusting them."
     ));
     import_instructions.set_wrap(true);
     import_instructions.set_xalign(0.0);
-    content.append(&import_instructions);
-    content.append(&import_scroll);
-    content.append(&fingerprint_confirm);
-    content.append(&import_contact);
+    contacts_page.append(&import_instructions);
+    contacts_page.append(&import_scroll);
+    contacts_page.append(&fingerprint_confirm);
+    contacts_page.append(&import_contact);
 
-    content.append(&heading("Direct connection"));
-    content.append(&contact_picker);
-    content.append(&remove_contact);
-    content.append(&peer_address);
+    contacts_page.append(&heading("Direct connection"));
+    contacts_page.append(&contact_picker);
+    contacts_page.append(&remove_contact);
+    contacts_page.append(&peer_address);
     let connection_buttons = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     connection_buttons.append(&connect);
     connection_buttons.append(&listen);
-    content.append(&connection_buttons);
+    contacts_page.append(&connection_buttons);
 
-    content.append(&heading("Encrypted conversation"));
-    content.append(&chat_scroll);
-    content.append(&message_row);
+    let chat_page = gtk::Box::new(gtk::Orientation::Vertical, 14);
+    chat_page.set_margin_top(24);
+    chat_page.set_margin_bottom(24);
+    chat_page.set_margin_start(24);
+    chat_page.set_margin_end(24);
+    chat_page.append(&heading("Encrypted conversation"));
+    let chat_intro = gtk::Label::new(Some("Messages travel directly between authenticated peers and are encrypted with the established Noise session."));
+    chat_intro.set_wrap(true);
+    chat_intro.set_xalign(0.0);
+    chat_page.append(&chat_intro);
+    chat_page.append(&chat_scroll);
+    chat_page.append(&message_row);
+
+    let settings_page = gtk::Box::new(gtk::Orientation::Vertical, 14);
+    settings_page.set_margin_top(24);
+    settings_page.set_margin_bottom(24);
+    settings_page.set_margin_start(24);
+    settings_page.set_margin_end(24);
+    settings_page.append(&heading("Privacy and device identity"));
+    let settings_copy = gtk::Label::new(Some("Your signing and Noise identities are stored in the desktop Secret Service keyring. TomChat does not silently replace an existing identity. Contact cards are signed, verified locally and require fingerprint confirmation before being trusted. Keep your device keyring backed up using your desktop's secure recovery process."));
+    settings_copy.set_wrap(true);
+    settings_copy.set_xalign(0.0);
+    settings_page.append(&settings_copy);
+
+    let stack = gtk::Stack::builder()
+        .hexpand(true)
+        .vexpand(true)
+        .transition_type(gtk::StackTransitionType::Crossfade)
+        .build();
+    stack.add_named(&contacts_page, Some("contacts"));
+    stack.add_named(&chat_page, Some("chats"));
+    stack.add_named(&settings_page, Some("settings"));
+
+    let sidebar = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    sidebar.set_width_request(190);
+    sidebar.set_margin_top(20);
+    sidebar.set_margin_bottom(20);
+    sidebar.set_margin_start(14);
+    sidebar.set_margin_end(14);
+    let brand = gtk::Label::new(Some("TOMCHAT"));
+    brand.add_css_class("title-1");
+    sidebar.append(&brand);
+    let nav_contacts = gtk::Button::with_label("◎   Contacts");
+    let nav_chats = gtk::Button::with_label("▤   Chats");
+    let nav_settings = gtk::Button::with_label("⚙   Settings");
+    nav_contacts.add_css_class("flat");
+    nav_chats.add_css_class("flat");
+    nav_settings.add_css_class("flat");
+    sidebar.append(&nav_contacts);
+    sidebar.append(&nav_chats);
+    sidebar.append(&nav_settings);
+    let sidebar_note = gtk::Label::new(Some("DIRECT PEER CHAT"));
+    sidebar_note.add_css_class("dim-label");
+    sidebar_note.set_wrap(true);
+    sidebar_note.set_xalign(0.0);
+    sidebar.append(&sidebar_note);
+    let nav_stack = stack.clone();
+    nav_contacts.connect_clicked(move |_| nav_stack.set_visible_child_name("contacts"));
+    let nav_stack = stack.clone();
+    nav_chats.connect_clicked(move |_| nav_stack.set_visible_child_name("chats"));
+    let nav_stack = stack.clone();
+    nav_settings.connect_clicked(move |_| nav_stack.set_visible_child_name("settings"));
+
+    let shell = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    shell.append(&sidebar);
+    let divider = gtk::Separator::new(gtk::Orientation::Vertical);
+    shell.append(&divider);
+    shell.append(&stack);
 
     let page = adw::ToolbarView::new();
     page.add_top_bar(&header);
-    page.set_content(Some(&content));
+    page.set_content(Some(&shell));
     window.set_content(Some(&page));
+
+    let qr_status = status.clone();
+    let qr_card_view = own_card.clone();
+    let qr_parent = window.clone();
+    show_qr.connect_clicked(move |_| {
+        let buffer = qr_card_view.buffer();
+        let encoded = buffer.text(&buffer.start_iter(), &buffer.end_iter(), false).to_string();
+        if !encoded.starts_with("TOMCHAT-CONTACT-V2.") {
+            qr_status.set_text("Create or recover your device identity before displaying a QR code.");
+            return;
+        }
+        match qr::write_png(encoded.trim()) {
+            Ok(path) => {
+                let qr_window = gtk::Window::builder()
+                    .title("Your TomChat contact QR code")
+                    .transient_for(&qr_parent)
+                    .modal(true)
+                    .default_width(440)
+                    .default_height(520)
+                    .build();
+                let panel = gtk::Box::new(gtk::Orientation::Vertical, 12);
+                panel.set_margin_top(20);
+                panel.set_margin_bottom(20);
+                panel.set_margin_start(20);
+                panel.set_margin_end(20);
+                let picture = gtk::Picture::for_filename(&path);
+                picture.set_can_shrink(true);
+                picture.set_size_request(360, 360);
+                panel.append(&picture);
+                let hint = gtk::Label::new(Some("Let another TomChat user scan this code, then compare fingerprints before trusting the contact."));
+                hint.set_wrap(true);
+                panel.append(&hint);
+                let close = gtk::Button::with_label("Close");
+                let close_window = qr_window.clone();
+                close.connect_clicked(move |_| close_window.close());
+                panel.append(&close);
+                qr_window.set_child(Some(&panel));
+                let cleanup = path.clone();
+                qr_window.connect_close_request(move |_| {
+                    let _ = std::fs::remove_file(&cleanup);
+                    glib::Propagation::Proceed
+                });
+                qr_window.present();
+            }
+            Err(error) => qr_status.set_text(&format!("Could not generate contact QR code: {error}")),
+        }
+    });
+
+    let scan_status = status.clone();
+    let scan_parent = window.clone();
+    let scan_input = import_input.clone();
+    let scan_confirm = fingerprint_confirm.clone();
+    scan_qr.connect_clicked(move |_| {
+        let chooser = gtk::FileChooserNative::new(
+            Some("Choose an image containing a TomChat QR code"),
+            Some(&scan_parent),
+            gtk::FileChooserAction::Open,
+            Some("Open"),
+            Some("Cancel"),
+        );
+        let input = scan_input.clone();
+        let status = scan_status.clone();
+        let confirm = scan_confirm.clone();
+        chooser.connect_response(move |dialog, response| {
+            if response == gtk::ResponseType::Accept {
+                if let Some(path) = dialog.file().and_then(|file| file.path()) {
+                    match qr::decode_image(&path) {
+                        Ok(payload) => {
+                            input.buffer().set_text(&payload);
+                            confirm.set_active(false);
+                            status.set_text("QR decoded. Compare the displayed fingerprint with the person, tick the confirmation box, then verify and trust the contact.");
+                        }
+                        Err(error) => status.set_text(&format!("Could not read a TomChat QR code from that image: {error}")),
+                    }
+                }
+            }
+            dialog.destroy();
+        });
+        chooser.show();
+    });
+
+    let webcam_status = status.clone();
+    let webcam_input = import_input.clone();
+    let webcam_confirm = fingerprint_confirm.clone();
+    let webcam_button = webcam_qr.clone();
+    webcam_qr.connect_clicked(move |_| {
+        webcam_button.set_sensitive(false);
+        webcam_status.set_text("Opening your webcam for a QR code…");
+        let (tx, rx) = mpsc::channel::<Result<String, String>>();
+        std::thread::spawn(move || {
+            let _ = tx.send(qr::scan_webcam_once());
+        });
+        let status = webcam_status.clone();
+        let input = webcam_input.clone();
+        let confirm = webcam_confirm.clone();
+        let button = webcam_button.clone();
+        glib::timeout_add_local(Duration::from_millis(100), move || {
+            match rx.try_recv() {
+                Ok(Ok(payload)) => {
+                    input.buffer().set_text(&payload);
+                    confirm.set_active(false);
+                    status.set_text("Webcam QR decoded. Compare the fingerprint with the person, then confirm before trusting the contact.");
+                    button.set_sensitive(true);
+                    glib::ControlFlow::Break
+                }
+                Ok(Err(error)) => {
+                    status.set_text(&format!("Webcam QR scan failed: {error}"));
+                    button.set_sensitive(true);
+                    glib::ControlFlow::Break
+                }
+                Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    status.set_text("Webcam QR scanner stopped unexpectedly.");
+                    button.set_sensitive(true);
+                    glib::ControlFlow::Break
+                }
+            }
+        });
+    });
 
     let create_status = status.clone();
     let signing_for_create = signing_identity.clone();
