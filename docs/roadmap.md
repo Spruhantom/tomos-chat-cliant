@@ -1,7 +1,7 @@
 # Development roadmap
 
 ## Phase 0 — repository and design baseline
-- [x] Preserve current desktop/server-connected code on `legacy-desktop`.
+- [x] Preserve current desktop/centralised service-connected code on `legacy-desktop`.
 - [x] Create isolated `android-rebuild` branch.
 - [x] Record strict network, full feature scope, and dual backup decisions.
 - [ ] Agree protocol and threat-model review before production cryptography.
@@ -68,4 +68,4 @@
 
 ## First development target
 
-A two-device Android demo with two direct transports: exchange identities by QR, discover/connect over Bluetooth LE and send an authenticated test payload; then repeat over the same Wi-Fi LAN. No server, relay, DHT bootstrap, or account registration. This validates transport independence and the strict zero-server premise before adding chat UI or production cryptography.
+A two-device Android demo with two direct transports: exchange identities by QR, discover/connect over Bluetooth LE and send an authenticated test payload; then repeat over the same Wi-Fi LAN. No centralised service, relay, DHT bootstrap, or account registration. This validates transport independence and the strict decentralised peer-to-peer premise before adding chat UI or production cryptography.
