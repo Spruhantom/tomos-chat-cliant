@@ -52,6 +52,7 @@ class BluetoothPeerDiscovery(
     val acceptingSocket: BluetoothServerSocket?
         get() = serverSocket
 
+    @SuppressLint("MissingPermission")
     fun start() {
         check(!closed.get()) { "Bluetooth discovery has been closed." }
         if (!started.compareAndSet(false, true)) return
