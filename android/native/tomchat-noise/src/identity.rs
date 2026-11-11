@@ -58,6 +58,7 @@ impl NoiseIdentity {
 
 
 impl NoiseIdentity {
+    #[cfg(target_os = "linux")]
     fn from_stored(private_key: [u8; 32], public_key: [u8; 32]) -> Result<Self, String> {
         validate_keypair(&private_key, &public_key)?;
         Ok(Self { private_key, public_key })
