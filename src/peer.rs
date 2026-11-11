@@ -33,10 +33,7 @@ pub fn connect_peer(
     let stream = TcpStream::connect_timeout(&socket, HANDSHAKE_TIMEOUT)
         .map_err(|error| format!("Could not connect directly to peer: {error}"))?;
     configure_stream(&stream)?;
-    local.with_private_key(|private| {
-        EncryptedPeerChannel::connect(stream, private, expected_peer)
-            .map_err(|error| format!("Peer authentication failed: {error}"))
-    })
+    local.with_private_key(|private| connect_peer_with_key_from_stream(stream, private, expected_peer))
 }
 
 /// Accept one direct peer connection while pinning it to the selected contact.
@@ -51,8 +48,52 @@ pub fn accept_peer(
     let (stream, _) = listener.accept()
         .map_err(|error| format!("Could not accept direct peer connection: {error}"))?;
     configure_stream(&stream)?;
-    local.with_private_key(|private| {
-        EncryptedPeerChannel::accept(stream, private, expected_peer)
-            .map_err(|error| format!("Peer authentication failed: {error}"))
-    })
+    local.with_private_key(|private| accept_peer_with_key_from_stream(stream, private, expected_peer))
+}
+
+/// Connect using a short-lived private-key copy owned by the caller.
+pub fn connect_peer_with_key(
+    address: &str,
+    local_private_key: &[u8; 32],
+    contact: &ContactCard,
+) -> Result<EncryptedPeerChannel, String> {
+    let expected_peer = trusted_noise_key(contact)?;
+    let socket = address.parse().map_err(|_| "Enter a peer address in IP:port format.".to_string())?;
+    let stream = TcpStream::connect_timeout(&socket, HANDSHAKE_TIMEOUT)
+        .map_err(|error| format!("Could not connect directly to peer: {error}"))?;
+    configure_stream(&stream)?;
+    connect_peer_with_key_from_stream(stream, local_private_key, expected_peer)
+}
+
+fn connect_peer_with_key_from_stream(
+    stream: TcpStream,
+    local_private_key: &[u8; 32],
+    expected_peer: &[u8; 32],
+) -> Result<EncryptedPeerChannel, String> {
+    EncryptedPeerChannel::connect(stream, local_private_key, expected_peer)
+        .map_err(|error| format!("Peer authentication failed: {error}"))
+}
+
+/// Wait for one direct connection from the selected, fingerprint-verified peer.
+pub fn accept_peer_with_key(
+    bind_address: &str,
+    local_private_key: &[u8; 32],
+    contact: &ContactCard,
+) -> Result<EncryptedPeerChannel, String> {
+    let expected_peer = trusted_noise_key(contact)?;
+    let listener = TcpListener::bind(bind_address)
+        .map_err(|error| format!("Could not listen for a direct peer connection: {error}"))?;
+    let (stream, _) = listener.accept()
+        .map_err(|error| format!("Could not accept direct peer connection: {error}"))?;
+    configure_stream(&stream)?;
+    accept_peer_with_key_from_stream(stream, local_private_key, expected_peer)
+}
+
+fn accept_peer_with_key_from_stream(
+    stream: TcpStream,
+    local_private_key: &[u8; 32],
+    expected_peer: &[u8; 32],
+) -> Result<EncryptedPeerChannel, String> {
+    EncryptedPeerChannel::accept(stream, local_private_key, expected_peer)
+        .map_err(|error| format!("Peer authentication failed: {error}"))
 }
