@@ -213,4 +213,27 @@ mod tests {
         assert!(result.is_err());
         assert!(responder.join().unwrap());
     }
+    #[test]
+    fn split_channel_supports_independent_send_and_receive_handles() {
+        let (alice_private, alice_public) = keypair();
+        let (bob_private, bob_public) = keypair();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+
+        let responder = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let channel = EncryptedPeerChannel::accept(stream, &bob_private, &alice_public).unwrap();
+            let (mut sender, mut receiver) = channel.split().unwrap();
+            assert_eq!(receiver.receive().unwrap(), b"hello from Alice");
+            sender.send(b"hello from Bob").unwrap();
+        });
+
+        let stream = TcpStream::connect(address).unwrap();
+        let channel = EncryptedPeerChannel::connect(stream, &alice_private, &bob_public).unwrap();
+        let (mut sender, mut receiver) = channel.split().unwrap();
+        sender.send(b"hello from Alice").unwrap();
+        assert_eq!(receiver.receive().unwrap(), b"hello from Bob");
+        responder.join().unwrap();
+    }
+
 }
