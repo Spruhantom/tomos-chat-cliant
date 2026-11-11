@@ -45,6 +45,7 @@ class AutoPeerDiscovery(
     private var registration: NsdManager.RegistrationListener? = null
     private var discovery: NsdManager.DiscoveryListener? = null
     private val serviceType = "_tomchat._tcp."
+    private val localServiceName = "TC-" + localFingerprint.filter(Char::isLetterOrDigit).take(12)
 
     fun start() {
         check(!closed.get()) { "Discovery has been closed." }
@@ -61,7 +62,7 @@ class AutoPeerDiscovery(
             }
             val port = coordinator.startListening("0.0.0.0", 0)
             val service = NsdServiceInfo().apply {
-                serviceName = "TomChat"
+                serviceName = localServiceName
                 this.serviceType = this@AutoPeerDiscovery.serviceType
                 this.port = port
                 setAttribute("fp", localFingerprint)
@@ -87,7 +88,7 @@ class AutoPeerDiscovery(
                     if (!closed.get()) onStatus("Finding trusted device on this Wi-Fi network…")
                 }
                 override fun onServiceFound(found: NsdServiceInfo) {
-                    if (closed.get() || found.serviceType.trimEnd('.') != serviceType.trimEnd('.')) return
+                    if (closed.get() || found.serviceName == localServiceName || found.serviceType.trimEnd('.') != serviceType.trimEnd('.')) return
                     resolve(found)
                 }
                 override fun onServiceLost(lost: NsdServiceInfo) = Unit
