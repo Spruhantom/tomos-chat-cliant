@@ -2,7 +2,7 @@
 
 **Priority:** Highest active development priority  
 **Branch:** `android-rebuild`  
-**Product constraint:** Strict serverless peer-to-peer. No TomChat application servers, relays, rendezvous services, hosted key directories, push gateways, TURN relays or cloud message storage.
+**Product constraint:** Strict fully decentralised peer-to-peer. No TomChat application centralised services, relays, rendezvous services, hosted key directories, push gateways, TURN relays or cloud message storage.
 
 ## Product decision
 
@@ -24,7 +24,7 @@ These are cross-cutting requirements for every workstream:
 - Protect local private keys using Android Keystore-backed storage and define backup, restore, rotation, revocation and device replacement behaviour.
 - Complete and review the direct peer Noise transport integration. No application data may pass before handshake and pinned-peer verification succeed.
 - Define bounded, versioned framing, strict payload limits, safe parsing, session lifecycle and fail-closed behaviour.
-- Keep message and media payloads encrypted end-to-end. No plaintext fallback, cloud storage or server-side decryption.
+- Keep message and media payloads encrypted end-to-end. No plaintext fallback, cloud storage or remote decryption.
 - Review JNI boundaries, key handling, memory lifetime, error paths and cryptographic protocol choices.
 - Maintain Rust format/check/test/Clippy, Kotlin JVM tests, Android APK builds and ABI/JNI export checks. Emulator boot is not a required CI gate; physical-device checks remain mandatory for device claims.
 
@@ -67,7 +67,7 @@ These are cross-cutting requirements for every workstream:
 - Use a reviewed group media-key distribution and rotation design; never reuse a one-to-one media key for a group.
 - Protect media against replay and unauthorized late joiners.
 - Test participant joins/leaves, key rotation, mute, packet loss, network changes and call teardown across multiple devices.
-- Keep media direct between peers. No SFU, media server, TURN relay or cloud fallback. Clearly expose when direct connectivity is unavailable.
+- Keep media direct between peers. No SFU, media centralised service, TURN relay or cloud fallback. Clearly expose when direct connectivity is unavailable.
 
 ## How parallel development is coordinated
 
