@@ -68,6 +68,14 @@ class PeerRouteSelectorTest {
     }
 
     @Test
+    fun directPeerRoleIsComplementaryForBothDevices() {
+        val first = "0000 AAAA"
+        val second = "FFFF BBBB"
+        assertTrue(PeerConnectionRole.shouldInitiate(first, second))
+        assertTrue(!PeerConnectionRole.shouldInitiate(second, first))
+    }
+
+    @Test
     fun deterministicTieBreakUsesRouteId() {
         val a = route("a", PeerTransportKind.WIFI_LAN, 20, 0.98, 20_000)
         val b = route("b", PeerTransportKind.WIFI_LAN, 20, 0.98, 20_000)
