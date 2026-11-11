@@ -1,51 +1,53 @@
-//! Desktop QR rendering and image-based scanning for Android-compatible contact cards.
+//! Desktop QR rendering and image-based scanning for signed contact cards.
+//! Uses distribution-provided qrencode and zbar tools to keep the Rust dependency
+//! graph small and the QR payload identical to Android's contact-card codec.
 
-use image::{DynamicImage, ImageFormat, Luma};
-use qrcode::QrCode;
-use std::io::Cursor;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 pub fn write_png(payload: &str) -> Result<PathBuf, String> {
-    if payload.len() > 4096 || !payload.starts_with("TOMCHAT-CONTACT-V2.") {
-        return Err("Only signed V2 TomChat contact cards can be shown as a QR code.".into());
-    }
-    let code = QrCode::new(payload.as_bytes()).map_err(|error| error.to_string())?;
-    let image = code
-        .render::<Luma<u8>>()
-        .quiet_zone(true)
-        .module_dimensions(8, 8)
-        .build();
+    validate_payload(payload)?;
     let path = std::env::temp_dir().join(format!("tomchat-contact-{}.png", std::process::id()));
-    let mut bytes = Cursor::new(Vec::new());
-    DynamicImage::ImageLuma8(image)
-        .write_to(&mut bytes, ImageFormat::Png)
-        .map_err(|error| error.to_string())?;
+    let output = Command::new("qrencode")
+        .args(["-o"])
+        .arg(&path)
+        .args(["-t", "PNG", "-m", "4", "-s", "8"])
+        .arg(payload)
+        .output()
+        .map_err(|error| format!("qrencode is unavailable: {error}"))?;
+    if !output.status.success() {
+        return Err(format!("qrencode failed: {}", String::from_utf8_lossy(&output.stderr).trim()));
+    }
     #[cfg(unix)]
     {
-        use std::os::unix::fs::OpenOptionsExt;
-        let mut file = std::fs::OpenOptions::new()
-            .create(true).truncate(true).write(true).mode(0o600)
-            .open(&path).map_err(|error| error.to_string())?;
-        use std::io::Write;
-        file.write_all(bytes.get_ref()).map_err(|error| error.to_string())?;
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|error| error.to_string())?;
     }
-    #[cfg(not(unix))]
-    std::fs::write(&path, bytes.get_ref()).map_err(|error| error.to_string())?;
     Ok(path)
 }
 
 pub fn decode_image(path: &Path) -> Result<String, String> {
-    let image = image::open(path).map_err(|error| error.to_string())?.to_luma8();
-    let mut prepared = rqrr::PreparedImage::prepare(image);
-    let grids = prepared.detect_grids();
-    for grid in grids {
-        if let Ok((_, payload)) = grid.decode() {
-            if payload.starts_with("TOMCHAT-CONTACT-V2.") && payload.len() <= 4096 {
-                return Ok(payload);
-            }
-        }
+    let output = Command::new("zbarimg")
+        .args(["--quiet", "--raw"])
+        .arg(path)
+        .output()
+        .map_err(|error| format!("zbarimg is unavailable: {error}"))?;
+    if !output.status.success() {
+        return Err("No readable QR code was found in that image.".into());
     }
-    Err("No valid TomChat V2 contact QR code was found.".into())
+    let payload = String::from_utf8(output.stdout)
+        .map_err(|_| "The QR code did not contain valid text.".to_string())?;
+    let payload = payload.trim();
+    validate_payload(payload)?;
+    Ok(payload.to_owned())
+}
+
+fn validate_payload(payload: &str) -> Result<(), String> {
+    if payload.len() > 4096 || !payload.starts_with("TOMCHAT-CONTACT-V2.") {
+        return Err("Only signed V2 TomChat contact cards are supported.".into());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -53,9 +55,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn renders_and_decodes_android_wire_format_payload() {
-        let payload = "TOMCHAT-CONTACT-V2.example";
-        let path = write_png(payload).unwrap_err();
-        assert!(path.contains("signed V2"));
+    fn rejects_legacy_and_oversized_qr_payloads() {
+        assert!(validate_payload("TOMCHAT-CONTACT-V1.legacy").is_err());
+        assert!(validate_payload(&format!("TOMCHAT-CONTACT-V2.{}", "x".repeat(4096))).is_err());
+    }
+
+    #[test]
+    fn accepts_v2_qr_payload_prefix() {
+        assert!(validate_payload("TOMCHAT-CONTACT-V2.payload").is_ok());
     }
 }
