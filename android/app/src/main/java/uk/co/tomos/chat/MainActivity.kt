@@ -514,7 +514,6 @@ private fun ChatsScreen(profile: AccountProfile) {
     var coordinator by remember { mutableStateOf<PeerMessagingCoordinator?>(null) }
     var trusted by remember { mutableStateOf<List<TrustedContact>>(emptyList()) }
     var selectedContact by remember { mutableStateOf<TrustedContact?>(null) }
-    var address by rememberSaveable { mutableStateOf("") }
     var port by rememberSaveable { mutableStateOf("47821") }
     var localFingerprint by remember { mutableStateOf<String?>(null) }
     var discovery by remember { mutableStateOf<AutoPeerDiscovery?>(null) }
