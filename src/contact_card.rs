@@ -290,4 +290,14 @@ mod tests {
         assert!(validate_name(&"x".repeat(65)).is_err());
         assert!(validate_name(&"😀".repeat(33)).is_err());
     }
+    #[test]
+    fn verifies_shared_android_kotlin_interoperability_vector() {
+        let encoded = include_str!("../docs/test-vectors/contact-card-v2.txt").trim();
+        let card = ContactCard::decode(encoded).unwrap();
+        assert_eq!(card.display_name, "TomChat Interop Test");
+        assert_eq!(card.fingerprint, "0E8D DAFD E31C E289 0F12 481A 03F8 247F 783E 64DF 1421 7348 9388 C8AA 7E04 D0C7");
+        assert_eq!(card.noise_static_public_key, Some(std::array::from_fn(|i| i as u8)));
+        assert!(card.is_noise_compatible());
+    }
+
 }
