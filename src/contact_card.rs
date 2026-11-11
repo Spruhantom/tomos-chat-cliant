@@ -368,6 +368,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn verifies_shared_android_rust_v2_fixture() {
+        let fixture = include_str!("../android/app/src/test/resources/contact-card-v2.txt").trim();
+        let decoded = ContactCard::decode(fixture).unwrap();
+        assert_eq!(decoded.display_name, "TomChat shared interoperability fixture");
+        assert!(decoded.is_noise_compatible());
+    }
+
+    #[test]
     fn android_v2_wire_format_round_trips_and_binds_noise_key() {
         let identity = SigningIdentity::generate().unwrap();
         let card = ContactCard::create("Tom's Linux PC", &identity, [0x2a; 32]).unwrap();
