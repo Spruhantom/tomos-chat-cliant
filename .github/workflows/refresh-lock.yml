@@ -1,0 +1,25 @@
+name: Refresh Rust lockfile for shared Noise integration
+
+on:
+  push:
+    branches:
+      - feature/shared-rust-peer-transport
+    paths:
+      - .github/workflows/refresh-lock.yml
+
+permissions:
+  contents: read
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Resolve and print updated lockfile
+        run: |
+          cargo generate-lockfile
+          echo "LOCKFILE_BASE64_BEGIN"
+          base64 -w0 Cargo.lock
+          echo
+          echo "LOCKFILE_BASE64_END"
