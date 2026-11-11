@@ -7,6 +7,8 @@ import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.security.KeyPair
 
 /**
@@ -80,10 +82,26 @@ class PeerMessagingCoordinator(
     @Throws(IOException::class)
     fun connectBluetooth(device: BluetoothDevice, contact: TrustedContact): PeerConversationSession {
         val socket = try {
-            device.createRfcommSocketToServiceRecord(BLUETOOTH_SERVICE_UUID).also { it.connect() }
+            device.createRfcommSocketToServiceRecord(BLUETOOTH_SERVICE_UUID)
         } catch (error: Exception) {
             if (error is IOException) throw error
+            throw IOException("Could not create the direct Bluetooth socket.", error)
+        }
+        val watchdog = Executors.newSingleThreadScheduledExecutor()
+        val timeout = watchdog.schedule(
+            { try { socket.close() } catch (_: Exception) { } },
+            BLUETOOTH_CONNECT_TIMEOUT_MS.toLong(),
+            TimeUnit.MILLISECONDS
+        )
+        try {
+            socket.connect()
+        } catch (error: Exception) {
+            try { socket.close() } catch (_: Exception) { }
+            if (error is IOException) throw error
             throw IOException("Could not connect directly over Bluetooth.", error)
+        } finally {
+            timeout.cancel(true)
+            watchdog.shutdownNow()
         }
         return establishBluetooth(socket, contact, initiator = true)
     }
@@ -93,10 +111,11 @@ class PeerMessagingCoordinator(
         contact: TrustedContact,
         initiator: Boolean
     ): PeerConversationSession {
+        val transport = BluetoothPeerTransportSocket(socket)
         val authenticated = try {
-            DirectPeerAuthenticator(localSigningIdentity, contact)
-                .authenticate(BluetoothPeerTransportSocket(socket))
+            DirectPeerAuthenticator(localSigningIdentity, contact).authenticate(transport)
         } catch (error: Exception) {
+            try { transport.close() } catch (_: Exception) { }
             try { socket.close() } catch (_: Exception) { }
             if (error is IOException) throw error
             throw IOException("Bluetooth peer authentication failed.", error)
@@ -133,6 +152,7 @@ class PeerMessagingCoordinator(
 
     companion object {
         private const val BLUETOOTH_ACCEPT_TIMEOUT_MS = 60_000
+        private const val BLUETOOTH_CONNECT_TIMEOUT_MS = 20_000
         val BLUETOOTH_SERVICE_UUID: java.util.UUID = java.util.UUID.fromString("5b8f1000-7a2d-4d6c-a9a8-544f4d434841")
     }
 }
