@@ -33,7 +33,7 @@ Uninstall the user-local executable and launcher (this does not delete identity/
 curl -fsSL https://raw.githubusercontent.com/Spruhantom/tomos-chat-cliant/main/install.sh | bash -s -- --uninstall
 ```
 
-Supported package managers: `pacman` (Arch Linux and Omarchy) and `apt-get` (Debian and Ubuntu). The installer requires an active desktop session with a working Secret Service/keyring for secure identity and trusted-contact storage. It fails closed if secure storage is unavailable.
+Supported package managers: `pacman` (Arch Linux and Omarchy) and `apt-get` (Debian 13+ and Ubuntu 24.04+). The GTK client requires libadwaita 1.5 or newer; older Debian/Ubuntu releases may not provide a compatible version. The installer requires an active desktop session with a working Secret Service/keyring for secure identity and trusted-contact storage. It fails closed if secure storage is unavailable.
 
 ### Android
 
