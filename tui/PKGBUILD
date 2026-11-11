@@ -1,0 +1,27 @@
+pkgname=tomchat-tui
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Decentralised peer-to-peer TomChat terminal client"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Spruhantom/tomos-chat-cliant"
+license=('GPL3')
+depends=('gcc-libs')
+makedepends=('cargo')
+source=("tomchat-tui::git+https://github.com/Spruhantom/tomos-chat-cliant.git#branch=feature/tomchat-tui-arch")
+sha256sums=('SKIP')
+
+prepare() {
+  cd "$srcdir/tomchat-tui/tui"
+  cargo fetch
+}
+
+build() {
+  cd "$srcdir/tomchat-tui/tui"
+  cargo build --release
+}
+
+package() {
+  cd "$srcdir/tomchat-tui/tui"
+  install -Dm755 target/release/tomchat "$pkgdir/usr/bin/tomchat"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/tomchat-tui/README.md"
+}
