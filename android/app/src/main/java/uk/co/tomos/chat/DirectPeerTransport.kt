@@ -51,7 +51,7 @@ class DirectPeerListener(
         }
     }
 
-    companion object { private const val ACCEPT_TIMEOUT_MS = 30_000 }
+    companion object { private const val ACCEPT_TIMEOUT_MS = 60_000 }
 }
 
 object DirectPeerConnector {
