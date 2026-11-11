@@ -1574,15 +1574,18 @@ dependencies = [
 name = "tomchat-client"
 version = "0.2.0"
 dependencies = [
+ "base64",
  "futures-util",
  "gtk4",
  "libadwaita",
  "reqwest",
+ "ring",
  "serde",
  "serde_json",
  "tokio",
  "tokio-tungstenite",
  "url",
+ "zeroize",
 ]
 
 [[package]]
