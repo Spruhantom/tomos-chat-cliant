@@ -1,0 +1,34 @@
+name: Rust format repair
+on:
+  push:
+    branches:
+      - feature/shared-rust-peer-transport
+permissions:
+  contents: write
+jobs:
+  format:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/shared-rust-peer-transport'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/shared-rust-peer-transport
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Format Rust crates
+        run: |
+          cargo fmt --all
+          cargo fmt --manifest-path android/native/tomchat-noise/Cargo.toml
+      - name: Commit formatting changes
+        run: |
+          if git diff --quiet; then
+            echo "Rust formatting is already clean."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -u
+          git commit -m "style: apply rustfmt formatting"
+          git push origin HEAD:feature/shared-rust-peer-transport
