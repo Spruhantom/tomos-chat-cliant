@@ -4,9 +4,10 @@ TomChat uses one automatic route policy for chat, voice and file transfer. Users
 
 ## Implementation status
 
-- **Implemented in this branch:** automatic Wi-Fi LAN discovery with Android NSD/mDNS, ephemeral listener ports, deterministic initiator selection, and the existing authenticated Noise XX session establishment. The normal chat UI no longer exposes manual IP, port, or Listen controls.
+- **Implemented in this branch:** automatic Wi-Fi LAN discovery with Android NSD/mDNS, a bounded multicast-lock window for older Android releases, ephemeral listener ports, deterministic initiator selection, multiple resolved LAN address attempts (including IPv6 where exposed by Android), and the existing authenticated Noise XX session establishment. The normal chat UI no longer exposes manual IP, port, or Listen controls.
 - **Implemented policy, adapters still pending:** route scoring includes Wi-Fi Direct, Bluetooth Classic/LE, and global IPv6, but those transports are not yet connected to the Android session coordinator. The current automatic connection path is same-LAN Wi-Fi only.
 - **Not yet verified:** two-physical-device discovery and reconnect tests. CI and device testing are required before this can be considered ready.
+- **Android platform follow-up:** the app currently targets SDK 35. Android 17 (API 37) introduces enforced local-network permission controls for raw LAN sockets; before raising target SDK to 37, implement the `ACCESS_LOCAL_NETWORK` runtime permission flow or migrate to the system NSD service picker where its user-selected-device interaction is acceptable.
 
 ## Planned direct transports
 
