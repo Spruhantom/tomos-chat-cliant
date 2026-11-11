@@ -54,6 +54,20 @@ class PeerRouteSelectorTest {
     }
 
     @Test
+    fun duplicateRouteIdsKeepTheBestMeasuredCandidate() {
+        val poor = route("same", PeerTransportKind.WIFI_LAN, 300, 0.70, 1_000)
+        val good = route("same", PeerTransportKind.WIFI_LAN, 8, 0.99, 80_000)
+        val result = PeerRouteSelector.select(listOf(poor, good), PeerTrafficClass.CHAT)
+        assertEquals(8, result.selected?.measuredLatencyMs)
+    }
+
+    @Test
+    fun bluetoothLeIsNotSelectedForVoiceMedia() {
+        val ble = route("ble", PeerTransportKind.BLUETOOTH_LE, 4, 0.99, 500)
+        assertNull(PeerRouteSelector.select(listOf(ble), PeerTrafficClass.VOICE).selected)
+    }
+
+    @Test
     fun deterministicTieBreakUsesRouteId() {
         val a = route("a", PeerTransportKind.WIFI_LAN, 20, 0.98, 20_000)
         val b = route("b", PeerTransportKind.WIFI_LAN, 20, 0.98, 20_000)
