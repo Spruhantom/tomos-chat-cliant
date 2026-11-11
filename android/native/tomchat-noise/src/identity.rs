@@ -112,11 +112,12 @@ impl NoiseIdentity {
         if !output.status.success() {
             return Err("No TomChat Noise identity was found in Secret Service.".into());
         }
-        let encoded = std::str::from_utf8(&output.stdout)
+        let mut encoded = std::str::from_utf8(&output.stdout)
             .map_err(|_| "Secret Service returned invalid identity data.".to_string())?
             .trim()
             .to_owned();
         let decoded = hex_decode(&encoded);
+        encoded.zeroize();
         let mut secret = decoded?;
         let mut output_bytes = output.stdout;
         output_bytes.zeroize();
