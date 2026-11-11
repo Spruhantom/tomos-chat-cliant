@@ -45,6 +45,20 @@ class EncryptedPeerChannelTest {
                             assertEquals(sent.type, received.type)
                             assertEquals(sent.messageId, received.messageId)
                             assertArrayEquals(sent.payload, received.payload)
+
+                            val identity = (1..32).joinToString("") { "AB" }.chunked(4).joinToString(" ")
+                            val callSignal = PeerCallSignal(
+                                UUID.randomUUID(), 1L, identity, PeerCallSignalKind.ACCEPT
+                            )
+                            val callFrame = EncryptedAppFrame(
+                                EncryptedAppFrame.Type.VOICE_SIGNAL,
+                                UUID.randomUUID(),
+                                PeerCallSignalCodec.encode(callSignal)
+                            )
+                            channel.send(callFrame)
+                            val receivedCallFrame = serverChannel.receive()
+                            assertEquals(EncryptedAppFrame.Type.VOICE_SIGNAL, receivedCallFrame.type)
+                            assertEquals(callSignal, PeerCallSignalCodec.decode(receivedCallFrame.payload))
                         } finally {
                             serverChannel.close()
                         }
