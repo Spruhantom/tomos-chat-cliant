@@ -18,7 +18,7 @@ Age is calculated using the user's local calendar date and completed birthdays, 
 
 The current screen is a development prototype. It accepts a self-declared date of birth and previews the assigned age band. It does **not** verify a person's age, verify a guardian, obtain legally meaningful parental consent, or securely persist an account profile. It must not be treated as an age-assurance system, and no adult-only or child-facing production features should be unlocked solely on this self-declaration.
 
-The production flow needs a reviewed age-assurance design and a separate guardian-consent ceremony for children where required. The verification method must be privacy-preserving, minimise disclosure, and must not silently introduce a TomChat-operated or third-party application centralised service. If a proposed verification method needs an online service, it must be explicitly assessed against the strict fully decentralised architecture requirement before adoption.
+The production flow needs a reviewed age-assurance design and a separate guardian-consent ceremony for children where required. The verification method must be privacy-preserving, minimise disclosure, and must not silently introduce a TomChat-operated or third-party hosted verification provider. If a proposed verification method needs an online service, it must be explicitly assessed against the strict fully decentralised architecture requirement before adoption.
 
 ## Data minimisation
 
@@ -41,7 +41,7 @@ The production flow needs a reviewed age-assurance design and a separate guardia
 
 ## fully decentralised architecture boundary
 
-Age-band calculation can be local. That does not make age verification or guardian consent trustworthy by itself. Any eventual proof should be verified locally where technically possible (for example, using a verifiable credential issued by a suitable independent process), with no TomChat account centralised service, directory, relay, or hosted guardian service. Whether a credential issuer is compatible with the product's strict fully decentralised promise requires a separate product decision and legal/privacy review.
+Age-band calculation can be local. That does not make age verification or guardian consent trustworthy by itself. Any eventual proof should be verified locally where technically possible (for example, using a verifiable credential issued by a suitable independent process), with no TomChat-hosted account infrastructure, directory, relay, or hosted guardian service. Whether a credential issuer is compatible with the product's strict fully decentralised promise requires a separate product decision and legal/privacy review.
 
 ## Central capability policy prototype
 
