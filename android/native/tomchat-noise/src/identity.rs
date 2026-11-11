@@ -58,8 +58,9 @@ impl NoiseIdentity {
 
 
 impl NoiseIdentity {
-    fn from_stored(private_key: [u8; 32], public_key: [u8; 32]) -> Self {
-        Self { private_key, public_key }
+    fn from_stored(private_key: [u8; 32], public_key: [u8; 32]) -> Result<Self, String> {
+        validate_keypair(&private_key, &public_key)?;
+        Ok(Self { private_key, public_key })
     }
 
     /// Store the identity in the user's desktop Secret Service collection.
@@ -84,11 +85,13 @@ impl NoiseIdentity {
         let mut encoded = hex_encode(&secret);
         secret.zeroize();
 
-        if let Some(mut stdin) = child.stdin.take() {
-            let result = stdin.write_all(encoded.as_bytes());
-            encoded.zeroize();
-            result.map_err(|error| format!("Could not pass identity to Secret Service: {error}"))?;
-        }
+        let write_result = if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(encoded.as_bytes())
+        } else {
+            Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, "Secret Service input unavailable"))
+        };
+        encoded.zeroize();
+        write_result.map_err(|error| format!("Could not pass identity to Secret Service: {error}"))?;
         let status = child.wait()
             .map_err(|error| format!("Could not save identity in Secret Service: {error}"))?;
         if !status.success() {
@@ -130,8 +133,26 @@ impl NoiseIdentity {
         private_key.copy_from_slice(&secret[..32]);
         public_key.copy_from_slice(&secret[32..]);
         secret.zeroize();
-        Ok(Self::from_stored(private_key, public_key))
+        Self::from_stored(private_key, public_key)
     }
+}
+
+
+#[cfg(target_os = "linux")]
+fn validate_keypair(private_key: &[u8; 32], public_key: &[u8; 32]) -> Result<(), String> {
+    let mut initiator = crate::NoiseSession::initiator(private_key, public_key)
+        .map_err(|_| "Stored Noise identity is invalid.".to_string())?;
+    let mut responder = crate::NoiseSession::responder(private_key, public_key)
+        .map_err(|_| "Stored Noise identity is invalid.".to_string())?;
+    let first = initiator.write_handshake(&[]).map_err(|_| "Stored Noise identity is invalid.".to_string())?;
+    responder.read_handshake(&first).map_err(|_| "Stored Noise identity is invalid.".to_string())?;
+    let second = responder.write_handshake(&[]).map_err(|_| "Stored Noise identity is invalid.".to_string())?;
+    initiator.read_handshake(&second).map_err(|_| "Stored Noise identity is invalid.".to_string())?;
+    let third = initiator.write_handshake(&[]).map_err(|_| "Stored Noise identity is invalid.".to_string())?;
+    responder.read_handshake(&third).map_err(|_| "Stored Noise identity is invalid.".to_string())?;
+    initiator.finish_handshake().map_err(|_| "Stored Noise public key does not match its private key.".to_string())?;
+    responder.finish_handshake().map_err(|_| "Stored Noise public key does not match its private key.".to_string())?;
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
