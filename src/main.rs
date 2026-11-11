@@ -273,7 +273,8 @@ fn build_contacts(app: &adw::Application) {
             connect_status.set_text("Select a trusted V2 contact first.");
             return;
         };
-        let Some(local) = connect_noise.borrow().as_ref() else {
+        let local_identity = connect_noise.borrow();
+        let Some(local) = local_identity.as_ref() else {
             connect_status.set_text("Create or recover this device's Noise identity first.");
             return;
         };
@@ -308,7 +309,8 @@ fn build_contacts(app: &adw::Application) {
             listen_status.set_text("Select a trusted V2 contact first.");
             return;
         };
-        let Some(local) = listen_noise.borrow().as_ref() else {
+        let local_identity = listen_noise.borrow();
+        let Some(local) = local_identity.as_ref() else {
             listen_status.set_text("Create or recover this device's Noise identity first.");
             return;
         };
