@@ -10,7 +10,7 @@ The next milestone is to reuse the Android project's direct TCP + mutual identit
 
 ## Architecture rules
 
-- Strict decentralised peer-to-peer: no account centralised service, relay, hosted discovery, STUN/TURN, central directory or cloud storage.
+- Strict decentralised peer-to-peer: no central account infrastructure, relay, hosted discovery, STUN/TURN, central directory or cloud storage.
 - Direct connections only, using peer-supplied reachability hints.
 - Bind Noise static keys to the same signed, fingerprint-verified TomChat contact identity used by Android.
 - Do not send application data before mutual identity authentication and Noise XX key pinning complete.
