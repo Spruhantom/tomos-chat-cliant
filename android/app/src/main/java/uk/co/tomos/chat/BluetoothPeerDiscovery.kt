@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * Nearby-device discovery for the direct Bluetooth fallback.
  *
- * BLE advertises only a short hash of the already trusted contact fingerprint.
+ * BLE advertises only an eight-byte hash prefix of the already trusted contact fingerprint, keeping the 128-bit service UUID and payload inside legacy advertisement limits.
  * The actual conversation uses RFCOMM and then the exact same signed identity
  * proof and Noise XX handshake as Wi-Fi. BLE is never used as a voice-media
  * transport. No location permission, relay, cloud directory or rendezvous is used.
@@ -173,6 +173,6 @@ class BluetoothPeerDiscovery(
         internal fun fingerprintToken(fingerprint: String): ByteArray =
             MessageDigest.getInstance("SHA-256")
                 .digest(fingerprint.toByteArray(Charsets.US_ASCII))
-                .copyOfRange(0, 16)
+                .copyOfRange(0, 8)
     }
 }
