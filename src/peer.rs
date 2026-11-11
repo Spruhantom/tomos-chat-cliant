@@ -34,6 +34,23 @@ pub fn connect_peer_with_key(
     connect_peer_with_key_from_stream(stream, local_private_key, expected_peer)
 }
 
+/// Bind a local TCP port, accept one incoming peer, and authenticate its pinned key.
+/// The caller should run this blocking operation on a worker thread.
+pub fn accept_peer_with_key(
+    address: &str,
+    local_private_key: &[u8; 32],
+    contact: &ContactCard,
+) -> Result<EncryptedPeerChannel, String> {
+    let expected_peer = trusted_noise_key(contact)?;
+    let listener = TcpListener::bind(address)
+        .map_err(|error| format!("Could not listen for direct peer connections on {address}: {error}"))?;
+    let (stream, remote) = listener.accept()
+        .map_err(|error| format!("Could not accept incoming peer connection: {error}"))?;
+    configure_stream(&stream)?;
+    accept_peer_with_key_from_stream(stream, local_private_key, expected_peer)
+        .map_err(|error| format!("Incoming connection from {remote} was rejected: {error}"))
+}
+
 fn connect_peer_with_key_from_stream(
     stream: TcpStream,
     local_private_key: &[u8; 32],
