@@ -94,4 +94,19 @@ class NoisePeerSessionTest {
         assertTrue(backend.closedHandles.contains(5L))
         assertThrows(IllegalStateException::class.java) { session.decrypt(byteArrayOf(1)) }
     }
+    @Test
+    fun legacyTrustedContactWithoutSignedNoiseBindingCannotCreateSession() {
+        val legacyContact = TrustedContact(
+            displayName = "Legacy peer",
+            encodedPublicKey = byteArrayOf(1, 2, 3),
+            fingerprint = "legacy-fingerprint",
+            noiseStaticPublicKey = null
+        )
+        val localIdentity = NoiseIdentity(ByteArray(32), ByteArray(32))
+
+        assertThrows(IllegalArgumentException::class.java) {
+            NoisePeerSession.create(localIdentity, legacyContact, initiator = true)
+        }
+    }
+
 }
