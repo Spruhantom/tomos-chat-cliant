@@ -6,6 +6,9 @@ on:
       - feature/shared-rust-peer-transport
     paths:
       - .github/workflows/refresh-lock.yml
+      - Cargo.toml
+      - Cargo.lock
+      - android/native/tomchat-noise/**
 
 permissions:
   contents: read
