@@ -4,7 +4,6 @@ mod peer;
 mod peer_chat;
 
 use adw::prelude::*;
-use gtk::prelude::*;
 use gtk::glib;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -380,7 +379,8 @@ fn build_contacts(app: &adw::Application) {
     let send_status = status.clone();
     send.connect_clicked(move |_| {
         let message = send_input.text().to_string();
-        let Some(chat) = send_chat.borrow().as_ref() else {
+        let active = send_chat.borrow();
+        let Some(chat) = active.as_ref() else {
             send_status.set_text("Connect to a trusted peer before sending messages.");
             return;
         };
@@ -399,7 +399,8 @@ fn build_contacts(app: &adw::Application) {
     let send_status_enter = status.clone();
     message_input.connect_activate(move |entry| {
         let message = entry.text().to_string();
-        let Some(chat) = send_chat_enter.borrow().as_ref() else {
+        let active = send_chat_enter.borrow();
+        let Some(chat) = active.as_ref() else {
             send_status_enter.set_text("Connect to a trusted peer before sending messages.");
             return;
         };
