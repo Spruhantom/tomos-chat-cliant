@@ -87,6 +87,15 @@ impl SigningIdentity {
     pub fn save_to_secret_service(&self) -> Result<(), ContactCardError> {
         use std::io::Write;
         use std::process::{Command, Stdio};
+        let mut existing = Command::new("secret-tool")
+            .args(["lookup", "application", "tomchat", "key", "p256-signing-v1"])
+            .stdin(Stdio::null()).stderr(Stdio::null()).output()
+            .map_err(|error| ContactCardError::KeyStore(error.to_string()))?;
+        let already_exists = existing.status.success();
+        existing.stdout.zeroize();
+        if already_exists {
+            return Err(ContactCardError::KeyStore("A signing identity already exists; refusing to replace it.".into()));
+        }
         let mut child = Command::new("secret-tool")
             .args(["store", "--label=TomChat signing identity",
                 "application", "tomchat", "key", "p256-signing-v1"])
