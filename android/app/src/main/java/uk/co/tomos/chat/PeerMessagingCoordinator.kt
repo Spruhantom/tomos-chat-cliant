@@ -1,5 +1,6 @@
 package uk.co.tomos.chat
 
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
@@ -68,6 +69,7 @@ class PeerMessagingCoordinator(
 
     /** Accept an RFCOMM connection and run the exact same identity + Noise protocol as TCP. */
     @Throws(IOException::class)
+    @SuppressLint("MissingPermission")
     fun acceptBluetooth(server: BluetoothServerSocket, contact: TrustedContact): PeerConversationSession {
         val socket = try {
             server.accept(BLUETOOTH_ACCEPT_TIMEOUT_MS)
@@ -80,6 +82,7 @@ class PeerMessagingCoordinator(
 
     /** Connect to a previously discovered Bluetooth peer without a relay. */
     @Throws(IOException::class)
+    @SuppressLint("MissingPermission")
     fun connectBluetooth(device: BluetoothDevice, contact: TrustedContact): PeerConversationSession {
         val socket = try {
             device.createRfcommSocketToServiceRecord(BLUETOOTH_SERVICE_UUID)
