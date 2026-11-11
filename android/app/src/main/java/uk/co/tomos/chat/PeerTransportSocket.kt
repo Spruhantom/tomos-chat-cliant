@@ -1,5 +1,6 @@
 package uk.co.tomos.chat
 
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothSocket
 import java.io.IOException
 import java.io.InputStream
@@ -42,6 +43,7 @@ class TcpPeerTransportSocket(private val socket: Socket) : PeerTransportSocket {
  * RFCOMM adapter. BluetoothSocket has no SO_TIMEOUT equivalent, so a bounded
  * handshake timeout closes the socket via a watchdog. Setting zero disables it.
  */
+@SuppressLint("MissingPermission")
 class BluetoothPeerTransportSocket(private val socket: BluetoothSocket) : PeerTransportSocket {
     private val closed = AtomicBoolean(false)
     private val watchdog = Executors.newSingleThreadScheduledExecutor()
