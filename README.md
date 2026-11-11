@@ -2,16 +2,16 @@
 
 **TomChat** is an Android-first project to build a decentralised, peer-to-peer messaging and voice app that keeps identity and communication under the user's control.
 
-> **Development status:** early Android foundation. The current app contains first-run age-band setup, local encrypted profile storage, a device signing identity, signed QR contact cards, and a direct TCP identity-proof prototype. It is not yet a functioning messenger. The Snow-based Noise XX core is now exposed to Android through JNI, with a Gradle cargo-ndk build for ARM and x86-64. Android instrumentation tests cover handshake, peer-key pinning and encrypted records. It is not yet connected to the direct socket or messaging UI, and end-to-end encrypted messaging is not yet available.
+> **Development status:** The Android prototype now includes direct TCP peer messaging and a first one-to-one voice-call path. Trusted contacts authenticate with signed identity proof, then pinned-key Noise XX; text, delivery acknowledgements, call signalling and 20 ms PCM voice frames are sent inside the encrypted channel. Android audio capture/playback uses communication audio mode, optional echo cancellation/noise suppression and speaker/earpiece routing. The call path is currently a LAN/reachable-IP prototype using raw PCM over ordered TCP; it is not yet optimised for mobile internet, NAT traversal, packet loss or battery use. CI and physical two-device audio testing remain outstanding. The account safety policy intentionally keeps messaging and calls disabled until age assurance (and guardian approval where required) is complete.
 
 ## Project principles
 
-- **Strict peer-to-peer:** TomChat will not deploy or depend on application servers, account servers, relays, push gateways, hosted discovery, central directories or hosted message storage.
+- **Strict peer-to-peer:** TomChat will not deploy or depend on centralised application infrastructure, centralised account infrastructure, relays, push gateways, hosted discovery, central directories or hosted message storage.
 - **Device-controlled identity:** the intended design keeps identity keys under the user's control on their devices.
 - **End-to-end encryption:** message and call content must be protected independently of the transport. The protocol is not yet implemented or security-reviewed.
 - **Local-first data:** conversations and account data should remain on the user's devices, with encrypted local backup and explicitly trusted-device replication planned.
-- **Honest connectivity:** direct connections are best-effort. NAT, carrier restrictions, firewalls, device sleep and offline peers can prevent remote connections. Without relays or mailbox servers, TomChat cannot promise global reachability or offline delivery.
-- **No silent fallback:** if a direct connection cannot be made, the app must explain the limitation rather than quietly using a server.
+- **Honest connectivity:** direct connections are best-effort. NAT, carrier restrictions, firewalls, device sleep and offline peers can prevent remote connections. Without relays or hosted message storage, TomChat cannot promise global reachability or offline delivery.
+- **No silent fallback:** if a direct connection cannot be made, the app must explain the limitation rather than quietly using a centralised service.
 
 ## One app, age-aware account setup
 
@@ -39,7 +39,7 @@ The production design must:
 - provide clear block/report controls and age-appropriate contact approval;
 - meet applicable child privacy, age-assurance, consent and online-safety requirements in each launch jurisdiction.
 
-Any proposed verification mechanism must be assessed against TomChat's strict no-application-server requirement. A local date-of-birth calculation alone is not trustworthy age assurance. See [Account age and child safety](docs/account-age-safety.md).
+Any proposed verification mechanism must be assessed against TomChat's strict fully decentralised architecture requirement. A local date-of-birth calculation alone is not trustworthy age assurance. See [Account age and child safety](docs/account-age-safety.md).
 
 ## Planned features
 
@@ -48,23 +48,26 @@ Any proposed verification mechanism must be assessed against TomChat's strict no
 - File sharing and voice messages.
 - Direct Bluetooth and Wi-Fi LAN connections, plus direct IP connections where reachable.
 - Automatic selection of the best available direct route, based on latency, throughput, stability and battery impact.
-- Device-local P-256 signing identity protected by Android Keystore, plus persistent X25519 Noise identity protected at rest by an Android Keystore AES-GCM wrapping key. V2 QR contact cards cryptographically bind the Noise public key into the P-256 signature. Camera scanning, fingerprint approval and encrypted trusted-contact persistence are implemented, including compatibility with older V1 cards (which are not Noise-capable). A direct TCP peer transport with mutual signed-nonce identity proof is prototyped; it does not yet carry application data or provide an encrypted session.
+- Device-local P-256 signing identity protected by Android Keystore, plus persistent X25519 Noise identity protected at rest by an Android Keystore AES-GCM wrapping key. V2 QR contact cards cryptographically bind the Noise public key into the P-256 signature. Camera scanning, fingerprint approval and encrypted trusted-contact persistence are implemented, including compatibility with older V1 cards (which are not Noise-capable). A direct TCP peer transport now performs mutual signed-nonce identity proof and then establishes a pinned-key Noise XX session before carrying encrypted application frames.
 - Encrypted local backup and encrypted peer-to-peer replication to explicitly trusted devices.
 - TomSocial integration as a later, carefully scoped decentralised social layer.
 
-All networking must use the same authenticated peer identity and end-to-end encrypted message envelope. Bluetooth LE discovery/GATT and Bluetooth Classic data transfer are planned; direct Bluetooth peer voice remains experimental until physical-device testing demonstrates acceptable quality and battery use.
+All networking must use the same authenticated peer identity and end-to-end encrypted message envelope. The current voice prototype carries fixed-size PCM frames through the Noise channel over the established direct TCP connection. Opus encoding, adaptive jitter buffering, packet-loss concealment, UDP/WebRTC-style media transport, NAT traversal and Bluetooth voice transport remain future work.
 
 ## Android application
 
-The Android foundation uses Kotlin, Jetpack Compose and Material 3, with an isolated Rust Noise XX prototype using Snow at `android/native/tomchat-noise`. The Rust Noise session is connected through a narrow JNI API; Rust owns session state, and Kotlin passes the signed contact key pin. The JNI session is not yet wired to the direct TCP transport. See [docs/architecture.md](docs/architecture.md) for remaining security work. The TomOS visual design is documented in [docs/design-system.md](docs/design-system.md). Tom OS Hyprland 1 is the primary brand reference; TomOS Android SIP informs Android interaction patterns, without importing SIP or Linphone functionality.
+The Android foundation uses Kotlin, Jetpack Compose and Material 3, with the Rust Noise XX core using Snow at `android/native/tomchat-noise`. Rust owns Noise session state behind a narrow JNI API. The messaging prototype connects the direct TCP identity-proof socket to the pinned Noise XX handshake, then exposes only encrypted application frames to the conversation session. The Compose chat screen can initiate or accept a direct connection to an independently trusted contact and displays encrypted local history. See [docs/architecture.md](docs/architecture.md) for remaining security work. The TomOS visual design is documented in [docs/design-system.md](docs/design-system.md). Tom OS Hyprland 1 is the primary brand reference; TomOS Android SIP informs Android interaction patterns, without importing SIP or Linphone functionality.
 
 Current UI foundation:
 - adaptive compact/medium/expanded window navigation: bottom bar on compact windows and navigation rail on wider windows; content width is constrained on large displays, and setup/contacts can scroll on short or unfolded screens;
 - fold posture detection through Jetpack WindowManager, with book mode for half-open vertical folds and tabletop mode for half-open horizontal folds; both layouts provide a hinge gutter and companion navigation pane. Device-by-device physical validation is still required;
 - first-run display-name and date-of-birth screen with local age-band preview;
 - Chats, Contacts, Calls and Settings navigation;
+- prototype chat flow with manual direct-IP connection/listen, trusted-contact selection, Noise XX gating, encrypted text frames, encrypted delivery receipts and local history;
+- prototype one-to-one voice calls from an active encrypted chat, with incoming-call invite/accept/reject, hang-up, mute, speaker/earpiece routing, runtime microphone permission and PCM media frames carried only through the Noise channel;
+- messaging and calling remain locked until the account safety policy allows the relevant capability and the Noise session is established;
 - TomOS neon visual styling;
-- account experience and zero-server policy status placeholders.
+- account experience and decentralised peer-to-peer policy status placeholders.
 
 The age-band classifier, central capability policy and unit tests are under `android/app/src/main` and `android/app/src/test`. The prototype defaults to unverified accounts, so communication capabilities remain locked; minors additionally require guardian approval. This is domain-policy scaffolding, not a connected age-verification or consent flow. Account setup persists a minimal profile using AES-256-GCM with a device-held Android Keystore key; the full date of birth is not saved. The persistent Noise X25519 private scalar is wrapped with AES-256-GCM and is not stored in plaintext. Keystore/atomic-file behaviour still requires physical-device testing.
 
@@ -85,7 +88,7 @@ The debug APK is produced at:
 android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-GitHub Actions runs Android unit tests and builds the debug APK. The existing Rust desktop checks are separate. Check the [Actions page](https://github.com/Spruhantom/tomos-chat-cliant/actions) for the latest result; do not assume a run has passed while it is still in progress.
+GitHub Actions builds the production Rust Noise/JNI library for the Linux host and runs a real JVM loopback integration test using that library. The test performs mutual signed-peer authentication, the real Noise XX handshake, and encrypted text, delivery-acknowledgement, call-signalling and PCM voice-frame exchange over localhost TCP; it is not a mock crypto test and does not require an emulator. CI also compiles the Android instrumentation-test sources without booting an emulator, builds the Android debug APK, validates native JNI exports for all packaged Android ABIs and uploads the APK. The instrumentation test that exercises Android Keystore-backed history remains available for manual execution on a device or emulator with `gradle --no-daemon :android:app:connectedDebugAndroidTest`. Physical microphone/speaker quality still requires two real phones. The existing Rust desktop checks are separate. Check the [Actions page](https://github.com/Spruhantom/tomos-chat-cliant/actions) for the latest result; do not assume a run has passed while it is still in progress.
 
 ## Repository layout
 
@@ -105,8 +108,9 @@ GitHub Actions runs Android unit tests and builds the debug APK. The existing Ru
 3. Design and review age assurance, guardian consent and age-policy enforcement.
 4. Prototype authenticated direct Bluetooth communication between two physical Android devices.
 5. Add direct Wi-Fi LAN and reachable direct-IP transport.
-6. Implement the reviewed end-to-end encryption protocol and messaging.
-7. Add calls, file transfer, backups and later TomSocial capabilities.
+6. Complete messaging delivery/reconnect reliability and independently review the end-to-end encryption implementation.
+7. Validate the voice prototype on two physical devices, then add Opus, jitter handling and a mobile-friendly media transport.
+8. Add file transfer, backups and later TomSocial capabilities.
 
 ## Security and release policy
 

@@ -2,7 +2,7 @@ name: TomChat Android CI
 
 on:
   push:
-    branches: [main, android-rebuild, voice-audio-foundation, webrtc-audio-foundation]
+    branches: [main, android-rebuild, 'feature/**']
   pull_request:
     branches: [main, android-rebuild]
   workflow_dispatch:
@@ -48,8 +48,23 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Run unit tests
+      # Build the production Rust/JNI Noise library for the Linux host. The
+      # JVM integration test loads this real library; no Android emulator is needed.
+      - name: Build host Noise JNI library for real JVM integration tests
+        run: |
+          HOST_NATIVE_DIR="$RUNNER_TEMP/tomchat-noise-host"
+          cargo build --release \
+            --manifest-path android/native/tomchat-noise/Cargo.toml \
+            --target-dir "$HOST_NATIVE_DIR"
+          test -s "$HOST_NATIVE_DIR/release/libtomchat_noise.so"
+
+      - name: Run unit and real Noise loopback integration tests
+        env:
+          JAVA_TOOL_OPTIONS: -Djava.library.path=${{ runner.temp }}/tomchat-noise-host/release
         run: gradle --no-daemon :android:app:testDebugUnitTest
+
+      - name: Compile Android instrumentation tests without booting an emulator
+        run: gradle --no-daemon :android:app:compileDebugAndroidTestKotlin
 
       - name: Build debug APK
         run: gradle --no-daemon :android:app:assembleDebug

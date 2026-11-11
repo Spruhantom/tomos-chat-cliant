@@ -77,4 +77,4 @@ The next foldable milestone is hinge/posture awareness with Jetpack WindowManage
 - Implement the design in native Jetpack Compose Material 3 components and centralized theme tokens.
 - Do not port GTK CSS, Quickshell/QML, Hyprland configuration, or desktop-only effects into Android.
 - Do not import the SIP app's Linphone SDK, SIP account model, or SIP networking into TomChat. Its UI and lifecycle patterns are references only.
-- Keep this visual system independent of the zero-server transport and cryptographic layers. Branding must not create telemetry, remote asset, font, or theme-service dependencies.
+- Keep this visual system independent of the decentralised peer-to-peer transport and cryptographic layers. Branding must not create telemetry, remote asset, font, or theme-service dependencies.

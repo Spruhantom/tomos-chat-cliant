@@ -1,8 +1,13 @@
 package uk.co.tomos.chat
 
 import android.os.Bundle
+import android.os.Build
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -42,6 +47,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
@@ -60,6 +66,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.LocalDensity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -171,6 +178,24 @@ private enum class Destination(val label: String, val glyph: String) {
     Settings("Settings", "⚙")
 }
 
+
+
+@Composable
+private fun AdultDebugTestBanner() {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF392A12)),
+        border = BorderStroke(1.dp, Color(0xFFFFC857))
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text("DEBUG TEST MODE — ADULT ACCOUNTS ONLY", color = Color(0xFFFFD477), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "Age assurance is bypassed only in this debug build for adult-classified accounts. Use only with consenting adult testers. Release builds keep the normal age and guardian checks.",
+                color = TextPrimary, fontSize = 11.sp, lineHeight = 16.sp
+            )
+        }
+    }
+}
 
 @Composable
 private fun ProfileStatusScreen(message: String) {
@@ -337,7 +362,7 @@ private fun TomChatApp(
                     containerColor = Void,
                     topBar = {
                         Column {
-                            AppHeader(profile.displayName)
+                            AppHeader()
                             if (foldPosture == FoldPosture.BOOK || foldPosture == FoldPosture.TABLETOP) {
                                 FoldPostureBanner(foldPosture)
                             }
@@ -399,7 +424,7 @@ private fun TomChatApp(
 @Composable
 private fun DestinationScreen(destination: Destination, profile: AccountProfile, contactCard: String?) {
     when (destination) {
-        Destination.Chats -> ChatsScreen()
+        Destination.Chats -> ChatsScreen(profile)
         Destination.Contacts -> ContactsScreen(profile, contactCard)
         Destination.Calls -> CallsScreen()
         Destination.Settings -> SettingsScreen(profile)
@@ -443,118 +468,371 @@ private fun FoldCompanionPane(
 }
 
 @Composable
-private fun AppHeader(displayName: String) {
+private fun AppHeader() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(Brush.horizontalGradient(listOf(Panel, Void)))
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+            .padding(horizontal = 20.dp, vertical = 18.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(44.dp)
-                .background(Brush.linearGradient(listOf(Pink, Purple)), RoundedCornerShape(14.dp)),
+                .size(42.dp)
+                .background(Brush.linearGradient(listOf(Pink, Purple)), RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
             Text("T", color = Color.White, fontWeight = FontWeight.Black, fontSize = 25.sp)
         }
         Spacer(Modifier.width(12.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column {
             Text("TOMCHAT", color = TextPrimary, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
-            Text("PRIVATE • DEVICE TO DEVICE", color = Cyan, fontSize = 9.sp, letterSpacing = 0.8.sp)
+            Text("PEER TO PEER • ZERO SERVERS", color = Cyan, fontSize = 9.sp, letterSpacing = 1.sp)
         }
         Spacer(Modifier.weight(1f))
-        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(displayName, color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-            Text("ON THIS DEVICE", color = Muted, fontSize = 8.sp, letterSpacing = 0.8.sp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(7.dp).background(Green, CircleShape))
+            Spacer(Modifier.width(6.dp))
+            Text("LOCAL", color = Muted, fontSize = 10.sp, letterSpacing = 1.sp)
         }
     }
 }
 
 @Composable
 private fun ScreenTitle(title: String, subtitle: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 18.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            Modifier.width(3.dp).height(42.dp)
-                .background(Brush.verticalGradient(listOf(Pink, Purple)), RoundedCornerShape(3.dp))
-        )
-        Spacer(Modifier.width(13.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text("TOMCHAT", color = Cyan, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
-            Text(title, fontSize = 25.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-            Text(subtitle, fontSize = 12.sp, color = Muted)
-        }
+    Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 18.dp)) {
+        Text(title, fontSize = 27.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+        Spacer(Modifier.height(4.dp))
+        Text(subtitle, fontSize = 12.sp, color = Muted)
     }
 }
 
 @Composable
-private fun ChatsScreen() {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        ScreenTitle("Messages", "A private space for direct conversations.")
-        StatusCard()
-        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 24.dp)) {
-            Text("INBOX", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
-            Spacer(Modifier.height(12.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Panel),
-                border = BorderStroke(1.dp, Raised),
-                shape = RoundedCornerShape(20.dp)
-            ) {
-                EmptyState(
-                    glyph = "✉",
-                    title = "Your inbox is ready",
-                    body = "The conversation interface is being prepared. Messaging will become available only after the secure peer session and account safety checks are complete."
+private fun ChatsScreen(profile: AccountProfile) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val contactStore = remember { TrustedContactStore(context.filesDir) }
+    var coordinator by remember { mutableStateOf<PeerMessagingCoordinator?>(null) }
+    var trusted by remember { mutableStateOf<List<TrustedContact>>(emptyList()) }
+    var selectedContact by remember { mutableStateOf<TrustedContact?>(null) }
+    var port by rememberSaveable { mutableStateOf("47821") }
+    var localFingerprint by remember { mutableStateOf<String?>(null) }
+    var discovery by remember { mutableStateOf<AutoPeerDiscovery?>(null) }
+    var session by remember { mutableStateOf<PeerConversationSession?>(null) }
+    var messages by remember { mutableStateOf<List<StoredChatMessage>>(emptyList()) }
+    var draft by rememberSaveable { mutableStateOf("") }
+    var working by remember { mutableStateOf(false) }
+    var statusText by remember { mutableStateOf("Preparing device encryption…") }
+    var errorText by remember { mutableStateOf<String?>(null) }
+    var callSnapshot by remember { mutableStateOf<PeerCallSnapshot?>(null) }
+    var pendingCallAction by remember { mutableStateOf("call") }
+    var callMuted by remember { mutableStateOf(false) }
+    var callSpeaker by remember { mutableStateOf(false) }
+    var pendingBluetoothContact by remember { mutableStateOf<TrustedContact?>(null) }
+
+    val callController = remember(session, selectedContact) {
+        val activeSession = session
+        val peer = selectedContact
+        if (activeSession != null && peer != null) {
+            PeerVoiceCallController(context, activeSession, peer.fingerprint, onError = { error ->
+                scope.launch { errorText = error.message ?: "Voice call audio failed." }
+            })
+        } else null
+    }
+    val microphonePermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            try {
+                if (pendingCallAction == "accept") callController?.acceptIncoming()
+                else callController?.startOutgoing()
+                callSnapshot = callController?.snapshot
+                callMuted = false
+                callSpeaker = false
+                errorText = null
+            } catch (error: Exception) {
+                errorText = error.message ?: "Could not start the voice call."
+            }
+        } else {
+            errorText = "Microphone permission is required to make or answer a voice call."
+        }
+    }
+
+    fun beginAutomaticDiscovery(contact: TrustedContact, allowBluetooth: Boolean) {
+        session?.close(); session = null
+        discovery?.close()
+        selectedContact = contact; working = true; errorText = null
+        statusText = "Starting automatic direct discovery…"
+        val activeDiscovery = AutoPeerDiscovery(
+            context = context,
+            coordinator = coordinator!!,
+            localFingerprint = localFingerprint!!,
+            contact = contact,
+            enableBluetoothFallback = allowBluetooth,
+            onStatus = { statusText = it },
+            onConnected = { connected ->
+                scope.launch {
+                    session?.close(); session = connected
+                    messages = withContext(Dispatchers.IO) { coordinator?.loadHistory(contact.fingerprint).orEmpty() }
+                    working = false
+                    discovery = null
+                }
+            },
+            onError = { error ->
+                scope.launch {
+                    errorText = error.message ?: "No direct connection could be established."
+                    statusText = "No direct route found"
+                    working = false
+                    discovery = null
+                }
+            }
+        )
+        discovery = activeDiscovery
+        activeDiscovery.start()
+    }
+
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val pending = pendingBluetoothContact
+        pendingBluetoothContact = null
+        if (pending != null) beginAutomaticDiscovery(pending, results.isNotEmpty() && results.values.all { it })
+    }
+
+    LaunchedEffect(context.filesDir) {
+        try {
+            val loaded = withContext(Dispatchers.IO) {
+                val signing = DeviceIdentityStore().getOrCreate()
+                val noise = NoiseIdentityStore(context.filesDir).getOrCreate()
+                Triple(
+                    PeerMessagingCoordinator(context.filesDir, signing, noise),
+                    contactStore.load(),
+                    ContactCardCodec.fingerprint(signing.public.encoded)
                 )
             }
-            Spacer(Modifier.height(16.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Raised.copy(alpha = 0.55f)),
-                border = BorderStroke(1.dp, Cyan.copy(alpha = 0.18f)),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("BUILT FOR DIRECT CONNECTIONS", color = Cyan, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
-                    Text("No central chat servers", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                    Text("TomChat is designed for device-to-device communication. Both peers need a reachable direct connection; offline delivery and global reachability are not guaranteed.", color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
+            coordinator = loaded.first
+            trusted = loaded.second
+            localFingerprint = loaded.third
+            statusText = "Ready for a direct encrypted connection"
+        } catch (error: Exception) {
+            errorText = error.message ?: "Could not initialise encrypted messaging."
+            statusText = "Encryption unavailable"
+        }
+    }
+
+    DisposableEffect(coordinator) { onDispose { discovery?.close(); coordinator?.close() } }
+    DisposableEffect(discovery) { onDispose { discovery?.close() } }
+    DisposableEffect(session) { onDispose { session?.close() } }
+    DisposableEffect(callController) {
+        callSnapshot = callController?.snapshot
+        onDispose { callController?.close() }
+    }
+
+    LaunchedEffect(session) {
+        val active = session ?: return@LaunchedEffect
+        val peer = selectedContact ?: return@LaunchedEffect
+        while (true) {
+            try {
+                val event = withContext(Dispatchers.IO) { active.receiveEvent() }
+                withContext(Dispatchers.IO) { callController?.handle(event) }
+                callSnapshot = callController?.snapshot
+                when (event) {
+                    is PeerConversationEvent.MessageReceived,
+                    is PeerConversationEvent.DeliveryConfirmed,
+                    is PeerConversationEvent.UnmatchedDeliveryAcknowledgement,
+                    PeerConversationEvent.DuplicateMessage,
+                    is PeerConversationEvent.VoiceSignalReceived,
+                    is PeerConversationEvent.VoiceFrameReceived -> Unit
+                }
+                messages = withContext(Dispatchers.IO) { coordinator?.loadHistory(peer.fingerprint).orEmpty() }
+            } catch (error: Exception) {
+                statusText = "Connection ended"
+                errorText = error.message ?: "The encrypted connection was interrupted."
+                session = null
+                break
+            }
+        }
+    }
+
+    val mayMessage = AccountSafetyPolicy.allows(
+        profile.safetyState(), TomChatCapability.MESSAGE_APPROVED_CONTACT,
+        allowUnverifiedAdultDebug = BuildConfig.DEBUG
+    )
+    val mayCall = AccountSafetyPolicy.allows(
+        profile.safetyState(), TomChatCapability.VOICE_CALL_APPROVED_CONTACT,
+        allowUnverifiedAdultDebug = BuildConfig.DEBUG
+    )
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 20.dp)) {
+        if (BuildConfig.DEBUG) AdultDebugTestBanner()
+        ScreenTitle("Your chats", "Encrypted, direct conversations between trusted devices.")
+        StatusCard(isConnected = session?.status == PeerConnectionStatus.CONNECTED, connectionText = statusText)
+        if (!mayMessage) {
+            EmptyState("⌑", "Messaging is locked", AccountSafetyPolicy.restrictionReason(profile.safetyState()))
+            return@Column
+        }
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+            Text("TRUSTED CONTACTS", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+            if (trusted.isEmpty()) Text("Add a contact by scanning and independently verifying their signed QR card first.", color = Muted, fontSize = 12.sp)
+            trusted.forEach { contact ->
+                Card(Modifier.fillMaxWidth().padding(top = 8.dp), colors = CardDefaults.cardColors(containerColor = Panel), border = BorderStroke(1.dp, if (selectedContact?.fingerprint == contact.fingerprint) Cyan else Raised)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(contact.displayName, color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                        Text(contact.fingerprint, color = Muted, fontSize = 9.sp)
+                        Text(if (contact.noiseStaticPublicKey != null) "Signed Noise key available" else "Legacy card — encrypted connection unavailable", color = if (contact.noiseStaticPublicKey != null) Green else Color(0xFFFFE14D), fontSize = 10.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = {
+                                session?.close(); session = null
+                                selectedContact = contact
+                                messages = emptyList(); errorText = null
+                                scope.launch {
+                                    try { messages = withContext(Dispatchers.IO) { coordinator?.loadHistory(contact.fingerprint).orEmpty() } }
+                                    catch (error: Exception) { errorText = error.message ?: "Could not load encrypted history." }
+                                }
+                            }) { Text("Open") }
+                            TextButton(enabled = coordinator != null && localFingerprint != null && contact.noiseStaticPublicKey != null && !working, onClick = {
+                                val required = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    arrayOf(
+                                        Manifest.permission.BLUETOOTH_SCAN,
+                                        Manifest.permission.BLUETOOTH_ADVERTISE,
+                                        Manifest.permission.BLUETOOTH_CONNECT
+                                    )
+                                } else {
+                                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+                                }
+                                val missing = required.filter {
+                                    ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+                                }.toTypedArray()
+                                if (missing.isEmpty()) beginAutomaticDiscovery(contact, true)
+                                else {
+                                    pendingBluetoothContact = contact
+                                    bluetoothPermissionLauncher.launch(missing)
+                                }
+                            }) { Text("Find & connect") }
+                        }
+                    }
+                }
+            }
+        }
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+            Text("AUTOMATIC DIRECT CONNECTION", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+            Text("TomChat automatically searches Wi-Fi first, then nearby Bluetooth if permitted. No IP address, port, or listening setup is needed. Every connection is verified with your saved identity and Noise encryption.", color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
+            Text(statusText, color = if (session != null) Green else Muted, fontSize = 11.sp)
+            if (errorText != null) Text(errorText!!, color = Color(0xFFFF6B83), fontSize = 11.sp)
+        }
+        selectedContact?.let { contact ->
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+                Text("CONVERSATION WITH ${contact.displayName.uppercase()}", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                if (session == null) Text("Messages and calls require mutual identity verification and an established Noise XX channel.", color = Muted, fontSize = 11.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(
+                        enabled = mayCall && session?.status == PeerConnectionStatus.CONNECTED &&
+                            (callSnapshot == null || callSnapshot?.state == PeerCallState.ENDED || callSnapshot?.state == PeerCallState.FAILED),
+                        onClick = {
+                            pendingCallAction = "call"
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                try {
+                                    callController?.startOutgoing()
+                                    callSnapshot = callController?.snapshot
+                                    errorText = null
+                                } catch (error: Exception) { errorText = error.message ?: "Could not start the call." }
+                            } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    ) { Text("Voice call") }
+                    callSnapshot?.let { call ->
+                        Text(
+                            when (call.state) {
+                                PeerCallState.OUTGOING -> "Calling…"
+                                PeerCallState.INCOMING -> "Incoming call"
+                                PeerCallState.CONNECTING -> "Connecting audio…"
+                                PeerCallState.ACTIVE -> "Call active"
+                                PeerCallState.RECONNECTING -> "Reconnecting…"
+                                PeerCallState.ENDED -> "Call ended"
+                                PeerCallState.FAILED -> "Call failed"
+                                PeerCallState.IDLE -> "Idle"
+                            },
+                            color = if (call.state == PeerCallState.ACTIVE) Green else Muted,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+                if (callSnapshot?.state == PeerCallState.INCOMING) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(enabled = mayCall, onClick = {
+                            pendingCallAction = "accept"
+                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                                try {
+                                    callController?.acceptIncoming()
+                                    callSnapshot = callController?.snapshot
+                                    errorText = null
+                                } catch (error: Exception) { errorText = error.message ?: "Could not answer the call." }
+                            } else microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                        }) { Text("Answer") }
+                        TextButton(onClick = {
+                            runCatching { callController?.rejectIncoming() }
+                            callSnapshot = callController?.snapshot
+                        }) { Text("Reject") }
+                    }
+                }
+                if (callSnapshot?.state == PeerCallState.ACTIVE) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = {
+                            callMuted = !callMuted
+                            runCatching { callController?.setMuted(callMuted) }
+                        }) { Text(if (callMuted) "Unmute" else "Mute") }
+                        TextButton(onClick = {
+                            callSpeaker = !callSpeaker
+                            val routed = runCatching { callController?.setSpeakerphoneEnabled(callSpeaker) == true }.getOrDefault(false)
+                            if (!routed) { callSpeaker = false; errorText = "That audio route is not available on this device." }
+                        }) { Text(if (callSpeaker) "Earpiece" else "Speaker") }
+                        Button(onClick = {
+                            callController?.hangUp()
+                            callSnapshot = callController?.snapshot
+                        }) { Text("Hang up") }
+                    }
+                }
+                messages.forEach { message ->
+                    Card(Modifier.fillMaxWidth().padding(vertical = 3.dp), colors = CardDefaults.cardColors(containerColor = if (message.direction == StoredMessageDirection.OUTGOING) Raised else Panel)) {
+                        Column(Modifier.padding(10.dp)) {
+                            Text(message.body, color = TextPrimary, fontSize = 13.sp)
+                            Text("${if (message.direction == StoredMessageDirection.OUTGOING) "YOU" else contact.displayName.uppercase()} • ${message.status.name}", color = Muted, fontSize = 9.sp)
+                        }
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(draft, { draft = it.take(16_384) }, Modifier.weight(1f), label = { Text("Encrypted message") }, enabled = session?.status == PeerConnectionStatus.CONNECTED, maxLines = 3)
+                    TextButton(enabled = session?.status == PeerConnectionStatus.CONNECTED && draft.isNotBlank() && !working, onClick = {
+                        val text = draft.trim(); val active = session ?: return@TextButton; draft = ""; working = true
+                        scope.launch {
+                            try {
+                                withContext(Dispatchers.IO) { active.sendText(text) }
+                                messages = withContext(Dispatchers.IO) { coordinator?.loadHistory(contact.fingerprint).orEmpty() }
+                            } catch (error: Exception) { errorText = error.message ?: "Message could not be sent."; statusText = "Message send failed" }
+                            finally { working = false }
+                        }
+                    }) { Text("Send") }
                 }
             }
         }
     }
 }
-
 @Composable
-private fun StatusCard() {
+private fun StatusCard(isConnected: Boolean, connectionText: String) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
         colors = CardDefaults.cardColors(containerColor = Panel),
-        border = BorderStroke(1.dp, Pink.copy(alpha = 0.28f)),
-        shape = RoundedCornerShape(18.dp)
+        border = BorderStroke(1.dp, Pink.copy(alpha = 0.45f)),
+        shape = RoundedCornerShape(16.dp)
     ) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 15.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                Modifier.size(42.dp).background(Raised, RoundedCornerShape(14.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("⌁", color = Cyan, fontSize = 24.sp)
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(38.dp).background(Raised, CircleShape), contentAlignment = Alignment.Center) {
+                Text("⌁", color = Cyan, fontSize = 22.sp)
             }
-            Spacer(Modifier.width(13.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text("PEER NETWORK", color = Cyan, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.1.sp)
-                Text("No direct peer connected", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                Text("Waiting for a trusted device", color = Muted, fontSize = 11.sp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Automatic peer connection", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                Text(connectionText, color = Muted, fontSize = 11.sp)
             }
-            Surface(color = Pink.copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
-                Text("OFFLINE", color = Pink, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
-            }
+            Text(if (isConnected) "ONLINE" else "OFFLINE", color = if (isConnected) Green else Pink, fontSize = 9.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -589,9 +867,13 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
     }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        if (BuildConfig.DEBUG) AdultDebugTestBanner()
         ScreenTitle("Contacts", "People you connect with directly.")
         val safety = profile.safetyState()
-        val mayExchange = AccountSafetyPolicy.allows(safety, TomChatCapability.EXCHANGE_CONTACT_CARD)
+        val mayExchange = AccountSafetyPolicy.allows(
+            safety, TomChatCapability.EXCHANGE_CONTACT_CARD,
+            allowUnverifiedAdultDebug = BuildConfig.DEBUG
+        )
         if (contactCard == null) {
             EmptyState("◎", "Device identity unavailable", "TomChat could not prepare this device's signed contact card.")
         } else if (!mayExchange) {
@@ -689,20 +971,13 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
 
 @Composable
 private fun CallsScreen() {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        ScreenTitle("Calls", "Voice conversations between trusted devices.")
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-            colors = CardDefaults.cardColors(containerColor = Panel),
-            border = BorderStroke(1.dp, Raised),
-            shape = RoundedCornerShape(20.dp)
-        ) {
-            EmptyState(
-                glyph = "⌕",
-                title = "Calling is coming next",
-                body = "The call interface will be enabled when authenticated signalling, encrypted voice media and Android audio routing are integrated and tested."
-            )
-        }
+    Column(Modifier.fillMaxSize()) {
+        ScreenTitle("Calls", "Private voice calls over direct peer connections.")
+        EmptyState(
+            glyph = "⌕",
+            title = "Start a private voice call",
+            body = "Open Chats, connect to a trusted contact using the direct encrypted connection, then tap Voice call. Keep the chat open during this prototype call. Microphone permission is requested only when you call or answer. Bluetooth and wired headsets use Android's normal audio routing."
+        )
     }
 }
 
@@ -727,15 +1002,18 @@ private fun SettingsScreen(profile: AccountProfile) {
                 )
                 SettingCard(
                     "Safety permissions",
-                    "Messaging, calls, file sharing and social capabilities are checked by the central account policy. They remain disabled in this prototype until age assurance (and guardian approval for minors) is completed.",
-                    "RESTRICTED"
+                    if (BuildConfig.DEBUG && profile.ageBand == AgeBand.ADULT_18_PLUS && profile.guardianConsent == GuardianConsentStatus.NOT_REQUIRED)
+                        "DEBUG TEST MODE: private contact exchange, messaging and voice calls are enabled for adult-classified test accounts without age assurance. This bypass is absent from release builds. Minor accounts still require verified age and guardian approval."
+                    else
+                        "Messaging, calls, file sharing and social capabilities are checked by the central account policy. They remain disabled until age assurance (and guardian approval for minors) is completed.",
+                    if (BuildConfig.DEBUG) "DEBUG TEST MODE" else "RESTRICTED"
                 )
             }
             item {
                 SettingCard("Network policy", "Strict peer-to-peer. No application servers, relays, push gateways or hosted discovery.", "ZERO SERVER")
             }
             item {
-                SettingCard("Connection preference", "Automatic fastest direct route. Bluetooth and Wi-Fi options will appear when transport support is implemented.", "AUTOMATIC")
+                SettingCard("Connection preference", "TomChat automatically tries trusted-device discovery over Wi-Fi, then nearby Bluetooth. Wi-Fi Direct and reachable global IPv6 are still being developed. No relay is used.", "AUTOMATIC")
             }
             item {
                 SettingCard("Identity and security", "P-256 signing identity is bound to a persistent X25519 Noise key. Both private identities are protected by Android Keystore-backed storage; contact cards sign the binding.", "PROTOTYPE")
@@ -758,16 +1036,15 @@ private fun SettingCard(title: String, description: String, tag: String) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Panel),
         border = BorderStroke(1.dp, Raised),
-        shape = RoundedCornerShape(18.dp)
+        shape = RoundedCornerShape(14.dp)
     ) {
-        Column(Modifier.fillMaxWidth().padding(17.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                Surface(color = Cyan.copy(alpha = 0.10f), shape = RoundedCornerShape(50)) {
-                    Text(tag, color = Cyan, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp))
-                }
+                Text(title, color = TextPrimary, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(tag, color = Cyan, fontSize = 9.sp, fontWeight = FontWeight.Bold)
             }
-            Text(description, color = Muted, fontSize = 12.sp, lineHeight = 19.sp)
+            Spacer(Modifier.height(7.dp))
+            Text(description, color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
         }
     }
 }
@@ -775,12 +1052,11 @@ private fun SettingCard(title: String, description: String, tag: String) {
 @Composable
 private fun EmptyState(glyph: String, title: String, body: String) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 34.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 30.dp, vertical = 48.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            modifier = Modifier.size(76.dp)
-                .background(Brush.linearGradient(listOf(Pink.copy(alpha = 0.18f), Purple.copy(alpha = 0.12f))), RoundedCornerShape(24.dp)),
+            modifier = Modifier.size(76.dp).background(Panel, RoundedCornerShape(24.dp)),
             contentAlignment = Alignment.Center
         ) {
             Text(glyph, color = Pink, fontSize = 34.sp)

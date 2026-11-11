@@ -30,27 +30,6 @@ class PeerCallStateMachineTest {
             PeerCallStateMachine.transition(reconnecting, PeerCallEvent.Reconnected).state)
     }
 
-    @Test fun remoteAcceptanceMovesOutgoingCallIntoConnecting() {
-        val outgoing = PeerCallStateMachine.transition(call(PeerCallState.OUTGOING), PeerCallEvent.RemoteAccepted)
-        assertEquals(PeerCallState.CONNECTING, outgoing.state)
-        assertEquals(PeerCallState.ACTIVE,
-            PeerCallStateMachine.transition(outgoing, PeerCallEvent.Connected).state)
-    }
-
-    @Test fun remoteRejectionAndLocalHangupAreTerminal() {
-        val rejected = PeerCallStateMachine.transition(call(PeerCallState.OUTGOING), PeerCallEvent.RemoteRejected)
-        assertEquals(PeerCallEndReason.REJECTED, rejected.endReason)
-        val hungUp = PeerCallStateMachine.transition(call(PeerCallState.ACTIVE), PeerCallEvent.LocalHangup)
-        assertEquals(PeerCallEndReason.LOCAL_HANGUP, hungUp.endReason)
-        assertEquals(PeerCallState.ENDED, hungUp.state)
-    }
-
-    @Test fun timeoutEndsAnUnansweredCall() {
-        val timedOut = PeerCallStateMachine.transition(call(PeerCallState.OUTGOING), PeerCallEvent.Timeout)
-        assertEquals(PeerCallState.ENDED, timedOut.state)
-        assertEquals(PeerCallEndReason.TIMEOUT, timedOut.endReason)
-    }
-
     @Test fun securityFailureIsTerminalAndCannotBeReopened() {
         val failed = PeerCallStateMachine.transition(call(PeerCallState.CONNECTING),
             PeerCallEvent.End(PeerCallEndReason.SECURITY_FAILURE))

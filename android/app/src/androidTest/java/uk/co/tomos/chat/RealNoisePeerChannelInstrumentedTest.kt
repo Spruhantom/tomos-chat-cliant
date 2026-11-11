@@ -38,8 +38,8 @@ class RealNoisePeerChannelInstrumentedTest {
         clientSocket.soTimeout = 8_000
         serverSocket.soTimeout = 8_000
 
-        val aliceConnection = AuthenticatedPeerConnection(clientSocket, "bob")
-        val bobConnection = AuthenticatedPeerConnection(serverSocket, "alice")
+        val aliceConnection = AuthenticatedPeerConnection(TcpPeerTransportSocket(clientSocket), "bob")
+        val bobConnection = AuthenticatedPeerConnection(TcpPeerTransportSocket(serverSocket), "alice")
         val aliceNoise = NoisePeerSession.create(alice, contact(bob), initiator = true)
         val bobNoise = NoisePeerSession.create(bob, contact(alice), initiator = false)
         val pool = Executors.newFixedThreadPool(2)

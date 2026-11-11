@@ -20,10 +20,9 @@ import java.util.concurrent.atomic.AtomicReference
 /**
  * Foreground-call PCM capture/playback only.
  *
- * This class does not encode, encrypt, signal, or transmit audio. Callers must
- * never forward captured PCM to a socket. A future media adapter must encrypt
- * authenticated media packets before transport and must not use this callback
- * as a plaintext network path.
+ * This class only captures and plays PCM. PeerVoiceCallController immediately
+ * wraps captured frames in application frames and sends them through the
+ * established Noise-encrypted channel; this class has no socket access.
  */
 class AndroidVoiceAudioEngine(
     context: Context,
@@ -169,8 +168,8 @@ class AndroidVoiceAudioEngine(
     }
 
     /**
-     * Plays exactly one 20 ms mono PCM16 frame. The caller supplies decoded
-     * audio only after a future authenticated media layer has verified it.
+     * Plays exactly one 20 ms mono PCM16 frame. The caller must supply audio
+     * only after the enclosing Noise channel has authenticated and decrypted it.
      */
     fun playPcmFrame(pcm: ByteArray) {
         VoiceAudioFormat.requireValidFrame(pcm)

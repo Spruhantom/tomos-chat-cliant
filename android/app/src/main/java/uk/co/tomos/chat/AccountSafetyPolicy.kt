@@ -38,8 +38,27 @@ object AccountSafetyPolicy {
         }
     }
 
-    fun allows(state: AccountSafetyState, capability: TomChatCapability): Boolean {
+    fun allows(
+        state: AccountSafetyState,
+        capability: TomChatCapability,
+        allowUnverifiedAdultDebug: Boolean = false
+    ): Boolean {
         if (capability == TomChatCapability.COMPLETE_LOCAL_SETUP) return state.ageBand != AgeBand.UNDER_FIVE
+
+        // Debug-only testing may let an explicitly adult-classified account
+        // exercise the private contact, messaging and voice-call prototype.
+        // This never applies to child/teen accounts or public/social features.
+        if (
+            allowUnverifiedAdultDebug &&
+            state.ageBand == AgeBand.ADULT_18_PLUS &&
+            state.guardianConsent == GuardianConsentStatus.NOT_REQUIRED &&
+            capability in setOf(
+                TomChatCapability.EXCHANGE_CONTACT_CARD,
+                TomChatCapability.MESSAGE_APPROVED_CONTACT,
+                TomChatCapability.VOICE_CALL_APPROVED_CONTACT
+            )
+        ) return true
+
         if (!isAccountCleared(state)) return false
 
         return when (state.ageBand) {

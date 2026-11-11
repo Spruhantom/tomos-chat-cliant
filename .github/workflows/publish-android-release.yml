@@ -1,0 +1,55 @@
+name: Publish TomChat Android prototype release
+
+on:
+  push:
+    branches: [android-rebuild]
+    paths:
+      - ".github/workflows/publish-android-release.yml"
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    name: Publish tested Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download APK from successful merged-commit build
+        uses: actions/download-artifact@v4
+        with:
+          name: tomchat-debug-apk
+          path: release-assets
+          repository: ${{ github.repository }}
+          run-id: 42697671226
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify APK file
+        run: |
+          test -s release-assets/app-debug.apk
+          file release-assets/app-debug.apk
+
+      - name: Create GitHub prerelease and upload APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: tomchat-android-2026.11.09
+          target_commitish: a019b7d20c703c8fc28f101cedd98a543f705b72
+          name: TomChat Android Prototype - 9 November 2026
+          prerelease: true
+          draft: false
+          make_latest: false
+          fail_on_unmatched_files: true
+          files: release-assets/app-debug.apk
+          body: |
+            TomChat Android encrypted messaging and one-to-one voice-call prototype.
+
+            Built from merged commit a019b7d20c703c8fc28f101cedd98a543f705b72 on android-rebuild.
+
+            Automated checks passed:
+            - Rust formatting, compilation, unit tests and Clippy
+            - Real Rust Noise JNI library loaded by JVM loopback TCP integration tests
+            - Encrypted peer authentication, messaging, delivery receipts, call signalling and PCM voice-frame exchange
+            - Android instrumentation-test source compilation
+            - Android debug APK build and JNI export verification for arm64-v8a, armeabi-v7a and x86_64
+
+            This is a debug prerelease for testing, not a production release. Voice is a raw PCM-over-TCP prototype; test calling between physical Android devices before wider distribution. Account safety restrictions remain enabled.

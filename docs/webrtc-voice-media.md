@@ -13,7 +13,7 @@ Use `io.getstream:stream-webrtc-android:1.3.10`, pinned rather than a dynamic ve
 - WebRTC carries real-time audio using its built-in DTLS-SRTP media protection. Do not invent a codec or wrap plaintext PCM in the app's TCP protocol.
 - SDP offers/answers, ICE candidates and call-control events are signalling metadata, not voice media. `PeerCallSignalling` serializes bounded call messages into `VOICE_SIGNAL` application frames; those frames can only be transported by `EncryptedPeerChannel` after mutual ECDSA identity proof and the pinned Noise static-key handshake.
 - `EncryptedPeerChannel` exposes the identity fingerprint established by the direct-peer proof and pinned Noise handshake. `PeerCallSignalling` checks every inbound signal against that authenticated fingerprint, call ID and strictly increasing sequence number. Spoofed identities, cross-call messages, duplicate/replayed and out-of-order signals are rejected.\n- SDP is required to contain one consistent SHA-256 DTLS fingerprint. Conflicting, malformed or unsupported fingerprint attributes are rejected. The verified SDP is passed unchanged to WebRTC; WebRTC's DTLS implementation checks the presented certificate against the fingerprint during the DTLS handshake. The authenticated Noise channel binds that SDP/fingerprint to the trusted contact identity.
-- Configure no ICE servers. This means host candidates only: same-LAN or otherwise directly reachable peers may connect, but NAT, carrier-grade NAT, restrictive Wi-Fi, and firewalls can prevent calls. There is deliberately no STUN, TURN, relay, SFU, rendezvous, push, or cloud fallback.
+- Configure no ICE service endpoints. This means host candidates only: same-LAN or otherwise directly reachable peers may connect, but NAT, carrier-grade NAT, restrictive Wi-Fi, and firewalls can prevent calls. There is deliberately no STUN, TURN, relay, SFU, rendezvous, push, or cloud fallback.
 - The direct TCP Noise channel is signalling-only. It must never carry RTP, encoded audio, or PCM.
 - The WebRTC audio device module owns microphone capture and playback during a call. Do not run `AndroidVoiceAudioEngine` concurrently; it remains a lower-level prototype/test foundation and will be retired or repurposed after the WebRTC path is validated.
 
@@ -21,7 +21,7 @@ Use `io.getstream:stream-webrtc-android:1.3.10`, pinned rather than a dynamic ve
 
 - Pinned WebRTC Android core dependency.
 - Runtime/factory initialisation with a Java audio device module.
-- Audio-only Unified Plan peer connection with an empty ICE-server list.
+- Audio-only Unified Plan peer connection with an empty ICE endpoint list.
 - Explicit microphone permission check before creating an audio session.
 - Track/source/peer-connection/factory cleanup.
 - Hardware AEC and noise suppression requested where Android supports them.
