@@ -36,7 +36,7 @@ A compromised endpoint, operating system administrator, malware, screenshots, co
 
 The Android prototype includes signed peer identity proof and a pinned-key Noise XX session for direct transport. Encrypted application frames and local message storage foundations exist. Android peer discovery uses local network and nearby Bluetooth mechanisms; discovery data is only a hint and is not authentication.
 
-The project also has an OpenMLS 0.9.2 integration baseline and direct WebRTC voice foundations. These are not evidence that durable MLS group state, multi-device recovery, or production E2EE has been completed. Production E2EE claims remain blocked until persistent OpenMLS storage, authenticated state restoration after restart, replay protection, and real two-device validation have passed review.
+The inspected `main` dependency manifests do not currently include the OpenMLS crates, and no persistent OpenMLS `MlsGroup` storage/load implementation has been evidenced. The threat-model and roadmap references to OpenMLS are requirements/plans, not a completed integration. The Android Gradle manifest includes CameraX and WebRTC dependencies, but dependency presence is not evidence of a complete camera capture, peer media negotiation and remote rendering path. Production E2EE claims remain blocked until a reviewed MLS integration (if group messaging is retained), authenticated durable state restoration, replay protection, and real two-device validation have passed review.
 
 ## Device and contact lifecycle
 
