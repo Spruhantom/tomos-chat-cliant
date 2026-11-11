@@ -7,7 +7,7 @@ import java.util.concurrent.atomic.AtomicReference
 import java.security.KeyPair
 
 /**
- * Owns the user-invoked direct TCP listener/connector and turns an authenticated
+ * Owns the direct TCP listener/connector used by automatic peer discovery and turns an authenticated
  * peer socket into a Noise-protected conversation. It has no server, relay,
  * directory, rendezvous or push-service dependency.
  */
