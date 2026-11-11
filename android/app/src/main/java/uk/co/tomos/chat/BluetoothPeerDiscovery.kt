@@ -94,7 +94,7 @@ class BluetoothPeerDiscovery(
         val settings = AdvertiseSettings.Builder()
             .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
             .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
-            .setConnectable(true)
+            .setConnectable(false)
             .setTimeout(0)
             .build()
         val advertiserListener = object : AdvertiseCallback() {
