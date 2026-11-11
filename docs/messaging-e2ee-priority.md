@@ -2,7 +2,7 @@
 
 **Priority:** Highest active development priority  
 **Branch:** `android-rebuild`  
-**Product constraint:** Strict fully decentralised peer-to-peer. No TomChat application centralised services, relays, rendezvous services, hosted key directories, push gateways, TURN relays or cloud message storage.
+**Product constraint:** Strict fully decentralised peer-to-peer. No TomChat-operated central infrastructure, relays, rendezvous services, hosted key directories, push gateways, TURN relays or cloud message storage.
 
 ## Product decision
 
