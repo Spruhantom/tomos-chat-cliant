@@ -90,6 +90,20 @@ android/app/build/outputs/apk/debug/app-debug.apk
 
 GitHub Actions builds the production Rust Noise/JNI library for the Linux host and runs a real JVM loopback integration test using that library. The test performs mutual signed-peer authentication, the real Noise XX handshake, and encrypted text, delivery-acknowledgement, call-signalling and PCM voice-frame exchange over localhost TCP; it is not a mock crypto test and does not require an emulator. CI also compiles the Android instrumentation-test sources without booting an emulator, builds the Android debug APK, validates native JNI exports for all packaged Android ABIs and uploads the APK. The instrumentation test that exercises Android Keystore-backed history remains available for manual execution on a device or emulator with `gradle --no-daemon :android:app:connectedDebugAndroidTest`. Physical microphone/speaker quality still requires two real phones. The existing Rust desktop checks are separate. Check the [Actions page](https://github.com/Spruhantom/tomos-chat-cliant/actions) for the latest result; do not assume a run has passed while it is still in progress.
 
+
+## Linux desktop installer
+
+The repository includes an installer for the Linux GTK desktop client. It supports Arch Linux (including Omarchy), Debian and Ubuntu. Run it as your normal user; it uses `sudo` only to install system build dependencies, builds from source, and installs the executable and desktop launcher under your home directory.
+
+Online install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Spruhantom/tomos-chat-cliant/feature/linux-installer/install.sh | bash
+```
+
+The installer detects `pacman` or `apt-get`, installs GTK 4 and libadwaita development dependencies, checks for Rust/Cargo, builds with the locked dependency set, and installs to `~/.local/bin/tomchat-client`. It does not install the Android application. The installer is currently on the `feature/linux-installer` branch pending validation on real Arch/Omarchy and Debian/Ubuntu systems.
+
+
 ## Repository layout
 
 - `android/app` — native Android application and tests.
