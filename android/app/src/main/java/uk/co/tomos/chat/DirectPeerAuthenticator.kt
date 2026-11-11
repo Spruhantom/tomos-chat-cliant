@@ -12,7 +12,7 @@ import java.security.SecureRandom
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Mutual proof-of-key-possession for a direct TCP peer.
+ * Mutual proof-of-key-possession for a direct peer over TCP or Bluetooth RFCOMM.
  *
  * This authenticates the peer but deliberately does not expose application
  * streams. A reviewed E2EE session protocol must be established before data
