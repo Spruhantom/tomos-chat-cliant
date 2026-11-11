@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # TomChat Linux GTK4/libadwaita installer.
-# Supported: Arch Linux/Omarchy and Debian/Ubuntu.
+# Supports Arch Linux/Omarchy and Debian/Ubuntu.
 set -Eeuo pipefail
 
 readonly APP_NAME="TomChat"
@@ -33,7 +33,7 @@ done
 
 if command -v pacman >/dev/null 2>&1; then
   log "Installing Arch Linux/Omarchy build and runtime dependencies."
-  sudo pacman -Sy --needed --noconfirm base-devel pkgconf gtk4 libadwaita libsecret git curl ca-certificates
+  sudo pacman -Syu --needed --noconfirm base-devel pkgconf gtk4 libadwaita libsecret git curl ca-certificates
 elif command -v apt-get >/dev/null 2>&1; then
   log "Installing Debian/Ubuntu build and runtime dependencies."
   sudo apt-get update
