@@ -18,6 +18,14 @@ class ContactCardCodecTest {
 
     private fun noiseKey(seed: Int = 7) = ByteArray(32) { (seed + it).toByte() }
 
+    @Test fun verifiesSharedRustAndroidV2Fixture() {
+        val fixture = requireNotNull(javaClass.getResourceAsStream("/contact-card-v2.txt"))
+            .bufferedReader().use { it.readText().trim() }
+        val decoded = ContactCardCodec.decode(fixture)
+        assertEquals("TomChat shared interoperability fixture", decoded.displayName)
+        assertTrue(ContactCardCodec.verify(decoded))
+    }
+
     @Test fun signedV2ContactCardRoundTripsIdentityAndNoiseBinding() {
         val card = ContactCardCodec.create("Tom's phone", identity(), noiseKey())
         val decoded = ContactCardCodec.decode(ContactCardCodec.encode(card))
