@@ -148,6 +148,7 @@ class AutoPeerDiscovery(
     private fun closeDiscoveryOnly() {
         try { discovery?.let { nsd.stopServiceDiscovery(it) } } catch (_: Exception) { }
         try { registration?.let { nsd.unregisterService(it) } } catch (_: Exception) { }
+        coordinator.stopListening()
     }
 
     override fun close() {
