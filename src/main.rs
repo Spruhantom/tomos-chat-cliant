@@ -40,7 +40,7 @@ fn build_contacts(app: &adw::Application) {
         contact_card::SigningIdentity::load_from_secret_service().ok()
     ));
     let noise_identity = Rc::new(RefCell::new(NoiseIdentity::load_from_secret_service().ok()));
-    let store = Rc::new(contact_store::TrustedContactStore::default());
+    let store = Rc::new(contact_store::TrustedContactStore);
     let (initial_contacts, store_status) = match store.load() {
         Ok(loaded) => (loaded, "Trusted contacts loaded from your desktop keyring.".to_string()),
         Err(error) => (Vec::new(), format!("Contact storage is unavailable: {error}")),
