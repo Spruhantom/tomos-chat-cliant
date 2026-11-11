@@ -295,7 +295,6 @@ fn build_contacts(app: &adw::Application) {
                 panel.set_margin_end(20);
                 let picture = gtk::Picture::for_filename(&path);
                 picture.set_can_shrink(true);
-                picture.set_content_fit(gtk::ContentFit::Contain);
                 picture.set_size_request(360, 360);
                 panel.append(&picture);
                 let hint = gtk::Label::new(Some("Let another TomChat user scan this code, then compare fingerprints before trusting the contact."));
