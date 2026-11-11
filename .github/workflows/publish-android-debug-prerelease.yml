@@ -4,7 +4,7 @@ on:
   workflow_run:
     workflows: ["TomChat Android CI"]
     types: [completed]
-    branches: [android-rebuild]
+    branches: [main, android-rebuild]
 
 permissions:
   actions: read
@@ -13,41 +13,59 @@ permissions:
 jobs:
   publish:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    name: Publish verified Android debug APK
+    name: Publish verified Android APKs
     runs-on: ubuntu-latest
     steps:
-      - name: Download APK from successful Android CI run
+      - name: Download debug APK from successful Android CI run
         uses: actions/download-artifact@v4
         with:
           name: tomchat-debug-apk
-          path: release-assets
+          path: release-assets/debug
           repository: ${{ github.repository }}
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify APK
+      - name: Download release-variant APK from successful Android CI run
+        uses: actions/download-artifact@v4
+        with:
+          name: tomchat-release-apk
+          path: release-assets/release
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify APK files and generate checksums
         run: |
           set -euo pipefail
-          test -s release-assets/app-debug.apk
-          file release-assets/app-debug.apk
-          sha256sum release-assets/app-debug.apk
+          test -s release-assets/debug/app-debug.apk
+          test -s release-assets/release/app-release.apk
+          file release-assets/debug/app-debug.apk
+          file release-assets/release/app-release.apk
+          sha256sum release-assets/debug/app-debug.apk release-assets/release/app-release.apk > release-assets/SHA256SUMS
+          cat release-assets/SHA256SUMS
 
       - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: tomchat-android-debug-2026.11.09-${{ github.event.workflow_run.run_number }}
+          tag_name: tomchat-android-ci-${{ github.event.workflow_run.head_sha }}
           target_commitish: ${{ github.event.workflow_run.head_sha }}
-          name: TomChat Android Debug Test Build - 9 November 2026
+          name: TomChat Android CI Test Build #${{ github.event.workflow_run.run_number }}
           prerelease: true
           draft: false
           make_latest: false
           fail_on_unmatched_files: true
-          files: release-assets/app-debug.apk
+          files: |
+            release-assets/debug/app-debug.apk
+            release-assets/release/app-release.apk
+            release-assets/SHA256SUMS
           body: |
-            TomChat Android debug build for controlled real-device testing.
+            TomChat Android test APKs built from the exact ${{ github.event.workflow_run.head_sha }} commit on ${{ github.event.workflow_run.head_branch }}.
 
-            Includes the adult-only debug test mode for signed contact-card exchange, private approved-contact messaging and one-to-one voice calls. This override is restricted to debug builds and adult-classified accounts with guardian state NOT_REQUIRED. Child and teen accounts remain subject to normal age-assurance and guardian requirements. Public discovery, public posting, groups and file sharing are not enabled by this override.
+            Included files:
+            - `app-debug.apk`: Android debug build.
+            - `app-release.apk`: release-variant build signed with the Android debug key; this is not production-signed.
+            - `SHA256SUMS`: SHA-256 checksums for both APKs.
 
-            Automated Android CI passed for the exact commit attached to this release, including Rust Noise/JNI tests, JVM loopback integration tests, Android instrumentation source compilation, APK build and JNI export verification.
+            The APKs are published only after the Android CI workflow succeeds for this exact commit. Automated CI passing does not replace physical-device testing or Android-to-Linux interoperability testing.
 
-            This is a debug prerelease, not a production release. Voice calling remains a prototype and must be tested on physical Android devices. Use only with consenting adult testers.
+            This is a prerelease for controlled testing, not a production release. Do not use it for sensitive or emergency communications.
