@@ -114,8 +114,12 @@ impl NoiseIdentity {
         }
         let encoded = std::str::from_utf8(&output.stdout)
             .map_err(|_| "Secret Service returned invalid identity data.".to_string())?
-            .trim();
-        let mut secret = hex_decode(encoded)?;
+            .trim()
+            .to_owned();
+        let decoded = hex_decode(&encoded);
+        let mut secret = decoded?;
+        let mut output_bytes = output.stdout;
+        output_bytes.zeroize();
         if secret.len() != 64 {
             secret.zeroize();
             return Err("Stored TomChat Noise identity has an invalid length.".into());
