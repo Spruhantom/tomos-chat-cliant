@@ -3,7 +3,6 @@ package uk.co.tomos.chat
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.IOException
-import java.net.Socket
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -12,7 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * after establishment; frame contents are decoded only after Noise decrypts.
  */
 class EncryptedPeerChannel internal constructor(
-    private val socket: Socket,
+    private val socket: PeerTransportSocket,
     private val input: DataInputStream,
     private val output: DataOutputStream,
     private val noise: NoisePeerSession

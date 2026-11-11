@@ -8,7 +8,7 @@ import java.net.SocketException
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * User-invoked direct TCP endpoint. It binds only to the selected local
+ * Direct TCP endpoint used by automatic local peer discovery. It binds only to the selected local
  * interface and never registers with a directory, relay or rendezvous host.
  */
 class DirectPeerListener(
@@ -51,7 +51,7 @@ class DirectPeerListener(
         }
     }
 
-    companion object { private const val ACCEPT_TIMEOUT_MS = 30_000 }
+    companion object { private const val ACCEPT_TIMEOUT_MS = 60_000 }
 }
 
 object DirectPeerConnector {

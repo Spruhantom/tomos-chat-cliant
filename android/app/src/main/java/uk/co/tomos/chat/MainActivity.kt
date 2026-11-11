@@ -1,6 +1,7 @@
 package uk.co.tomos.chat
 
 import android.os.Bundle
+import android.os.Build
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
@@ -514,11 +515,9 @@ private fun ChatsScreen(profile: AccountProfile) {
     var coordinator by remember { mutableStateOf<PeerMessagingCoordinator?>(null) }
     var trusted by remember { mutableStateOf<List<TrustedContact>>(emptyList()) }
     var selectedContact by remember { mutableStateOf<TrustedContact?>(null) }
-    var address by rememberSaveable { mutableStateOf("") }
     var port by rememberSaveable { mutableStateOf("47821") }
-    var bindAddress by rememberSaveable { mutableStateOf("0.0.0.0") }
-    var listenPort by rememberSaveable { mutableStateOf("47821") }
-    var listening by remember { mutableStateOf(false) }
+    var localFingerprint by remember { mutableStateOf<String?>(null) }
+    var discovery by remember { mutableStateOf<AutoPeerDiscovery?>(null) }
     var session by remember { mutableStateOf<PeerConversationSession?>(null) }
     var messages by remember { mutableStateOf<List<StoredChatMessage>>(emptyList()) }
     var draft by rememberSaveable { mutableStateOf("") }
@@ -529,6 +528,7 @@ private fun ChatsScreen(profile: AccountProfile) {
     var pendingCallAction by remember { mutableStateOf("call") }
     var callMuted by remember { mutableStateOf(false) }
     var callSpeaker by remember { mutableStateOf(false) }
+    var pendingBluetoothContact by remember { mutableStateOf<TrustedContact?>(null) }
 
     val callController = remember(session, selectedContact) {
         val activeSession = session
@@ -558,15 +558,61 @@ private fun ChatsScreen(profile: AccountProfile) {
         }
     }
 
+    fun beginAutomaticDiscovery(contact: TrustedContact, allowBluetooth: Boolean) {
+        session?.close(); session = null
+        discovery?.close()
+        selectedContact = contact; working = true; errorText = null
+        statusText = "Starting automatic direct discovery…"
+        val activeDiscovery = AutoPeerDiscovery(
+            context = context,
+            coordinator = coordinator!!,
+            localFingerprint = localFingerprint!!,
+            contact = contact,
+            enableBluetoothFallback = allowBluetooth,
+            onStatus = { statusText = it },
+            onConnected = { connected ->
+                scope.launch {
+                    session?.close(); session = connected
+                    messages = withContext(Dispatchers.IO) { coordinator?.loadHistory(contact.fingerprint).orEmpty() }
+                    working = false
+                    discovery = null
+                }
+            },
+            onError = { error ->
+                scope.launch {
+                    errorText = error.message ?: "No direct connection could be established."
+                    statusText = "No direct route found"
+                    working = false
+                    discovery = null
+                }
+            }
+        )
+        discovery = activeDiscovery
+        activeDiscovery.start()
+    }
+
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val pending = pendingBluetoothContact
+        pendingBluetoothContact = null
+        if (pending != null) beginAutomaticDiscovery(pending, results.isNotEmpty() && results.values.all { it })
+    }
+
     LaunchedEffect(context.filesDir) {
         try {
             val loaded = withContext(Dispatchers.IO) {
                 val signing = DeviceIdentityStore().getOrCreate()
                 val noise = NoiseIdentityStore(context.filesDir).getOrCreate()
-                PeerMessagingCoordinator(context.filesDir, signing, noise) to contactStore.load()
+                Triple(
+                    PeerMessagingCoordinator(context.filesDir, signing, noise),
+                    contactStore.load(),
+                    ContactCardCodec.fingerprint(signing.public.encoded)
+                )
             }
             coordinator = loaded.first
             trusted = loaded.second
+            localFingerprint = loaded.third
             statusText = "Ready for a direct encrypted connection"
         } catch (error: Exception) {
             errorText = error.message ?: "Could not initialise encrypted messaging."
@@ -574,7 +620,8 @@ private fun ChatsScreen(profile: AccountProfile) {
         }
     }
 
-    DisposableEffect(coordinator) { onDispose { coordinator?.close() } }
+    DisposableEffect(coordinator) { onDispose { discovery?.close(); coordinator?.close() } }
+    DisposableEffect(discovery) { onDispose { discovery?.close() } }
     DisposableEffect(session) { onDispose { session?.close() } }
     DisposableEffect(callController) {
         callSnapshot = callController?.snapshot
@@ -642,47 +689,33 @@ private fun ChatsScreen(profile: AccountProfile) {
                                     catch (error: Exception) { errorText = error.message ?: "Could not load encrypted history." }
                                 }
                             }) { Text("Open") }
-                            TextButton(enabled = coordinator != null && contact.noiseStaticPublicKey != null && !working, onClick = {
-                                session?.close(); session = null
-                                selectedContact = contact; working = true; errorText = null
-                                scope.launch {
-                                    try {
-                                        val active = withContext(Dispatchers.IO) { coordinator!!.connect(address.trim(), port.toInt(), contact) }
-                                        session?.close(); session = active
-                                        messages = withContext(Dispatchers.IO) { coordinator!!.loadHistory(contact.fingerprint) }
-                                        statusText = "Encrypted connection established"
-                                    } catch (error: Exception) { errorText = error.message ?: "Could not connect securely."; statusText = "Connection failed" }
-                                    finally { working = false }
+                            TextButton(enabled = coordinator != null && localFingerprint != null && contact.noiseStaticPublicKey != null && !working, onClick = {
+                                val required = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    arrayOf(
+                                        Manifest.permission.BLUETOOTH_SCAN,
+                                        Manifest.permission.BLUETOOTH_ADVERTISE,
+                                        Manifest.permission.BLUETOOTH_CONNECT
+                                    )
+                                } else {
+                                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
                                 }
-                            }) { Text("Connect") }
-                            TextButton(enabled = coordinator != null && contact.noiseStaticPublicKey != null && !working && !listening, onClick = {
-                                session?.close(); session = null
-                                selectedContact = contact; working = true; errorText = null
-                                scope.launch {
-                                    try {
-                                        val actualPort = withContext(Dispatchers.IO) { coordinator!!.startListening(bindAddress.trim(), listenPort.toInt()) }
-                                        listening = true
-                                        statusText = "Listening on port $actualPort — waiting for ${contact.displayName}"
-                                        val active = withContext(Dispatchers.IO) { coordinator!!.accept(contact) }
-                                        session?.close(); session = active
-                                        messages = withContext(Dispatchers.IO) { coordinator!!.loadHistory(contact.fingerprint) }
-                                        listening = false; statusText = "Encrypted connection established"
-                                    } catch (error: Exception) { listening = false; errorText = error.message ?: "Could not accept a secure connection."; statusText = "Listener stopped" }
-                                    finally { working = false }
+                                val missing = required.filter {
+                                    ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+                                }.toTypedArray()
+                                if (missing.isEmpty()) beginAutomaticDiscovery(contact, true)
+                                else {
+                                    pendingBluetoothContact = contact
+                                    bluetoothPermissionLauncher.launch(missing)
                                 }
-                            }) { Text(if (listening) "Waiting…" else "Listen") }
+                            }) { Text("Find & connect") }
                         }
                     }
                 }
             }
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
-            Text("DIRECT CONNECTION", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-            OutlinedTextField(address, { address = it.take(253) }, Modifier.fillMaxWidth(), label = { Text("Peer IP address") }, singleLine = true)
-            OutlinedTextField(port, { port = it.filter(Char::isDigit).take(5) }, Modifier.fillMaxWidth(), label = { Text("Peer port") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
-            Text("On the receiving device, select the same trusted contact and use Listen.", color = Muted, fontSize = 11.sp)
-            OutlinedTextField(bindAddress, { bindAddress = it.take(253) }, Modifier.fillMaxWidth(), label = { Text("Local interface to listen on") }, singleLine = true)
-            OutlinedTextField(listenPort, { listenPort = it.filter(Char::isDigit).take(5) }, Modifier.fillMaxWidth(), label = { Text("Local listening port") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), singleLine = true)
+            Text("AUTOMATIC DIRECT CONNECTION", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+            Text("TomChat automatically searches Wi-Fi first, then nearby Bluetooth if permitted. No IP address, port, or listening setup is needed. Every connection is verified with your saved identity and Noise encryption.", color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
             Text(statusText, color = if (session != null) Green else Muted, fontSize = 11.sp)
             if (errorText != null) Text(errorText!!, color = Color(0xFFFF6B83), fontSize = 11.sp)
         }
@@ -796,7 +829,7 @@ private fun StatusCard(isConnected: Boolean, connectionText: String) {
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text("Direct connection", color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                Text("Automatic peer connection", color = TextPrimary, fontWeight = FontWeight.SemiBold)
                 Text(connectionText, color = Muted, fontSize = 11.sp)
             }
             Text(if (isConnected) "ONLINE" else "OFFLINE", color = if (isConnected) Green else Pink, fontSize = 9.sp, fontWeight = FontWeight.Bold)
@@ -980,7 +1013,7 @@ private fun SettingsScreen(profile: AccountProfile) {
                 SettingCard("Network policy", "Strict peer-to-peer. No application servers, relays, push gateways or hosted discovery.", "ZERO SERVER")
             }
             item {
-                SettingCard("Connection preference", "Automatic fastest direct route. Bluetooth and Wi-Fi options will appear when transport support is implemented.", "AUTOMATIC")
+                SettingCard("Connection preference", "TomChat automatically tries trusted-device discovery over Wi-Fi, then nearby Bluetooth. Wi-Fi Direct and reachable global IPv6 are still being developed. No relay is used.", "AUTOMATIC")
             }
             item {
                 SettingCard("Identity and security", "P-256 signing identity is bound to a persistent X25519 Noise key. Both private identities are protected by Android Keystore-backed storage; contact cards sign the binding.", "PROTOTYPE")
