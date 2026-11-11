@@ -14,7 +14,9 @@ class EncryptedPeerChannel internal constructor(
     private val socket: PeerTransportSocket,
     private val input: DataInputStream,
     private val output: DataOutputStream,
-    private val noise: NoisePeerSession
+    private val noise: NoisePeerSession,
+    /** Identity fingerprint authenticated before the Noise session was established. */
+    val authenticatedPeerFingerprint: String
 ) : AutoCloseable {
     private val closed = AtomicBoolean(false)
     private val writeLock = Any()
