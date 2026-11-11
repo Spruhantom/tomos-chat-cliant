@@ -33,10 +33,14 @@ impl fmt::Display for PeerTransportError {
 }
 impl std::error::Error for PeerTransportError {}
 impl From<io::Error> for PeerTransportError {
-    fn from(value: io::Error) -> Self { Self::Io(value) }
+    fn from(value: io::Error) -> Self {
+        Self::Io(value)
+    }
 }
 impl From<NoiseSessionError> for PeerTransportError {
-    fn from(value: NoiseSessionError) -> Self { Self::Noise(value) }
+    fn from(value: NoiseSessionError) -> Self {
+        Self::Noise(value)
+    }
 }
 
 /// A TCP stream usable only after the pinned-key Noise XX handshake succeeds.
@@ -95,7 +99,9 @@ impl EncryptedPeerChannel {
         Ok(self.noise.decrypt(&ciphertext)?)
     }
 
-    pub fn stream(&self) -> &TcpStream { &self.stream }
+    pub fn stream(&self) -> &TcpStream {
+        &self.stream
+    }
 
     /// Split the authenticated channel into independent blocking send/receive
     /// handles. Noise state remains shared and serialized so transport counters
@@ -104,8 +110,14 @@ impl EncryptedPeerChannel {
         let reader = self.stream.try_clone()?;
         let noise = Arc::new(Mutex::new(self.noise));
         Ok((
-            PeerSender { stream: self.stream, noise: noise.clone() },
-            PeerReceiver { stream: reader, noise },
+            PeerSender {
+                stream: self.stream,
+                noise: noise.clone(),
+            },
+            PeerReceiver {
+                stream: reader,
+                noise,
+            },
         ))
     }
 }
@@ -116,7 +128,10 @@ pub struct PeerSender {
 }
 impl PeerSender {
     pub fn send(&mut self, plaintext: &[u8]) -> Result<(), PeerTransportError> {
-        let ciphertext = self.noise.lock().map_err(|_| PeerTransportError::SessionLock)?
+        let ciphertext = self
+            .noise
+            .lock()
+            .map_err(|_| PeerTransportError::SessionLock)?
             .encrypt(plaintext)?;
         write_frame(&mut self.stream, &ciphertext)
     }
@@ -136,7 +151,10 @@ impl PeerReceiver {
         if ciphertext.len() < MIN_CIPHERTEXT {
             return Err(PeerTransportError::InvalidFrame);
         }
-        Ok(self.noise.lock().map_err(|_| PeerTransportError::SessionLock)?
+        Ok(self
+            .noise
+            .lock()
+            .map_err(|_| PeerTransportError::SessionLock)?
             .decrypt(&ciphertext)?)
     }
 }
@@ -187,13 +205,15 @@ mod tests {
 
         let responder = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            let mut channel = EncryptedPeerChannel::accept(stream, &bob_private, &alice_public).unwrap();
+            let mut channel =
+                EncryptedPeerChannel::accept(stream, &bob_private, &alice_public).unwrap();
             assert_eq!(channel.receive().unwrap(), b"hello from Alice");
             channel.send(b"hello from Bob").unwrap();
         });
 
         let stream = TcpStream::connect(address).unwrap();
-        let mut channel = EncryptedPeerChannel::connect(stream, &alice_private, &bob_public).unwrap();
+        let mut channel =
+            EncryptedPeerChannel::connect(stream, &alice_private, &bob_public).unwrap();
         channel.send(b"hello from Alice").unwrap();
         assert_eq!(channel.receive().unwrap(), b"hello from Bob");
         responder.join().unwrap();
@@ -220,7 +240,12 @@ mod tests {
 
         let stream = TcpStream::connect(address).unwrap();
         let result = EncryptedPeerChannel::connect(stream, &alice_private, &wrong_bob_public);
-        assert!(matches!(result, Err(PeerTransportError::Noise(NoiseSessionError::PeerKeyMismatch))));
+        assert!(matches!(
+            result,
+            Err(PeerTransportError::Noise(
+                NoiseSessionError::PeerKeyMismatch
+            ))
+        ));
         assert!(responder.join().unwrap());
     }
     #[test]
@@ -232,7 +257,8 @@ mod tests {
 
         let responder = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            let channel = EncryptedPeerChannel::accept(stream, &bob_private, &alice_public).unwrap();
+            let channel =
+                EncryptedPeerChannel::accept(stream, &bob_private, &alice_public).unwrap();
             let (mut sender, mut receiver) = channel.split().unwrap();
             assert_eq!(receiver.receive().unwrap(), b"hello from Alice");
             sender.send(b"hello from Bob").unwrap();
@@ -245,5 +271,4 @@ mod tests {
         assert_eq!(receiver.receive().unwrap(), b"hello from Bob");
         responder.join().unwrap();
     }
-
 }

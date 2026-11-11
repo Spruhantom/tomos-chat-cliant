@@ -25,7 +25,8 @@ impl PeerChat {
         if message.trim().is_empty() {
             return Err("Message cannot be empty.".into());
         }
-        self.outgoing.send(Some(message.into_bytes()))
+        self.outgoing
+            .send(Some(message.into_bytes()))
             .map_err(|_| "Peer connection is closed.".to_string())
     }
 
@@ -60,15 +61,14 @@ fn spawn_sender(
     });
 }
 
-fn spawn_receiver(
-    mut receiver: PeerReceiver,
-    incoming: Sender<Result<String, String>>,
-) {
+fn spawn_receiver(mut receiver: PeerReceiver, incoming: Sender<Result<String, String>>) {
     thread::spawn(move || loop {
         match receiver.receive() {
             Ok(bytes) => match String::from_utf8(bytes) {
                 Ok(message) => {
-                    if incoming.send(Ok(message)).is_err() { break; }
+                    if incoming.send(Ok(message)).is_err() {
+                        break;
+                    }
                 }
                 Err(_) => {
                     let _ = incoming.send(Err("Peer sent a non-text message.".into()));

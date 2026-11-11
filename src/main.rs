@@ -37,29 +37,41 @@ fn build_contacts(app: &adw::Application) {
     status.set_xalign(0.0);
 
     let signing_identity = Rc::new(RefCell::new(
-        contact_card::SigningIdentity::load_from_secret_service().ok()
+        contact_card::SigningIdentity::load_from_secret_service().ok(),
     ));
     let noise_identity = Rc::new(RefCell::new(NoiseIdentity::load_from_secret_service().ok()));
     let store = Rc::new(contact_store::TrustedContactStore);
     let (initial_contacts, store_status) = match store.load() {
-        Ok(loaded) => (loaded, "Trusted contacts loaded from your desktop keyring.".to_string()),
-        Err(error) => (Vec::new(), format!("Contact storage is unavailable: {error}")),
+        Ok(loaded) => (
+            loaded,
+            "Trusted contacts loaded from your desktop keyring.".to_string(),
+        ),
+        Err(error) => (
+            Vec::new(),
+            format!("Contact storage is unavailable: {error}"),
+        ),
     };
     let contacts = Rc::new(RefCell::new(initial_contacts));
 
     let own_card = gtk::TextView::builder()
-        .editable(false).cursor_visible(false)
+        .editable(false)
+        .cursor_visible(false)
         .wrap_mode(gtk::WrapMode::WordChar)
         .height_request(90)
         .build();
     own_card.set_vexpand(false);
-    refresh_own_card(&own_card, &signing_identity.borrow(), &noise_identity.borrow());
+    refresh_own_card(
+        &own_card,
+        &signing_identity.borrow(),
+        &noise_identity.borrow(),
+    );
 
     let create_confirm = gtk::CheckButton::with_label(
         "This is a new device. I understand creating a new identity will not recover an existing one."
     );
     let create_identity = gtk::Button::with_label("Create new device identity");
-    create_identity.set_sensitive(signing_identity.borrow().is_none() && noise_identity.borrow().is_none());
+    create_identity
+        .set_sensitive(signing_identity.borrow().is_none() && noise_identity.borrow().is_none());
     let create_for_toggle = create_identity.clone();
     create_confirm.connect_toggled(move |check| create_for_toggle.set_sensitive(check.is_active()));
 
@@ -68,14 +80,18 @@ fn build_contacts(app: &adw::Application) {
         .height_request(90)
         .build();
     import_input.set_vexpand(false);
-    let import_scroll = gtk::ScrolledWindow::builder().child(&import_input).min_content_height(90).build();
+    let import_scroll = gtk::ScrolledWindow::builder()
+        .child(&import_input)
+        .min_content_height(90)
+        .build();
     let fingerprint_confirm = gtk::CheckButton::with_label(
-        "I have independently checked this contact fingerprint with the person."
+        "I have independently checked this contact fingerprint with the person.",
     );
     let import_contact = gtk::Button::with_label("Verify and trust contact");
     import_contact.set_sensitive(false);
     let import_for_toggle = import_contact.clone();
-    fingerprint_confirm.connect_toggled(move |check| import_for_toggle.set_sensitive(check.is_active()));
+    fingerprint_confirm
+        .connect_toggled(move |check| import_for_toggle.set_sensitive(check.is_active()));
 
     let contact_picker = gtk::ComboBoxText::new();
     populate_contact_picker(&contact_picker, &contacts.borrow());
@@ -90,12 +106,16 @@ fn build_contacts(app: &adw::Application) {
     let listen = gtk::Button::with_label("Listen on port 46321");
 
     let chat_view = gtk::TextView::builder()
-        .editable(false).cursor_visible(false)
+        .editable(false)
+        .cursor_visible(false)
         .wrap_mode(gtk::WrapMode::WordChar)
         .vexpand(true)
         .build();
     let chat_scroll = gtk::ScrolledWindow::builder()
-        .child(&chat_view).min_content_height(180).vexpand(true).build();
+        .child(&chat_view)
+        .min_content_height(180)
+        .vexpand(true)
+        .build();
     let message_input = gtk::Entry::builder()
         .placeholder_text("Write an encrypted message…")
         .hexpand(true)
@@ -116,7 +136,10 @@ fn build_contacts(app: &adw::Application) {
 
     let identity_heading = heading("Your signed contact card");
     content.append(&identity_heading);
-    let own_scroll = gtk::ScrolledWindow::builder().child(&own_card).min_content_height(90).build();
+    let own_scroll = gtk::ScrolledWindow::builder()
+        .child(&own_card)
+        .min_content_height(90)
+        .build();
     content.append(&own_scroll);
     content.append(&create_confirm);
     content.append(&create_identity);
@@ -236,7 +259,6 @@ fn build_contacts(app: &adw::Application) {
         }
     });
 
-
     let remove_store = store.clone();
     let remove_contacts = contacts.clone();
     let remove_picker = contact_picker.clone();
@@ -341,7 +363,11 @@ fn build_contacts(app: &adw::Application) {
                 poll_connect.set_sensitive(true);
                 poll_listen.set_sensitive(true);
                 poll_send.set_sensitive(true);
-                append_chat_line(&poll_view, "System", "Encrypted direct connection established.");
+                append_chat_line(
+                    &poll_view,
+                    "System",
+                    "Encrypted direct connection established.",
+                );
             }
             Ok(Err(error)) => {
                 poll_status.set_text(&error);
@@ -418,7 +444,9 @@ fn build_contacts(app: &adw::Application) {
     } else if signing_identity.borrow().is_some() || noise_identity.borrow().is_some() {
         status.set_text("Only part of this device identity could be loaded. TomChat will not replace keys; recover the missing key before connecting.");
     } else {
-        status.set_text(&format!("{store_status} Create a new identity only if this is a new device."));
+        status.set_text(&format!(
+            "{store_status} Create a new identity only if this is a new device."
+        ));
     }
 
     window.present();
@@ -440,12 +468,15 @@ fn refresh_own_card(
     match (signing.as_ref(), noise.as_ref()) {
         (Some(signing), Some(noise)) => {
             match contact_card::ContactCard::create("TomChat desktop", signing, *noise.public_key())
-                .and_then(|card| card.encode()) {
+                .and_then(|card| card.encode())
+            {
                 Ok(encoded) => buffer.set_text(&encoded),
                 Err(error) => buffer.set_text(&format!("Could not create contact card: {error}")),
             }
         }
-        _ => buffer.set_text("Create or recover your device identity to generate a signed V2 contact card."),
+        _ => buffer.set_text(
+            "Create or recover your device identity to generate a signed V2 contact card.",
+        ),
     }
 }
 
@@ -458,7 +489,12 @@ fn populate_contact_picker(picker: &gtk::ComboBoxText, contacts: &[contact_card:
     for contact in contacts.iter().filter(|card| card.is_noise_compatible()) {
         picker.append_text(&contact_label(contact));
     }
-    if !contacts.iter().filter(|card| card.is_noise_compatible()).collect::<Vec<_>>().is_empty() {
+    if !contacts
+        .iter()
+        .filter(|card| card.is_noise_compatible())
+        .collect::<Vec<_>>()
+        .is_empty()
+    {
         picker.set_active(Some(0));
     }
 }
@@ -468,7 +504,8 @@ fn selected_contact(
     contacts: &[contact_card::ContactCard],
 ) -> Option<contact_card::ContactCard> {
     let selected = picker.active_text()?.to_string();
-    contacts.iter()
+    contacts
+        .iter()
         .find(|card| card.is_noise_compatible() && contact_label(card) == selected)
         .cloned()
 }

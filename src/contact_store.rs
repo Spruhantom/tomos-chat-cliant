@@ -6,7 +6,11 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 
 const ATTRS: [&str; 5] = [
-    "lookup", "application", "tomchat", "key", "trusted-contact-cards-v1",
+    "lookup",
+    "application",
+    "tomchat",
+    "key",
+    "trusted-contact-cards-v1",
 ];
 
 #[derive(Debug)]
@@ -24,7 +28,9 @@ impl std::fmt::Display for ContactStoreError {
 }
 impl std::error::Error for ContactStoreError {}
 impl From<ContactCardError> for ContactStoreError {
-    fn from(value: ContactCardError) -> Self { Self::Card(value) }
+    fn from(value: ContactCardError) -> Self {
+        Self::Card(value)
+    }
 }
 
 #[derive(Default)]
@@ -34,27 +40,41 @@ impl TrustedContactStore {
     pub fn load(&self) -> Result<Vec<ContactCard>, ContactStoreError> {
         let output = Command::new("secret-tool")
             .args(ATTRS)
-            .stdin(Stdio::null()).stderr(Stdio::null()).output()
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .output()
             .map_err(|error| ContactStoreError::KeyStore(error.to_string()))?;
         if !output.status.success() {
             return Ok(Vec::new());
         }
-        let encoded_cards: Vec<String> = serde_json::from_slice(&output.stdout)
-            .map_err(|error| ContactStoreError::KeyStore(format!("Stored contacts are malformed: {error}")))?;
+        let encoded_cards: Vec<String> =
+            serde_json::from_slice(&output.stdout).map_err(|error| {
+                ContactStoreError::KeyStore(format!("Stored contacts are malformed: {error}"))
+            })?;
         if encoded_cards.len() > 1000 {
-            return Err(ContactStoreError::KeyStore("Stored contact count exceeds the safety limit.".into()));
+            return Err(ContactStoreError::KeyStore(
+                "Stored contact count exceeds the safety limit.".into(),
+            ));
         }
-        encoded_cards.into_iter().map(|encoded| ContactCard::decode(&encoded).map_err(Into::into)).collect()
+        encoded_cards
+            .into_iter()
+            .map(|encoded| ContactCard::decode(&encoded).map_err(Into::into))
+            .collect()
     }
 
     pub fn import(&self, encoded: &str) -> Result<Vec<ContactCard>, ContactStoreError> {
         let card = ContactCard::decode(encoded)?;
         let mut contacts = self.load()?;
-        if let Some(existing) = contacts.iter().find(|existing| existing.fingerprint == card.fingerprint) {
+        if let Some(existing) = contacts
+            .iter()
+            .find(|existing| existing.fingerprint == card.fingerprint)
+        {
             if existing.encoded_public_key != card.encoded_public_key
-                || existing.noise_static_public_key != card.noise_static_public_key {
+                || existing.noise_static_public_key != card.noise_static_public_key
+            {
                 return Err(ContactStoreError::KeyStore(
-                    "An existing fingerprint has a conflicting identity binding.".into()));
+                    "An existing fingerprint has a conflicting identity binding.".into(),
+                ));
             }
             return Ok(contacts);
         }
@@ -74,25 +94,43 @@ impl TrustedContactStore {
     }
 
     fn save(&self, contacts: &[ContactCard]) -> Result<(), ContactStoreError> {
-        let encoded: Vec<String> = contacts.iter().map(ContactCard::encode)
+        let encoded: Vec<String> = contacts
+            .iter()
+            .map(ContactCard::encode)
             .collect::<Result<_, _>>()?;
         let mut payload = serde_json::to_vec(&encoded)
             .map_err(|error| ContactStoreError::KeyStore(error.to_string()))?;
         let mut child = Command::new("secret-tool")
-            .args(["store", "--label=TomChat trusted contacts",
-                "application", "tomchat", "key", "trusted-contact-cards-v1"])
-            .stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null())
-            .spawn().map_err(|error| ContactStoreError::KeyStore(error.to_string()))?;
+            .args([
+                "store",
+                "--label=TomChat trusted contacts",
+                "application",
+                "tomchat",
+                "key",
+                "trusted-contact-cards-v1",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|error| ContactStoreError::KeyStore(error.to_string()))?;
         let write_result = if let Some(mut stdin) = child.stdin.take() {
             stdin.write_all(&payload)
         } else {
-            Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, "Secret Service input unavailable"))
+            Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "Secret Service input unavailable",
+            ))
         };
         payload.fill(0);
         write_result.map_err(|error| ContactStoreError::KeyStore(error.to_string()))?;
-        let status = child.wait().map_err(|error| ContactStoreError::KeyStore(error.to_string()))?;
+        let status = child
+            .wait()
+            .map_err(|error| ContactStoreError::KeyStore(error.to_string()))?;
         if !status.success() {
-            return Err(ContactStoreError::KeyStore("Secret Service refused the contact list.".into()));
+            return Err(ContactStoreError::KeyStore(
+                "Secret Service refused the contact list.".into(),
+            ));
         }
         Ok(())
     }

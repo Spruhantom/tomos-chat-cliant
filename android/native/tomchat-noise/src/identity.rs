@@ -39,11 +39,18 @@ impl NoiseIdentity {
         let pair = Builder::new(params)
             .generate_keypair()
             .map_err(NoiseIdentityError::KeyGeneration)?;
-        let private_key: [u8; 32] = pair.private.try_into()
+        let private_key: [u8; 32] = pair
+            .private
+            .try_into()
             .map_err(|_| NoiseIdentityError::KeyGeneration(snow::Error::Input))?;
-        let public_key: [u8; 32] = pair.public.try_into()
+        let public_key: [u8; 32] = pair
+            .public
+            .try_into()
             .map_err(|_| NoiseIdentityError::KeyGeneration(snow::Error::Input))?;
-        Ok(Self { private_key, public_key })
+        Ok(Self {
+            private_key,
+            public_key,
+        })
     }
 
     pub fn public_key(&self) -> &[u8; 32] {
@@ -56,12 +63,14 @@ impl NoiseIdentity {
     }
 }
 
-
 impl NoiseIdentity {
     #[cfg(target_os = "linux")]
     fn from_stored(private_key: [u8; 32], public_key: [u8; 32]) -> Result<Self, String> {
         validate_keypair(&private_key, &public_key)?;
-        Ok(Self { private_key, public_key })
+        Ok(Self {
+            private_key,
+            public_key,
+        })
     }
 
     /// Store the identity in the user's desktop Secret Service collection.
@@ -73,7 +82,9 @@ impl NoiseIdentity {
 
         let mut existing = Command::new("secret-tool")
             .args(["lookup", "application", "tomchat", "key", "noise-static-v1"])
-            .stdin(Stdio::null()).stderr(Stdio::null()).output()
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .output()
             .map_err(|error| format!("Could not check Secret Service: {error}"))?;
         let already_exists = existing.status.success();
         existing.stdout.zeroize();
@@ -82,8 +93,14 @@ impl NoiseIdentity {
         }
 
         let mut child = Command::new("secret-tool")
-            .args(["store", "--label=TomChat Noise identity",
-                "application", "tomchat", "key", "noise-static-v1"])
+            .args([
+                "store",
+                "--label=TomChat Noise identity",
+                "application",
+                "tomchat",
+                "key",
+                "noise-static-v1",
+            ])
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -99,11 +116,16 @@ impl NoiseIdentity {
         let write_result = if let Some(mut stdin) = child.stdin.take() {
             stdin.write_all(encoded.as_bytes())
         } else {
-            Err(std::io::Error::new(std::io::ErrorKind::BrokenPipe, "Secret Service input unavailable"))
+            Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                "Secret Service input unavailable",
+            ))
         };
         encoded.zeroize();
-        write_result.map_err(|error| format!("Could not pass identity to Secret Service: {error}"))?;
-        let status = child.wait()
+        write_result
+            .map_err(|error| format!("Could not pass identity to Secret Service: {error}"))?;
+        let status = child
+            .wait()
             .map_err(|error| format!("Could not save identity in Secret Service: {error}"))?;
         if !status.success() {
             return Err("Secret Service did not save the TomChat identity.".into());
@@ -148,21 +170,36 @@ impl NoiseIdentity {
     }
 }
 
-
 #[cfg(target_os = "linux")]
 fn validate_keypair(private_key: &[u8; 32], public_key: &[u8; 32]) -> Result<(), String> {
     let mut initiator = crate::NoiseSession::initiator(private_key, public_key)
         .map_err(|_| "Stored Noise identity is invalid.".to_string())?;
     let mut responder = crate::NoiseSession::responder(private_key, public_key)
         .map_err(|_| "Stored Noise identity is invalid.".to_string())?;
-    let first = initiator.write_handshake(&[]).map_err(|_| "Stored Noise identity is invalid.".to_string())?;
-    responder.read_handshake(&first).map_err(|_| "Stored Noise identity is invalid.".to_string())?;
-    let second = responder.write_handshake(&[]).map_err(|_| "Stored Noise identity is invalid.".to_string())?;
-    initiator.read_handshake(&second).map_err(|_| "Stored Noise identity is invalid.".to_string())?;
-    let third = initiator.write_handshake(&[]).map_err(|_| "Stored Noise identity is invalid.".to_string())?;
-    responder.read_handshake(&third).map_err(|_| "Stored Noise identity is invalid.".to_string())?;
-    initiator.finish_handshake().map_err(|_| "Stored Noise public key does not match its private key.".to_string())?;
-    responder.finish_handshake().map_err(|_| "Stored Noise public key does not match its private key.".to_string())?;
+    let first = initiator
+        .write_handshake(&[])
+        .map_err(|_| "Stored Noise identity is invalid.".to_string())?;
+    responder
+        .read_handshake(&first)
+        .map_err(|_| "Stored Noise identity is invalid.".to_string())?;
+    let second = responder
+        .write_handshake(&[])
+        .map_err(|_| "Stored Noise identity is invalid.".to_string())?;
+    initiator
+        .read_handshake(&second)
+        .map_err(|_| "Stored Noise identity is invalid.".to_string())?;
+    let third = initiator
+        .write_handshake(&[])
+        .map_err(|_| "Stored Noise identity is invalid.".to_string())?;
+    responder
+        .read_handshake(&third)
+        .map_err(|_| "Stored Noise identity is invalid.".to_string())?;
+    initiator
+        .finish_handshake()
+        .map_err(|_| "Stored Noise public key does not match its private key.".to_string())?;
+    responder
+        .finish_handshake()
+        .map_err(|_| "Stored Noise public key does not match its private key.".to_string())?;
     Ok(())
 }
 
@@ -182,13 +219,21 @@ fn hex_decode(value: &str) -> Result<Vec<u8>, String> {
     if !value.len().is_multiple_of(2) || value.len() > 256 {
         return Err("Stored TomChat Noise identity has an invalid encoding.".into());
     }
-    value.as_bytes().as_chunks::<2>().0.iter().map(|pair| {
-        let high = (pair[0] as char).to_digit(16)
-            .ok_or_else(|| "Stored TomChat Noise identity has invalid hexadecimal data.".to_string())?;
-        let low = (pair[1] as char).to_digit(16)
-            .ok_or_else(|| "Stored TomChat Noise identity has invalid hexadecimal data.".to_string())?;
-        Ok(((high << 4) | low) as u8)
-    }).collect()
+    value
+        .as_bytes()
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| {
+            let high = (pair[0] as char).to_digit(16).ok_or_else(|| {
+                "Stored TomChat Noise identity has invalid hexadecimal data.".to_string()
+            })?;
+            let low = (pair[1] as char).to_digit(16).ok_or_else(|| {
+                "Stored TomChat Noise identity has invalid hexadecimal data.".to_string()
+            })?;
+            Ok(((high << 4) | low) as u8)
+        })
+        .collect()
 }
 
 impl Drop for NoiseIdentity {
@@ -223,5 +268,4 @@ mod tests {
         assert!(hex_decode("not-hex").is_err());
         raw.zeroize();
     }
-
 }
