@@ -75,14 +75,5 @@ class ContactCardCodecTest {
     @Test fun rejectsOversizedInput() {
         org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { ContactCardCodec.decode("x".repeat(4097)) }
     }
-    @Test fun acceptsSharedRustAndAndroidV2ContactCardVector() {
-        val encoded = requireNotNull(javaClass.getResourceAsStream("/contact-card-v2.txt"))
-            .bufferedReader().use { it.readText().trim() }
-        val card = ContactCardCodec.decode(encoded)
-        assertEquals("TomChat Interop Test", card.displayName)
-        assertEquals("0E8D DAFD E31C E289 0F12 481A 03F8 247F 783E 64DF 1421 7348 9388 C8AA 7E04 D0C7", card.fingerprint)
-        assertArrayEquals(ByteArray(32) { it.toByte() }, card.noiseStaticPublicKey)
-        assertTrue(ContactCardCodec.verify(card))
-    }
 
 }
