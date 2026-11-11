@@ -1,6 +1,7 @@
 package uk.co.tomos.chat
 
 import android.content.Context
+import android.net.wifi.WifiManager
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import java.io.IOException
@@ -27,7 +28,10 @@ class AutoPeerDiscovery(
     private val onConnected: (PeerConversationSession) -> Unit,
     private val onError: (Throwable) -> Unit
 ) : AutoCloseable {
-    private val nsd = context.applicationContext.getSystemService(Context.NSD_SERVICE) as NsdManager
+    private val appContext = context.applicationContext
+    private val nsd = appContext.getSystemService(Context.NSD_SERVICE) as NsdManager
+    private val wifiManager = appContext.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+    private var multicastLock: WifiManager.MulticastLock? = null
     private val executor: ScheduledExecutorService = Executors.newScheduledThreadPool(2)
     private val closed = AtomicBoolean(false)
     private val completed = AtomicBoolean(false)
@@ -44,6 +48,12 @@ class AutoPeerDiscovery(
             return
         }
         try {
+            // Android filters multicast packets for background Wi-Fi clients on
+            // many devices. Hold this only for the bounded discovery window.
+            multicastLock = wifiManager.createMulticastLock("TomChatPeerDiscovery").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
             val port = coordinator.startListening("0.0.0.0", 0)
             val service = NsdServiceInfo().apply {
                 serviceName = "TomChat"
@@ -161,6 +171,8 @@ class AutoPeerDiscovery(
         try { registration?.let { nsd.unregisterService(it) } } catch (_: Exception) { }
         timeout?.cancel(true)
         coordinator.stopListening()
+        try { multicastLock?.let { if (it.isHeld) it.release() } } catch (_: Exception) { }
+        multicastLock = null
     }
 
     override fun close() {
