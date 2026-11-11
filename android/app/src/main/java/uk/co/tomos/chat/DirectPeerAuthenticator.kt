@@ -23,11 +23,14 @@ class DirectPeerAuthenticator(
     private val expectedPeer: TrustedContact,
     private val random: SecureRandom = SecureRandom()
 ) {
-    fun authenticate(socket: Socket): AuthenticatedPeerConnection {
-        socket.soTimeout = HANDSHAKE_TIMEOUT_MS
+    fun authenticate(socket: Socket): AuthenticatedPeerConnection =
+        authenticate(TcpPeerTransportSocket(socket))
+
+    fun authenticate(socket: PeerTransportSocket): AuthenticatedPeerConnection {
+        socket.readTimeoutMs = HANDSHAKE_TIMEOUT_MS
         socket.tcpNoDelay = true
-        val input = DataInputStream(socket.getInputStream())
-        val output = DataOutputStream(socket.getOutputStream())
+        val input = DataInputStream(socket.inputStream)
+        val output = DataOutputStream(socket.outputStream)
 
         val localNonce = ByteArray(NONCE_SIZE).also(random::nextBytes)
         output.writeInt(PROTOCOL_MAGIC)
@@ -105,7 +108,7 @@ class DirectPeerAuthenticator(
 }
 
 class AuthenticatedPeerConnection internal constructor(
-    private val socket: Socket,
+    private val socket: PeerTransportSocket,
     val peerFingerprint: String
 ) : AutoCloseable {
     private val closed = AtomicBoolean(false)
@@ -117,10 +120,10 @@ class AuthenticatedPeerConnection internal constructor(
     fun establishEncryptedChannel(session: NoisePeerSession, initiator: Boolean, handshakeTimeoutMs: Int = 8_000): EncryptedPeerChannel {
         check(!closed.get() && isConnected) { "Peer connection is closed." }
         require(handshakeTimeoutMs in 1..30_000)
-        val input = DataInputStream(socket.getInputStream())
-        val output = DataOutputStream(socket.getOutputStream())
+        val input = DataInputStream(socket.inputStream)
+        val output = DataOutputStream(socket.outputStream)
         try {
-            socket.soTimeout = handshakeTimeoutMs
+            socket.readTimeoutMs = handshakeTimeoutMs
             if (initiator) {
                 writeBounded(output, session.writeHandshake(), MAX_NOISE_HANDSHAKE_BYTES)
                 session.readHandshake(readBounded(input, MAX_NOISE_HANDSHAKE_BYTES))
@@ -131,7 +134,7 @@ class AuthenticatedPeerConnection internal constructor(
                 session.readHandshake(readBounded(input, MAX_NOISE_HANDSHAKE_BYTES))
             }
             session.finishHandshake()
-            socket.soTimeout = 0
+            socket.readTimeoutMs = 0
             return EncryptedPeerChannel(socket, input, output, session)
         } catch (error: Exception) {
             try { session.close() } catch (_: Exception) { }
