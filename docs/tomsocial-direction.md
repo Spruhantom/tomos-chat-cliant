@@ -6,7 +6,7 @@
 
 ## Non-negotiable decentralised peer-to-peer policy
 
-TomSocial must work without any application centralised service: no TomOS-operated centralised service, third-party relay, community centralised service, user-hosted centralised service, hosted rendezvous, DHT bootstrap, central directory, push gateway, cloud database, object store, or central feed index. Do not add optional centralised service integrations or silent infrastructure fallbacks.
+TomSocial must work without any central infrastructure: no TomOS-operated hosted component, third-party relay, community-operated infrastructure, or user-hosted shared component, hosted rendezvous, DHT bootstrap, central directory, push gateway, cloud database, object store, or central feed index. Do not add optional centralised service integrations or silent infrastructure fallbacks.
 
 ## Product vision
 
@@ -25,7 +25,7 @@ Names are working product names, not final branding.
 1. Reuse the TomChat identity and Rust networking core, but keep social data and permissions separate from private conversations.
 2. Public posts are signed, versioned objects. A recipient can verify authorship and detect tampering without trusting the peer that delivered the object.
 3. Users choose what is public, followers-only, group-only, or private. Public content must never be treated as end-to-end encrypted private chat.
-4. No application centralised service is allowed anywhere in the system, including optional relays, bootstrap services, user-hosted centralised services, or shared storage services.
+4. No central infrastructure is allowed anywhere in the system, including optional relays, bootstrap services, user-hosted shared components, or shared storage services.
 5. Availability is explicit: content can only be fetched when the author or a peer holding a local replica is reachable. Users can keep their own copies and replicate selected posts directly to trusted personal devices.
 6. Build abuse resistance from the beginning: block/mute, rate limits, report evidence, moderator roles, community rules, spam controls, and user-controlled feed filters.
 7. Social features must not weaken the strict P2P requirements or expose private contact graphs and chat metadata.
