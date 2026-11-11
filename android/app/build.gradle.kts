@@ -81,7 +81,7 @@ dependencies {
     implementation("androidx.camera:camera-view:1.4.1")
 
     // Pinned WebRTC core only; peer signalling remains inside the Noise channel.
-    implementation("io.getstream:stream-webrtc-android:1.3.10")
+    implementation("io.getstream:stream-webrtc-android:1.3.9")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:runner:1.6.2")
