@@ -1,3 +1,5 @@
+pub mod peer_transport;
+
 //! Experimental Noise session core for TomChat.
 //!
 //! Uses Noise XX with Noise_XX_25519_ChaChaPoly_SHA256. The caller must
