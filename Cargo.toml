@@ -10,7 +10,7 @@ gtk = { package = "gtk4", version = "0.9" }
 adw = { package = "libadwaita", version = "0.7", features = ["v1_5"] }
 base64 = "0.22.1"
 ring = "0.17.14"
-zeroize = "1.9.1"
+zeroize = "=1.8.1"
 tomchat-noise = { path = "android/native/tomchat-noise" }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
