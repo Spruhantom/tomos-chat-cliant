@@ -1,12 +1,12 @@
-# TomOS Social — future zero-server platform direction
+# TomOS Social — future decentralised peer-to-peer platform direction
 
 - Status: Proposed future product direction
 - Date: 2026-11-09
 - Relationship: Built into the TomChat Android app after the core P2P messaging foundation is stable
 
-## Non-negotiable zero-server policy
+## Non-negotiable decentralised peer-to-peer policy
 
-TomSocial must work without any application server: no TomOS-operated server, third-party relay, community server, user-hosted server, hosted rendezvous, DHT bootstrap, central directory, push gateway, cloud database, object store, or central feed index. Do not add optional server integrations or silent infrastructure fallbacks.
+TomSocial must work without any application centralised service: no TomOS-operated centralised service, third-party relay, community centralised service, user-hosted centralised service, hosted rendezvous, DHT bootstrap, central directory, push gateway, cloud database, object store, or central feed index. Do not add optional centralised service integrations or silent infrastructure fallbacks.
 
 ## Product vision
 
@@ -25,7 +25,7 @@ Names are working product names, not final branding.
 1. Reuse the TomChat identity and Rust networking core, but keep social data and permissions separate from private conversations.
 2. Public posts are signed, versioned objects. A recipient can verify authorship and detect tampering without trusting the peer that delivered the object.
 3. Users choose what is public, followers-only, group-only, or private. Public content must never be treated as end-to-end encrypted private chat.
-4. No application server is allowed anywhere in the system, including optional relays, bootstrap services, user-hosted servers, or shared storage services.
+4. No application centralised service is allowed anywhere in the system, including optional relays, bootstrap services, user-hosted centralised services, or shared storage services.
 5. Availability is explicit: content can only be fetched when the author or a peer holding a local replica is reachable. Users can keep their own copies and replicate selected posts directly to trusted personal devices.
 6. Build abuse resistance from the beginning: block/mute, rate limits, report evidence, moderator roles, community rules, spam controls, and user-controlled feed filters.
 7. Social features must not weaken the strict P2P requirements or expose private contact graphs and chat metadata.
@@ -42,12 +42,12 @@ Names are working product names, not final branding.
 
 The protocol must define canonical serialization, signature domain separation, event versioning, expiry/deletion semantics, replay handling, and safe handling of unknown fields before implementation.
 
-## Zero-server distribution model
+## decentralised peer-to-peer distribution model
 
 - Nearby discovery through local multicast and Bluetooth/NFC/QR contact exchange.
 - Remote peers exchange signed contact cards and reachable address hints directly, out of band or through existing peer connections.
 - Direct peer fetch and synchronisation when peers are reachable.
-- Each user's devices may replicate selected public posts and media for that user's own availability. This is device-to-device replication, not a server or always-on hosting guarantee.
+- Each user's devices may replicate selected public posts and media for that user's own availability. This is device-to-device replication, not a centralised service or always-on hosting guarantee.
 - No DHT bootstrap, public index, relay, TURN/STUN service, shared community host, or central directory.
 - No global search or guaranteed public feed discovery. Discovery is limited to known peers, local peers, and invitations users exchange.
 - Mobile devices sleeping or going offline reduce availability. No promise of instant global feed delivery.
@@ -55,11 +55,11 @@ The protocol must define canonical serialization, signature domain separation, e
 ## Interoperability research
 
 ActivityPub and Nostr are useful research references, not dependencies:
-- ActivityPub is a W3C standard for federated social networking. Typical deployments use servers, so conventional federation is incompatible with this zero-server requirement.
-- Nostr uses signed events and user-selected relays. Relays are servers, so standard relay-based operation is incompatible with this requirement.
+- ActivityPub is a W3C standard for federated social networking. Typical deployments use centralised services, so conventional federation is incompatible with this decentralised peer-to-peer requirement.
+- Nostr uses signed events and user-selected relays. Relays are centralised services, so standard relay-based operation is incompatible with this requirement.
 - libp2p Gossipsub may be evaluated for announcements among currently connected peers, but it does not provide durable storage, global discovery, or offline delivery by itself.
 
-Do not implement bridges that require a server. Any future import/export must be local and user-initiated.
+Do not implement bridges that require a centralised service. Any future import/export must be local and user-initiated.
 
 ## Privacy and safety
 
@@ -90,4 +90,4 @@ Do not build the social platform before the core messaging identity and direct-p
 - Posts are not guaranteed to reach people who are offline or unknown to the author's peer graph.
 - Content availability depends on author devices and explicitly selected peer replicas being online.
 - Deleting a post cannot guarantee removal of copies already downloaded by other users.
-- Strict zero-server operation sacrifices some convenience and reachability to preserve independence.
+- Strict decentralised peer-to-peer operation sacrifices some convenience and reachability to preserve independence.
