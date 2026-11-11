@@ -23,7 +23,7 @@ class PeerMessagingCoordinator(
     @Synchronized
     @Throws(IOException::class)
     fun startListening(bindAddress: String, port: Int): Int {
-        require(port in 1..65535)
+        require(port in 0..65535)
         val address = InetAddress.getByName(bindAddress)
         require(address.isAnyLocalAddress || address.isSiteLocalAddress || address.isLoopbackAddress) {
             "The listener must bind to a local network interface."
@@ -40,6 +40,9 @@ class PeerMessagingCoordinator(
             throw IOException("Could not start the direct peer listener.", error)
         }
     }
+
+    @Synchronized
+    fun stopListening() { listenerRef.getAndSet(null)?.close() }
 
     @Throws(IOException::class)
     fun accept(contact: TrustedContact): PeerConversationSession {
