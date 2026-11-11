@@ -56,6 +56,103 @@ impl NoiseIdentity {
     }
 }
 
+
+impl NoiseIdentity {
+    fn from_stored(private_key: [u8; 32], public_key: [u8; 32]) -> Self {
+        Self { private_key, public_key }
+    }
+
+    /// Store the identity in the user's desktop Secret Service collection.
+    /// Requires the `secret-tool` utility and an unlocked Secret Service.
+    #[cfg(target_os = "linux")]
+    pub fn save_to_secret_service(&self) -> Result<(), String> {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+
+        let mut child = Command::new("secret-tool")
+            .args(["store", "--label=TomChat Noise identity",
+                "application", "tomchat", "key", "noise-static-v1"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|error| format!("Could not start Secret Service helper: {error}"))?;
+
+        let mut secret = [0u8; 64];
+        secret[..32].copy_from_slice(&self.private_key);
+        secret[32..].copy_from_slice(&self.public_key);
+        let encoded = hex_encode(&secret);
+        secret.zeroize();
+
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(encoded.as_bytes())
+                .map_err(|error| format!("Could not pass identity to Secret Service: {error}"))?;
+        }
+        let status = child.wait()
+            .map_err(|error| format!("Could not save identity in Secret Service: {error}"))?;
+        if !status.success() {
+            return Err("Secret Service did not save the TomChat identity.".into());
+        }
+        Ok(())
+    }
+
+    /// Load the identity from Secret Service. Does not create a replacement
+    /// when the key store is unavailable or the stored record is malformed.
+    #[cfg(target_os = "linux")]
+    pub fn load_from_secret_service() -> Result<Self, String> {
+        use std::process::{Command, Stdio};
+
+        let output = Command::new("secret-tool")
+            .args(["lookup", "application", "tomchat", "key", "noise-static-v1"])
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .output()
+            .map_err(|error| format!("Could not access Secret Service: {error}"))?;
+        if !output.status.success() {
+            return Err("No TomChat Noise identity was found in Secret Service.".into());
+        }
+        let encoded = std::str::from_utf8(&output.stdout)
+            .map_err(|_| "Secret Service returned invalid identity data.".to_string())?
+            .trim();
+        let mut secret = hex_decode(encoded)?;
+        if secret.len() != 64 {
+            secret.zeroize();
+            return Err("Stored TomChat Noise identity has an invalid length.".into());
+        }
+        let mut private_key = [0u8; 32];
+        let mut public_key = [0u8; 32];
+        private_key.copy_from_slice(&secret[..32]);
+        public_key.copy_from_slice(&secret[32..]);
+        secret.zeroize();
+        Ok(Self::from_stored(private_key, public_key))
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn hex_encode(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        output.push(HEX[(byte >> 4) as usize] as char);
+        output.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    output
+}
+
+#[cfg(target_os = "linux")]
+fn hex_decode(value: &str) -> Result<Vec<u8>, String> {
+    if value.len() % 2 != 0 || value.len() > 256 {
+        return Err("Stored TomChat Noise identity has an invalid encoding.".into());
+    }
+    value.as_bytes().chunks_exact(2).map(|pair| {
+        let high = (pair[0] as char).to_digit(16)
+            .ok_or_else(|| "Stored TomChat Noise identity has invalid hexadecimal data.".to_string())?;
+        let low = (pair[1] as char).to_digit(16)
+            .ok_or_else(|| "Stored TomChat Noise identity has invalid hexadecimal data.".to_string())?;
+        Ok(((high << 4) | low) as u8)
+    }).collect()
+}
+
 impl Drop for NoiseIdentity {
     fn drop(&mut self) {
         self.private_key.zeroize();
