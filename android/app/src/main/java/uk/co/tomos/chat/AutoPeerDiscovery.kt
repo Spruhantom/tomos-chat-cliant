@@ -114,7 +114,7 @@ class AutoPeerDiscovery(
                         val session = coordinator.accept(contact)
                         publishConnected(session)
                     } catch (error: Exception) {
-                        if (!closed.get() && !completed.get()) fail(error)
+                        if (!closed.get() && !completed.get() && !bluetoothStarted.get()) fail(error)
                     }
                 }
             }
