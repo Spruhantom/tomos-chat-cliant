@@ -596,7 +596,7 @@ private fun ChatsScreen(profile: AccountProfile) {
     ) { results ->
         val pending = pendingBluetoothContact
         pendingBluetoothContact = null
-        if (pending != null) beginAutomaticDiscovery(pending, results.values.all { it })
+        if (pending != null) beginAutomaticDiscovery(pending, results.isNotEmpty() && results.values.all { it })
     }
 
     LaunchedEffect(context.filesDir) {
