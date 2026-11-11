@@ -4,8 +4,8 @@ import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import java.io.IOException
-import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -28,7 +28,7 @@ class AutoPeerDiscovery(
     private val onError: (Throwable) -> Unit
 ) : AutoCloseable {
     private val nsd = context.applicationContext.getSystemService(Context.NSD_SERVICE) as NsdManager
-    private val executor: ExecutorService = Executors.newFixedThreadPool(2)
+    private val executor: ScheduledExecutorService = Executors.newScheduledThreadPool(2)
     private val closed = AtomicBoolean(false)
     private val completed = AtomicBoolean(false)
     private val resolving = AtomicBoolean(false)
