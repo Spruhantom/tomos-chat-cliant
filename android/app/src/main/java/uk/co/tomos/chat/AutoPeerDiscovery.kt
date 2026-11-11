@@ -3,10 +3,11 @@ package uk.co.tomos.chat
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
-import android.os.Build
 import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -30,6 +31,8 @@ class AutoPeerDiscovery(
     private val executor: ExecutorService = Executors.newFixedThreadPool(2)
     private val closed = AtomicBoolean(false)
     private val completed = AtomicBoolean(false)
+    private val resolving = AtomicBoolean(false)
+    private var timeout: ScheduledFuture<*>? = null
     private var registration: NsdManager.RegistrationListener? = null
     private var discovery: NsdManager.DiscoveryListener? = null
     private val serviceType = "_tomchat._tcp."
@@ -70,7 +73,6 @@ class AutoPeerDiscovery(
                 }
                 override fun onServiceFound(found: NsdServiceInfo) {
                     if (closed.get() || found.serviceType.trimEnd('.') != serviceType.trimEnd('.')) return
-                    if (found.serviceName == service.serviceName) return
                     resolve(found)
                 }
                 override fun onServiceLost(lost: NsdServiceInfo) = Unit
@@ -84,6 +86,11 @@ class AutoPeerDiscovery(
             }
             discovery = listener
             nsd.discoverServices(serviceType, NsdManager.PROTOCOL_DNS_SD, listener)
+            timeout = executor.schedule(
+                { fail(IOException("No trusted device was found on this Wi-Fi network.")) },
+                45,
+                TimeUnit.SECONDS
+            )
 
             // The lexicographically smaller identity initiates. This prevents
             // both devices opening competing simultaneous Noise sessions.
@@ -104,10 +111,13 @@ class AutoPeerDiscovery(
 
     @Suppress("DEPRECATION")
     private fun resolve(found: NsdServiceInfo) {
-        if (closed.get() || completed.get()) return
+        if (closed.get() || completed.get() || !resolving.compareAndSet(false, true)) return
         nsd.resolveService(found, object : NsdManager.ResolveListener {
-            override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) = Unit
+            override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) {
+                resolving.set(false)
+            }
             override fun onServiceResolved(info: NsdServiceInfo) {
+                resolving.set(false)
                 if (closed.get() || completed.get()) return
                 val advertisedFingerprint = info.attributes["fp"]
                     ?.toString(Charsets.US_ASCII)
@@ -149,6 +159,7 @@ class AutoPeerDiscovery(
     private fun closeDiscoveryOnly() {
         try { discovery?.let { nsd.stopServiceDiscovery(it) } } catch (_: Exception) { }
         try { registration?.let { nsd.unregisterService(it) } } catch (_: Exception) { }
+        timeout?.cancel(true)
         coordinator.stopListening()
     }
 
