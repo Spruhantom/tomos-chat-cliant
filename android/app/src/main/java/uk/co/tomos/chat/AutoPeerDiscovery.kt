@@ -26,6 +26,7 @@ class AutoPeerDiscovery(
     private val coordinator: PeerMessagingCoordinator,
     private val localFingerprint: String,
     private val contact: TrustedContact,
+    private val enableBluetoothFallback: Boolean = true,
     private val onStatus: (String) -> Unit,
     private val onConnected: (PeerConversationSession) -> Unit,
     private val onError: (Throwable) -> Unit
@@ -183,6 +184,10 @@ class AutoPeerDiscovery(
 
     private fun fail(error: Throwable) {
         if (closed.get() || completed.get()) return
+        if (!enableBluetoothFallback) {
+            failFinal(IOException("Wi-Fi discovery failed. Bluetooth Nearby devices permission was not granted."))
+            return
+        }
         if (bluetoothStarted.compareAndSet(false, true)) {
             closeDiscoveryOnly()
             onStatus("Wi-Fi route unavailable; trying direct Bluetooth…")
