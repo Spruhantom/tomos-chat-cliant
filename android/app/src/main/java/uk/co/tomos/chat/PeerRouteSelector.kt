@@ -56,7 +56,11 @@ object PeerRouteSelector {
         val eligible = candidates
             .filter { it.reachable && it.id !in excludedRouteIds }
             .filter { allowMetered || !it.requiresMeteredNetwork }
-            .distinctBy { it.id }
+            // BLE is a discovery/control path, not a sustained real-time audio route.
+            .filter { traffic != PeerTrafficClass.VOICE || it.transport != PeerTransportKind.BLUETOOTH_LE }
+            .groupBy { it.id }
+            .values
+            .mapNotNull { duplicates -> duplicates.maxByOrNull { score(it, traffic) } }
             .sortedWith(
                 compareByDescending<PeerRouteCandidate> { score(it, traffic) }
                     .thenBy { it.measuredLatencyMs }
