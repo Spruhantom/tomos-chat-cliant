@@ -43,10 +43,10 @@ class AutoPeerDiscovery(
         try {
             val port = coordinator.startListening("0.0.0.0", 0)
             val service = NsdServiceInfo().apply {
-                serviceName = "TomChat-$localFingerprint"
+                serviceName = "TomChat"
                 this.serviceType = this@AutoPeerDiscovery.serviceType
                 this.port = port
-                setAttribute("fingerprint", localFingerprint)
+                setAttribute("fp", localFingerprint)
                 setAttribute("protocol", "1")
             }
             val registerListener = object : NsdManager.RegistrationListener {
@@ -109,8 +109,9 @@ class AutoPeerDiscovery(
             override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) = Unit
             override fun onServiceResolved(info: NsdServiceInfo) {
                 if (closed.get() || completed.get()) return
-                val advertisedFingerprint = info.attributes["fingerprint"]
+                val advertisedFingerprint = info.attributes["fp"]
                     ?.toString(Charsets.US_ASCII)
+                if (advertisedFingerprint == localFingerprint) return
                 if (advertisedFingerprint != contact.fingerprint) return
                 if (localFingerprint > contact.fingerprint) return
                 val host = info.host?.hostAddress ?: return
