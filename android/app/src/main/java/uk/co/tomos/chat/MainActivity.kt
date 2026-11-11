@@ -690,22 +690,22 @@ private fun ChatsScreen(profile: AccountProfile) {
                                 }
                             }) { Text("Open") }
                             TextButton(enabled = coordinator != null && localFingerprint != null && contact.noiseStaticPublicKey != null && !working, onClick = {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                    val required = arrayOf(
+                                val required = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    arrayOf(
                                         Manifest.permission.BLUETOOTH_SCAN,
                                         Manifest.permission.BLUETOOTH_ADVERTISE,
                                         Manifest.permission.BLUETOOTH_CONNECT
                                     )
-                                    val missing = required.filter {
-                                        ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
-                                    }.toTypedArray()
-                                    if (missing.isEmpty()) beginAutomaticDiscovery(contact, true)
-                                    else {
-                                        pendingBluetoothContact = contact
-                                        bluetoothPermissionLauncher.launch(missing)
-                                    }
                                 } else {
-                                    beginAutomaticDiscovery(contact, true)
+                                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+                                }
+                                val missing = required.filter {
+                                    ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+                                }.toTypedArray()
+                                if (missing.isEmpty()) beginAutomaticDiscovery(contact, true)
+                                else {
+                                    pendingBluetoothContact = contact
+                                    bluetoothPermissionLauncher.launch(missing)
                                 }
                             }) { Text("Find & connect") }
                         }
