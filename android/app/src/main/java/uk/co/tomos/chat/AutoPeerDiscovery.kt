@@ -94,7 +94,7 @@ class AutoPeerDiscovery(
 
             // The lexicographically smaller identity initiates. This prevents
             // both devices opening competing simultaneous Noise sessions.
-            if (localFingerprint > contact.fingerprint) {
+            if (!PeerConnectionRole.shouldInitiate(localFingerprint, contact.fingerprint)) {
                 executor.execute {
                     try {
                         val session = coordinator.accept(contact)
@@ -123,7 +123,7 @@ class AutoPeerDiscovery(
                     ?.toString(Charsets.US_ASCII)
                 if (advertisedFingerprint == localFingerprint) return
                 if (advertisedFingerprint != contact.fingerprint) return
-                if (localFingerprint > contact.fingerprint) return
+                if (!PeerConnectionRole.shouldInitiate(localFingerprint, contact.fingerprint)) return
                 val host = info.host?.hostAddress ?: return
                 val port = info.port
                 if (port !in 1..65535) return
