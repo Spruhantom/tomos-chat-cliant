@@ -23,10 +23,10 @@ The first-run screen collects a display name and a date of birth in `YYYY-MM-DD`
 
 ## Current Android screens
 
-- Chats: zero-server connection status and empty conversation state.
+- Chats: decentralised peer-to-peer connection status and empty conversation state.
 - Contacts: signed QR contact cards, fingerprint confirmation, trusted-contact persistence, and a signed binding between the P-256 device identity and the X25519 Noise static key.
 - Calls: placeholder for authenticated direct voice calls.
-- Settings: zero-server policy, automatic route preference, identity, backups, and future TomSocial direction.
+- Settings: decentralised peer-to-peer policy, automatic route preference, identity, backups, and future TomSocial direction.
 
 The Android foundation still does not implement real messaging or calling. The current direct TCP connection proves peer identity but deliberately exposes no application data stream.
 
@@ -40,7 +40,7 @@ Follow [docs/design-system.md](../docs/design-system.md):
 
 ## Direct Bluetooth and peer networking
 
-Bluetooth is a first-class direct peer transport, not a server substitute:
+Bluetooth is a first-class direct peer transport, not a centralised service substitute:
 - BLE advertisements/GATT for nearby discovery, connection setup, and small encrypted payloads.
 - Bluetooth Classic RFCOMM for a direct byte stream and suitable file transfers where supported.
 - The same authenticated, end-to-end encrypted message envelope is used over Bluetooth and Wi-Fi.
