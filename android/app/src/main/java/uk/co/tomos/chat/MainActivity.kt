@@ -1,6 +1,7 @@
 package uk.co.tomos.chat
 
 import android.os.Bundle
+import android.os.Build
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
@@ -527,6 +528,7 @@ private fun ChatsScreen(profile: AccountProfile) {
     var pendingCallAction by remember { mutableStateOf("call") }
     var callMuted by remember { mutableStateOf(false) }
     var callSpeaker by remember { mutableStateOf(false) }
+    var pendingBluetoothContact by remember { mutableStateOf<TrustedContact?>(null) }
 
     val callController = remember(session, selectedContact) {
         val activeSession = session
@@ -554,6 +556,47 @@ private fun ChatsScreen(profile: AccountProfile) {
         } else {
             errorText = "Microphone permission is required to make or answer a voice call."
         }
+    }
+
+    fun beginAutomaticDiscovery(contact: TrustedContact, allowBluetooth: Boolean) {
+        session?.close(); session = null
+        discovery?.close()
+        selectedContact = contact; working = true; errorText = null
+        statusText = "Starting automatic direct discovery…"
+        val activeDiscovery = AutoPeerDiscovery(
+            context = context,
+            coordinator = coordinator!!,
+            localFingerprint = localFingerprint!!,
+            contact = contact,
+            enableBluetoothFallback = allowBluetooth,
+            onStatus = { statusText = it },
+            onConnected = { connected ->
+                scope.launch {
+                    session?.close(); session = connected
+                    messages = withContext(Dispatchers.IO) { coordinator?.loadHistory(contact.fingerprint).orEmpty() }
+                    working = false
+                    discovery = null
+                }
+            },
+            onError = { error ->
+                scope.launch {
+                    errorText = error.message ?: "No direct connection could be established."
+                    statusText = "No direct route found"
+                    working = false
+                    discovery = null
+                }
+            }
+        )
+        discovery = activeDiscovery
+        activeDiscovery.start()
+    }
+
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val pending = pendingBluetoothContact
+        pendingBluetoothContact = null
+        if (pending != null) beginAutomaticDiscovery(pending, results.values.all { it })
     }
 
     LaunchedEffect(context.filesDir) {
@@ -647,35 +690,23 @@ private fun ChatsScreen(profile: AccountProfile) {
                                 }
                             }) { Text("Open") }
                             TextButton(enabled = coordinator != null && localFingerprint != null && contact.noiseStaticPublicKey != null && !working, onClick = {
-                                session?.close(); session = null
-                                discovery?.close()
-                                selectedContact = contact; working = true; errorText = null
-                                statusText = "Starting automatic direct discovery…"
-                                val activeDiscovery = AutoPeerDiscovery(
-                                    context = context,
-                                    coordinator = coordinator!!,
-                                    localFingerprint = localFingerprint!!,
-                                    contact = contact,
-                                    onStatus = { statusText = it },
-                                    onConnected = { connected ->
-                                        scope.launch {
-                                            session?.close(); session = connected
-                                            messages = withContext(Dispatchers.IO) { coordinator?.loadHistory(contact.fingerprint).orEmpty() }
-                                            working = false
-                                            discovery = null
-                                        }
-                                    },
-                                    onError = { error ->
-                                        scope.launch {
-                                            errorText = error.message ?: "No direct connection could be established."
-                                            statusText = "No direct route found on this network"
-                                            working = false
-                                            discovery = null
-                                        }
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    val required = arrayOf(
+                                        Manifest.permission.BLUETOOTH_SCAN,
+                                        Manifest.permission.BLUETOOTH_ADVERTISE,
+                                        Manifest.permission.BLUETOOTH_CONNECT
+                                    )
+                                    val missing = required.filter {
+                                        ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+                                    }.toTypedArray()
+                                    if (missing.isEmpty()) beginAutomaticDiscovery(contact, true)
+                                    else {
+                                        pendingBluetoothContact = contact
+                                        bluetoothPermissionLauncher.launch(missing)
                                     }
-                                )
-                                discovery = activeDiscovery
-                                activeDiscovery.start()
+                                } else {
+                                    beginAutomaticDiscovery(contact, true)
+                                }
                             }) { Text("Find & connect") }
                         }
                     }
@@ -684,7 +715,7 @@ private fun ChatsScreen(profile: AccountProfile) {
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
             Text("AUTOMATIC DIRECT CONNECTION", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-            Text("TomChat automatically finds this trusted device on the same Wi-Fi network. No IP address, port, or listening setup is needed. Connections are still verified with your saved identity and Noise encryption.", color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
+            Text("TomChat automatically searches Wi-Fi first, then nearby Bluetooth if permitted. No IP address, port, or listening setup is needed. Every connection is verified with your saved identity and Noise encryption.", color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
             Text(statusText, color = if (session != null) Green else Muted, fontSize = 11.sp)
             if (errorText != null) Text(errorText!!, color = Color(0xFFFF6B83), fontSize = 11.sp)
         }
