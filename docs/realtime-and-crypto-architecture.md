@@ -1,67 +1,57 @@
-# Real-time transport and cryptographic architecture
+# TomChat direct transport and cryptographic architecture
 
-Status: real-time transport is implemented; end-to-end encryption and device identity are not.
+Status: direct Android peer transport and Noise foundations are implemented; durable production E2EE and full multi-device group messaging remain incomplete.
 
-## 1. Implemented transport
+## 1. Decentralised network model
 
-The client uses a background WebSocket worker for the authenticated `/api/v1/ws` endpoint. The session bearer token is sent in the HTTP upgrade Authorization header and never in a URL. The worker handles delivery, acknowledgements, errors, ping/pong, bounded reconnect backoff, session expiry, message-ID de-duplication, and REST history catch-up using the forward `after` cursor.
+TomChat is a peer-to-peer application. Each participating device owns its identity and local data. Devices discover one another using local network discovery, nearby Bluetooth discovery, QR contact exchange, or a user-shared reachable address.
 
-The GTK conversation view receives worker events through a channel, displays messages for the selected conversation, and buffers messages for other conversations. The transport is not itself encryption: it relays opaque payloads only.
+Discovery results are hints only. They must never be treated as proof of identity. No central directory, hosted rendezvous, relay, push gateway, or cloud message store is part of the design. When a direct path is unavailable, the app reports that the peer cannot currently be reached.
 
-## 2. Encryption and device identity
+## 2. Direct transport
 
-TomChat does not yet implement E2EE. The message composer must remain disabled until the cryptographic protocol, device lifecycle, persistence, recovery and verification work has been implemented and independently reviewed.
+The Android prototype provides direct TCP transport, automatic route selection, local network discovery, and nearby Bluetooth discovery foundations. Wi-Fi and Bluetooth transports share a transport-neutral socket interface. The peer connection must complete mutual identity proof and a pinned-key Noise XX handshake before encrypted application frames are accepted.
 
-The current protocol evaluation selects IETF Messaging Layer Security (MLS, RFC 9420) as the preferred design for both direct and group conversations, using OpenMLS as the first Rust implementation candidate. This is an engineering decision for a prototype, not a security certification or a claim that OpenMLS has been independently audited for TomChat's integration. OpenMLS is pre-1.0 and its API and storage formats may change; pin an exact version, isolate it behind a narrow adapter, and review release/security notes before upgrades.
+Bluetooth discovery is for finding nearby devices and selecting a direct connection; it is not a voice-media relay. Network changes, Android permission changes, background limits, and device sleep can interrupt a direct session. Reconnection and failover must preserve peer identity and session safety.
 
-Initial ciphersuite candidate: `MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519`. Do not silently negotiate a weaker or different suite. The selected suite and protocol version must be authenticated in the MLS group state and visible to clients.
+The Linux TUI is an early foundation. It must reuse the same wire format, identity rules, and Noise protocol rather than inventing a separate protocol. A shared Android/Linux implementation and interoperability tests remain outstanding.
 
-## 3. Device identity and key lifecycle
+## 3. Encryption and identity
 
-Each installation is a distinct device. Account credentials authenticate to the service but are not encryption keys. A device creates its signing credential and MLS key material locally. Private keys and MLS group state remain local and are never uploaded.
+Each installation has its own device identity. Contact cards are exchanged out of band and the user approves the full fingerprint before trusting a peer. IP addresses, Bluetooth addresses, display names, and discovery advertisements are not identity credentials.
 
-The service stores only public device credentials, signed KeyPackages, device status/revocation metadata, and opaque MLS protocol messages. Device enrollment must be authenticated by an existing verified device or by an explicit recovery ceremony. A new device must not silently inherit old message history or impersonate an existing device.
+The Android prototype contains a native Rust Noise XX core exposed through JNI, Kotlin session integration, and encrypted application-frame foundations. The repository also pins OpenMLS 0.9.2 as a future group-messaging baseline. OpenMLS persistence, transactional group-state updates, restart restoration, device lifecycle, and multi-device recovery are not yet complete.
 
-Required lifecycle:
-- create a device identity and private key material locally;
-- publish a signed public credential and replenishable KeyPackages;
-- verify a new device by QR/safety-code comparison with an existing device;
-- add/remove devices through authenticated MLS membership changes;
-- revoke a lost device and force a fresh group epoch;
-- persist MLS state atomically before acknowledging a commit or application message;
-- support encrypted, user-controlled recovery separately from normal device sync;
-- clearly show unverified devices and membership/key changes in the UI.
+Do not describe TomChat as production-ready E2EE until persistent cryptographic state survives app updates and restarts, rollback/replay protections are verified, and two-device tests pass.
 
-## 4. Local storage
+## 4. Voice calling
 
-Use the desktop Secret Service through a maintained integration for small secrets and key-encryption material. Store encrypted MLS state in an application data directory with restrictive permissions. Derive a local wrapping key from a random secret held by the secret service; do not use the account password as the MLS key.
+Call-control messages must travel inside an already authenticated and encrypted peer channel. The Android WebRTC media foundation is configured for direct host candidates only; it must not introduce hosted signalling, STUN, TURN, relays, or cloud fallback.
 
-MLS state changes and outbound protocol messages must be committed transactionally. A crash or failed write must not leave the in-memory group state ahead of durable storage. Never log plaintext, private keys, KeyPackages, exported secrets, or message ciphertext. Disable cryptographic debug features in release builds.
+The Android voice audio engine provides platform audio capture/playback foundations. Actual calling support remains subject to end-to-end signalling integration, authenticated DTLS fingerprint binding, media lifecycle handling, network-change recovery, and physical two-device testing. Direct calls may be unavailable when peers cannot establish a reachable direct path.
 
-## 5. Threat model and limitations
+## 5. Local storage and recovery
 
-Assume the delivery server can observe, drop, reorder, replay, delay and inject network messages, and can lie about device-directory contents. MLS protects message confidentiality and integrity only when clients validate credentials and membership changes correctly.
+Private keys and cryptographic session state remain on participating devices. Use Android Keystore or the relevant desktop secret store to protect local wrapping keys. Store encrypted conversation data with restrictive permissions and never log plaintext, private keys, session secrets, or message contents.
 
-Out of scope for the initial desktop release: compromised endpoints, keyloggers, screenshots, malicious OS/root access, traffic analysis, timing/size metadata, denial of service, and recovery-secret theft. The server still sees account identifiers, conversation membership, device directory metadata, message sizes and timestamps.
+Cryptographic state changes and outbound messages must be committed transactionally. A crash or failed write must not leave in-memory session state ahead of durable storage. Recovery must be explicit and user-controlled; a new device must not silently inherit an existing device identity.
 
-Account password reset must not recover or replace encryption identity. A user who loses all trusted devices and their recovery secret must be told that encrypted history is unrecoverable. Never create a server-side escrow key.
+## 6. Security and reliability gates
 
-## 6. Implementation gates
-
-1. Finalise the server and protocol API for device credentials, KeyPackages and opaque MLS messages.
-2. Implement a narrow crypto adapter around a pinned OpenMLS release and a reviewed crypto provider.
-3. Implement durable transactional storage and Secret Service integration.
-4. Add unit tests using MLS test vectors, multi-device and multi-member integration tests, replay/reorder/fork tests, crash-recovery tests, and fuzzing.
-5. Implement device verification, revocation and recovery UI.
-6. Obtain independent review of the full integration and threat model.
-7. Only then enable encrypted message composition behind a feature gate.
+- Complete persistent OpenMLS storage and authenticated restoration after process restart.
+- Test replay, reorder, duplicate, malformed and unauthenticated frame rejection.
+- Test identity changes, contact revocation, and recovery.
+- Exercise Wi-Fi and Bluetooth paths on multiple physical Android devices.
+- Test Android permissions, lifecycle transitions, sleep/wake, and network changes.
+- Complete shared Android/Linux protocol interoperability.
+- Validate direct voice signalling and media identity binding end to end.
+- Clearly report unreachable peers instead of introducing hidden infrastructure fallbacks.
 
 ## 7. Current status
 
-- Authenticated live transport and reconnect history recovery: implemented.
-- MLS protocol adapter: not implemented.
-- Device registration/directory APIs: not implemented.
-- Secret Service integration and encrypted local state: not implemented.
-- Device verification, revocation and recovery: not implemented.
-- Message composer: intentionally disabled.
-- Manual GTK runtime and multi-device testing: outstanding.
+- Direct Android TCP peer transport and Noise XX foundations: implemented.
+- Local network and Bluetooth discovery foundations: implemented; physical-device coverage remains required.
+- Automatic peer route selection: implemented as an initial foundation; live route measurement and robust failover remain future work.
+- Linux TUI: early foundation; shared protocol integration remains outstanding.
+- OpenMLS 0.9.2 baseline: pinned; durable group-state integration and restart restoration remain outstanding.
+- Android direct WebRTC media foundation: present; complete calling and physical-device validation remain outstanding.
