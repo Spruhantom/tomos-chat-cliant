@@ -28,6 +28,7 @@ fn build_contacts(app: &adw::Application) {
 
     let status = gtk::Label::new(None);
     status.set_wrap(true);
+    status.set_text(&store_status);
     status.set_xalign(0.0);
 
     let identity_status = match contact_card::SigningIdentity::load_from_secret_service() {
@@ -42,7 +43,11 @@ fn build_contacts(app: &adw::Application) {
     };
 
     let store = Rc::new(contact_store::TrustedContactStore::default());
-    let contacts = Rc::new(RefCell::new(store.load().unwrap_or_default()));
+    let (initial_contacts, store_status) = match store.load() {
+        Ok(loaded) => (loaded, "Contacts loaded from your desktop keyring.".to_string()),
+        Err(error) => (Vec::new(), format!("Contact storage is unavailable: {error}")),
+    };
+    let contacts = Rc::new(RefCell::new(initial_contacts));
 
     let card_input = gtk::TextView::builder()
         .wrap_mode(gtk::WrapMode::WordChar)
@@ -55,7 +60,11 @@ fn build_contacts(app: &adw::Application) {
         .min_content_height(110)
         .build();
 
-    let import = gtk::Button::with_label("Import signed contact card");
+    let fingerprint_confirm = gtk::CheckButton::with_label("I have independently checked this contact fingerprint with the person.");
+    let import = gtk::Button::with_label("Verify and trust contact");
+    import.set_sensitive(false);
+    let confirm_for_button = fingerprint_confirm.clone();
+    fingerprint_confirm.connect_toggled(move |check| import.set_sensitive(check.is_active()));
     import.add_css_class("suggested-action");
     let contact_list = gtk::ListBox::new();
     contact_list.add_css_class("boxed-list");
@@ -88,6 +97,7 @@ fn build_contacts(app: &adw::Application) {
     instructions.set_xalign(0.0);
     content.append(&instructions);
     content.append(&card_scroll);
+    content.append(&fingerprint_confirm);
     content.append(&import);
     content.append(&status);
 
@@ -109,11 +119,16 @@ fn build_contacts(app: &adw::Application) {
     let list_for_import = contact_list.clone();
     let input_for_import = card_input.clone();
     let status_for_import = status.clone();
+    let confirm_for_import = fingerprint_confirm.clone();
     import.connect_clicked(move |_| {
         let buffer = input_for_import.buffer();
         let start = buffer.start_iter();
         let end = buffer.end_iter();
         let encoded = buffer.text(&start, &end, false).to_string();
+        if !confirm_for_import.is_active() {
+            status_for_import.set_text("Check the contact fingerprint with the person before trusting this identity.");
+            return;
+        }
         if encoded.trim().is_empty() {
             status_for_import.set_text("Paste a signed contact card first.");
             return;
@@ -123,6 +138,7 @@ fn build_contacts(app: &adw::Application) {
                 *contacts_for_import.borrow_mut() = updated;
                 refresh_contact_list(&list_for_import, &contacts_for_import.borrow());
                 buffer.set_text("");
+                confirm_for_import.set_active(false);
                 status_for_import.set_text("Contact card verified and saved in your desktop keyring. Compare its fingerprint out of band before starting a conversation.");
             }
             Err(error) => status_for_import.set_text(&format!("Contact was not imported: {error}")),
