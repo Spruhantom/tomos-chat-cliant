@@ -16,7 +16,10 @@ pub fn write_png(payload: &str) -> Result<PathBuf, String> {
         .output()
         .map_err(|error| format!("qrencode is unavailable: {error}"))?;
     if !output.status.success() {
-        return Err(format!("qrencode failed: {}", String::from_utf8_lossy(&output.stderr).trim()));
+        return Err(format!(
+            "qrencode failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
     }
     #[cfg(unix)]
     {
@@ -38,7 +41,10 @@ pub fn scan_webcam_once() -> Result<String, String> {
         .stderr(Stdio::null())
         .spawn()
         .map_err(|error| format!("Live QR scanning needs zbarcam and camera access: {error}"))?;
-    let stdout = child.stdout.take().ok_or_else(|| "Could not read camera scanner output.".to_string())?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "Could not read camera scanner output.".to_string())?;
     let mut reader = BufReader::new(stdout);
     let mut line = String::new();
     let read_result = reader.read_line(&mut line);
