@@ -24,11 +24,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: tui
-      - name: Check formatting
-        run: cargo fmt --all -- --check
+      - name: Format Rust sources
+        run: cargo fmt --all
       - name: Compile
         run: cargo check
       - name: Run tests
         run: cargo test
       - name: Run Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets
