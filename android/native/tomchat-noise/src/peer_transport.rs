@@ -8,6 +8,7 @@ use crate::{NoiseSession, NoiseSessionError};
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
+use std::sync::{Arc, Mutex};
 
 const MAX_FRAME: usize = 65_535;
 const MIN_CIPHERTEXT: usize = 16;
@@ -17,6 +18,7 @@ pub enum PeerTransportError {
     Io(io::Error),
     Noise(NoiseSessionError),
     InvalidFrame,
+    SessionLock,
 }
 
 impl fmt::Display for PeerTransportError {
@@ -25,6 +27,7 @@ impl fmt::Display for PeerTransportError {
             Self::Io(error) => write!(f, "Peer transport I/O failed: {error}"),
             Self::Noise(error) => write!(f, "Peer encryption failed: {error}"),
             Self::InvalidFrame => f.write_str("Peer sent an invalid or oversized frame."),
+            Self::SessionLock => f.write_str("Peer encryption state is unavailable."),
         }
     }
 }
@@ -93,6 +96,45 @@ impl EncryptedPeerChannel {
     }
 
     pub fn stream(&self) -> &TcpStream { &self.stream }
+
+    /// Split the authenticated channel into independent blocking send/receive
+    /// handles. Noise state remains shared and serialized so transport counters
+    /// cannot race between the two workers.
+    pub fn split(self) -> Result<(PeerSender, PeerReceiver), PeerTransportError> {
+        let reader = self.stream.try_clone()?;
+        let noise = Arc::new(Mutex::new(self.noise));
+        Ok((
+            PeerSender { stream: self.stream, noise: noise.clone() },
+            PeerReceiver { stream: reader, noise },
+        ))
+    }
+}
+
+pub struct PeerSender {
+    stream: TcpStream,
+    noise: Arc<Mutex<NoiseSession>>,
+}
+impl PeerSender {
+    pub fn send(&mut self, plaintext: &[u8]) -> Result<(), PeerTransportError> {
+        let ciphertext = self.noise.lock().map_err(|_| PeerTransportError::SessionLock)?
+            .encrypt(plaintext)?;
+        write_frame(&mut self.stream, &ciphertext)
+    }
+}
+
+pub struct PeerReceiver {
+    stream: TcpStream,
+    noise: Arc<Mutex<NoiseSession>>,
+}
+impl PeerReceiver {
+    pub fn receive(&mut self) -> Result<Vec<u8>, PeerTransportError> {
+        let ciphertext = read_frame(&mut self.stream)?;
+        if ciphertext.len() < MIN_CIPHERTEXT {
+            return Err(PeerTransportError::InvalidFrame);
+        }
+        Ok(self.noise.lock().map_err(|_| PeerTransportError::SessionLock)?
+            .decrypt(&ciphertext)?)
+    }
 }
 
 fn write_frame(stream: &mut TcpStream, frame: &[u8]) -> Result<(), PeerTransportError> {
