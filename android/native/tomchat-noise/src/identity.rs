@@ -179,10 +179,10 @@ fn hex_encode(bytes: &[u8]) -> String {
 
 #[cfg(target_os = "linux")]
 fn hex_decode(value: &str) -> Result<Vec<u8>, String> {
-    if value.len() % 2 != 0 || value.len() > 256 {
+    if !value.len().is_multiple_of(2) || value.len() > 256 {
         return Err("Stored TomChat Noise identity has an invalid encoding.".into());
     }
-    value.as_bytes().chunks_exact(2).map(|pair| {
+    value.as_bytes().as_chunks::<2>().0.iter().map(|pair| {
         let high = (pair[0] as char).to_digit(16)
             .ok_or_else(|| "Stored TomChat Noise identity has invalid hexadecimal data.".to_string())?;
         let low = (pair[1] as char).to_digit(16)
