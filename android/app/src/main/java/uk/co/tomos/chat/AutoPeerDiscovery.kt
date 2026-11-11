@@ -139,11 +139,14 @@ class AutoPeerDiscovery(
                 if (!PeerConnectionRole.shouldInitiate(localFingerprint, contact.fingerprint)) return
                 val port = info.port
                 if (port !in 1..65535) return
-                val hosts = if (Build.VERSION.SDK_INT >= 34) {
+                val resolvedHosts = if (Build.VERSION.SDK_INT >= 34) {
                     info.hostAddresses.map { it.hostAddress }
                 } else {
-                    listOfNotNull(info.host?.hostAddress)
-                }.distinct()
+                    emptyList()
+                }
+                // Keep the legacy single-host result as a compatibility fallback
+                // for devices whose NSD implementation returns no address list.
+                val hosts = (resolvedHosts + listOfNotNull(info.host?.hostAddress)).distinct()
                 if (hosts.isEmpty()) return
                 executor.execute {
                     var lastError: Exception? = null
