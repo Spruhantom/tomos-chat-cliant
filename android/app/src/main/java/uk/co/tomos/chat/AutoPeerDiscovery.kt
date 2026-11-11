@@ -136,8 +136,9 @@ class AutoPeerDiscovery(
             override fun onServiceResolved(info: NsdServiceInfo) {
                 resolvingServices.remove(serviceKey)
                 if (closed.get() || completed.get()) return
-                val advertisedFingerprint = info.attributes["fp"]
-                    ?.toString(Charsets.US_ASCII)
+                val advertisedProtocol = info.attributes["protocol"]?.toString(Charsets.US_ASCII)
+                if (advertisedProtocol != "1") return
+                val advertisedFingerprint = info.attributes["fp"]?.toString(Charsets.US_ASCII)
                 if (advertisedFingerprint == localFingerprint) return
                 if (advertisedFingerprint != contact.fingerprint) return
                 if (!PeerConnectionRole.shouldInitiate(localFingerprint, contact.fingerprint)) return
