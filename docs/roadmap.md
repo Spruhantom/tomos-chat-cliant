@@ -1,71 +1,54 @@
-# Development roadmap
+# TomChat development roadmap
 
-## Phase 0 — repository and design baseline
-- [x] Preserve current desktop/centralised service-connected code on `legacy-desktop`.
-- [x] Create isolated `android-rebuild` branch.
-- [x] Record strict network, full feature scope, and dual backup decisions.
-- [ ] Agree protocol and threat-model review before production cryptography.
+## Current phase — feature freeze and validation
 
-## Phase 1 — Android foundation
-- Kotlin + Jetpack Compose Android app.
-- Gradle wrapper, version catalog, lint, unit tests, instrumented test scaffold, GitHub Actions.
-- App navigation shell: onboarding, identity, contacts, chats, calls, settings.
-- Permission and lifecycle handling; no network dependency yet.
+Android and Linux desktop clients are now integrated into `main`. Work is focused on correctness, security, packaging, documentation and real-world validation. New product features should wait until the current prototype passes the release gates.
 
-## Phase 2 — identity and local security
-- Generate device identity locally.
-- Android Keystore integration and key lifecycle.
-- Signed contact card and QR import/export.
-- Encrypted local database, migrations, lock and recovery UX.
-- Tests for key loss, rotation, device replacement, and backup restore.
+- [x] Android Kotlin/Jetpack Compose client foundation.
+- [x] Linux Rust/GTK4/libadwaita desktop client foundation.
+- [x] Shared Rust Noise XX peer transport core.
+- [x] Signed V2 contact cards binding P-256 signing identity to the X25519 Noise key.
+- [x] CI workflows for Linux/Rust and Android build/test.
+- [x] Linux installer for Arch/Omarchy and Debian/Ubuntu.
+- [ ] Test fresh install and upgrade on physical Android devices.
+- [ ] Test Linux install, desktop launcher and Secret Service behaviour on supported distributions.
+- [ ] Demonstrate Android-to-Linux signed contact-card exchange and fingerprint verification.
+- [ ] Demonstrate Android-to-Linux and Linux-to-Android Noise handshake and encrypted bidirectional messaging on physical systems.
+- [ ] Test reconnect, network changes, wrong keys, malformed/tampered frames and failure recovery.
+- [ ] Complete independent security review, privacy/age-safety review and release hardening.
 
-## Phase 3 — direct peer networking proof of concept
-- Rust networking crate and Android FFI prototype.
-- Bluetooth LE discovery and GATT connection between two physical Android devices.
-- Bluetooth Classic RFCOMM data channel where both devices support it.
-- LAN discovery and direct peer connection between two physical Android devices.
-- Authenticated peer handshake and protocol version negotiation, shared across transports.
-- Explicit address/contact exchange for remote peers.
-- Implement automatic fastest-direct-path selection using measured latency, throughput, packet loss, stability, and battery cost; expose automatic/Bluetooth/Wi-Fi preferences.
-- Test transport switching, disconnect/reconnect, MTU negotiation, large transfers, permissions, and battery use.
-- Test QUIC and TCP fallback, network changes, IPv4/IPv6, Wi-Fi and mobile data.
-- Demonstrate no central service, relay, DHT bootstrap, or account registration.
+## Platform responsibilities
 
-## Phase 4 — encrypted one-to-one messaging
-- Select and integrate reviewed pairwise cryptographic protocol.
-- Signed/encrypted message envelopes, durable outbox, acknowledgements and deduplication.
-- Send messages over Bluetooth LE, Bluetooth Classic, and LAN using the same encrypted envelope.
-- Offline queue and reconnect synchronisation between reachable peers.
-- Negative tests: tampering, replay, wrong keys, downgrade, malformed payloads.
+### Android
+- Kotlin, Jetpack Compose and Material 3 UI.
+- Android lifecycle, permissions, notifications and audio routing.
+- Android Keystore-backed signing and wrapped Noise identity persistence.
+- JNI boundary to the shared Rust Noise core.
 
-## Phase 5 — groups and file sharing
-- MLS-based group membership/key lifecycle after protocol review.
-- Encrypted attachments, chunking, integrity checks, size limits and resumable transfer.
-- Prefer Wi-Fi for large transfers; support Bluetooth transfer for suitable file sizes and devices.
-- Group delivery/synchronisation semantics and conflict handling.
-- Abuse controls for untrusted peers.
+### Linux desktop
+- Native Rust GTK4/libadwaita application.
+- Desktop Secret Service/keyring for signing identity, Noise identity and trusted contacts.
+- Signed V2 contact-card creation/import and explicit fingerprint trust.
+- Direct TCP peer connection/listen with pinned Noise XX identity and encrypted frames.
 
-## Phase 6 — voice
-- One-to-one voice over direct peer connectivity.
-- Call setup over authenticated peer channel; WebRTC media protection.
-- Mute, speaker, Bluetooth headset routing, audio focus, interruption and call lifecycle.
-- Experiment with direct Bluetooth peer voice media; do not claim support until latency, quality, and battery tests pass across physical devices.
-- Group voice topology prototype and participant limits.
-- Measure NAT failure rate; never silently add TURN/relay.
+### Shared core
+- Noise XX session and encrypted peer transport.
+- Pinned remote static-key verification.
+- Bounded length-prefixed transport frames.
+- Cross-platform test vectors and negative security tests.
 
-## Phase 7 — backups and multiple devices
-- Passphrase-protected local encrypted export/import.
-- Trusted-device encrypted replication.
-- Device authorization, revocation, backup versioning and restore tests.
-- Recovery UX and clear irrecoverable-loss warnings.
+## Deferred work
 
-## Phase 8 — hardening and release
-- Independent cryptographic and protocol review.
-- Fuzzing, property tests, dependency audit, static analysis and CI.
-- Battery, memory, network-loss, roaming and Android-version testing.
-- Privacy review, threat model update, release signing and reproducible build work.
-- Publish APKs and documented limitations.
+Feature additions such as group messaging, file sharing, advanced discovery, transport migration, Opus voice media and social features remain deferred until validation and security gates are complete.
 
-## First development target
+## Release gates
 
-A two-device Android demo with two direct transports: exchange identities by QR, discover/connect over Bluetooth LE and send an authenticated test payload; then repeat over the same Wi-Fi LAN. No centralised service, relay, DHT bootstrap, or account registration. This validates transport independence and the strict decentralised peer-to-peer premise before adding chat UI or production cryptography.
+A wider release requires:
+1. CI passing for the exact release commit.
+2. Successful install/upgrade tests on each advertised platform.
+3. Real-device identity persistence and trusted-contact verification.
+4. Demonstrated cross-platform interoperability before claiming Android/Linux support.
+5. No unresolved critical/high-severity security or data-loss defects.
+6. Independent cryptographic/security review and appropriate privacy/age-safety review.
+
+A successful CI run alone is not proof of production readiness.
