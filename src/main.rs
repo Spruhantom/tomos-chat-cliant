@@ -1,267 +1,171 @@
-pub mod contact_card;
-pub mod conversations;
-pub mod messaging;
-pub mod realtime;
+mod contact_card;
+mod contact_store;
 
 use adw::prelude::*;
-use adw::Application;
-use gtk::glib;
-use std::sync::mpsc;
-use std::time::Duration;
-
-fn validate_server_url(input: &str) -> Result<String, String> {
-    let parsed = url::Url::parse(input.trim())
-        .map_err(|_| "Enter a valid server URL, including https://".to_string())?;
-    let is_loopback = match parsed.host() {
-        Some(url::Host::Domain(host)) => host.eq_ignore_ascii_case("localhost"),
-        Some(url::Host::Ipv4(address)) => address.is_loopback(),
-        Some(url::Host::Ipv6(address)) => address.is_loopback(),
-        None => false,
-    };
-
-    if !parsed.username().is_empty()
-        || parsed.password().is_some()
-        || parsed.query().is_some()
-        || parsed.fragment().is_some()
-        || (parsed.path() != "/" && !parsed.path().is_empty())
-    {
-        return Err(
-            "Enter only the server's base URL, without credentials, a path, query or fragment."
-                .to_string(),
-        );
-    }
-
-    match parsed.scheme() {
-        "https" => {}
-        "http" if is_loopback => {}
-        "http" => {
-            return Err(
-                "Use HTTPS for remote servers. HTTP is allowed only for localhost or a loopback IP address."
-                    .to_string(),
-            )
-        }
-        _ => {
-            return Err(
-                "The server URL must use HTTPS, or HTTP for local development.".to_string(),
-            )
-        }
-    }
-
-    Ok(parsed.as_str().trim_end_matches('/').to_string())
-}
-
-#[derive(serde::Serialize)]
-struct Credentials<'a> {
-    username: &'a str,
-    password: &'a str,
-}
-
-#[derive(serde::Deserialize)]
-struct LoginResponse {
-    user: LoginUser,
-    token: String,
-}
-
-#[derive(serde::Deserialize)]
-struct LoginUser {
-    username: String,
-}
-
-#[derive(Debug)]
-struct LoginSession {
-    base_url: String,
-    username: String,
-    token: String,
-}
+use gtk::prelude::*;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 fn main() {
-    let app = Application::builder()
+    let app = adw::Application::builder()
         .application_id("uk.co.tomserver.TomChat")
         .build();
-
-    app.connect_activate(build_login);
+    app.connect_activate(build_contacts);
     app.run();
 }
 
-fn build_login(app: &Application) {
+fn build_contacts(app: &adw::Application) {
     let window = adw::ApplicationWindow::builder()
         .application(app)
         .title("TomChat")
-        .default_width(460)
-        .default_height(560)
+        .default_width(620)
+        .default_height(720)
         .build();
 
     let header = adw::HeaderBar::new();
-    let server = gtk::Entry::builder()
-        .placeholder_text("https://chat.example.com")
-        .text("http://127.0.0.1:8080")
-        .hexpand(true)
-        .build();
-    let username = gtk::Entry::builder()
-        .placeholder_text("Username")
-        .hexpand(true)
-        .build();
-    let password = gtk::PasswordEntry::builder()
-        .placeholder_text("Password")
-        .show_peek_icon(true)
-        .hexpand(true)
-        .build();
-    let status = gtk::Label::new(Some("Connect to your TomChat server."));
+    let title = gtk::Label::new(Some("Your contacts"));
+    title.add_css_class("title-1");
+
+    let status = gtk::Label::new(None);
     status.set_wrap(true);
-    let login = gtk::Button::with_label("Sign in");
-    login.add_css_class("suggested-action");
+    status.set_xalign(0.0);
+
+    let identity_status = match contact_card::SigningIdentity::load_from_secret_service() {
+        Ok(_) => "Your P-256 signing identity is loaded from your desktop keyring.".to_string(),
+        Err(_) => match contact_card::SigningIdentity::generate() {
+            Ok(identity) => match identity.save_to_secret_service() {
+                Ok(()) => "A new P-256 signing identity has been saved in your desktop keyring.".to_string(),
+                Err(error) => format!("Secure identity setup failed: {error}"),
+            },
+            Err(error) => format!("Identity setup failed: {error}"),
+        },
+    };
+
+    let store = Rc::new(contact_store::TrustedContactStore::default());
+    let contacts = Rc::new(RefCell::new(store.load().unwrap_or_default()));
+
+    let card_input = gtk::TextView::builder()
+        .wrap_mode(gtk::WrapMode::WordChar)
+        .top_margin(8).bottom_margin(8).left_margin(8).right_margin(8)
+        .height_request(110)
+        .build();
+    card_input.set_vexpand(false);
+    let card_scroll = gtk::ScrolledWindow::builder()
+        .child(&card_input)
+        .min_content_height(110)
+        .build();
+
+    let import = gtk::Button::with_label("Import signed contact card");
+    import.add_css_class("suggested-action");
+    let contact_list = gtk::ListBox::new();
+    contact_list.add_css_class("boxed-list");
+    contact_list.set_selection_mode(gtk::SelectionMode::None);
+    let list_scroll = gtk::ScrolledWindow::builder()
+        .child(&contact_list)
+        .vexpand(true)
+        .build();
 
     let content = gtk::Box::new(gtk::Orientation::Vertical, 14);
-    content.set_margin_top(36);
-    content.set_margin_bottom(36);
-    content.set_margin_start(32);
-    content.set_margin_end(32);
-    let title = gtk::Label::new(Some("Welcome to TomChat"));
-    title.add_css_class("title-1");
+    content.set_margin_top(24);
+    content.set_margin_bottom(24);
+    content.set_margin_start(24);
+    content.set_margin_end(24);
     content.append(&title);
-    content.append(&gtk::Label::new(Some("Server address")));
-    content.append(&server);
-    content.append(&gtk::Label::new(Some("Username")));
-    content.append(&username);
-    content.append(&gtk::Label::new(Some("Password")));
-    content.append(&password);
-    content.append(&login);
+
+    let identity_label = gtk::Label::new(Some(&identity_status));
+    identity_label.set_wrap(true);
+    identity_label.set_xalign(0.0);
+    content.append(&identity_label);
+
+    let import_heading = gtk::Label::new(Some("Add a contact"));
+    import_heading.add_css_class("heading");
+    import_heading.set_xalign(0.0);
+    content.append(&import_heading);
+    let instructions = gtk::Label::new(Some(
+        "Paste a TomChat V2 contact card. Verify the fingerprint with the person before trusting it. Legacy V1 cards can be imported for reference but cannot start encrypted peer sessions."
+    ));
+    instructions.set_wrap(true);
+    instructions.set_xalign(0.0);
+    content.append(&instructions);
+    content.append(&card_scroll);
+    content.append(&import);
     content.append(&status);
+
+    let contacts_heading = gtk::Label::new(Some("Trusted contacts"));
+    contacts_heading.add_css_class("heading");
+    contacts_heading.set_xalign(0.0);
+    content.append(&contacts_heading);
+    content.append(&list_scroll);
 
     let page = adw::ToolbarView::new();
     page.add_top_bar(&header);
     page.set_content(Some(&content));
     window.set_content(Some(&page));
 
-    let (tx, rx) = mpsc::channel::<Result<LoginSession, String>>();
-    let app_for_poll = app.clone();
-    let status_for_poll = status.clone();
-    let login_for_poll = login.clone();
-    glib::timeout_add_local(Duration::from_millis(100), move || match rx.try_recv() {
-        Ok(Ok(session)) => {
-            status_for_poll.set_text(&format!(
-                "Signed in as {}. Loading conversations…",
-                session.username
-            ));
-            login_for_poll.set_sensitive(true);
-            crate::conversations::show(
-                &app_for_poll,
-                session.base_url,
-                session.token,
-                session.username,
-            );
-            glib::ControlFlow::Continue
-        }
-        Ok(Err(message)) => {
-            status_for_poll.set_text(&message);
-            login_for_poll.set_sensitive(true);
-            glib::ControlFlow::Continue
-        }
-        Err(mpsc::TryRecvError::Empty) => glib::ControlFlow::Continue,
-        Err(mpsc::TryRecvError::Disconnected) => glib::ControlFlow::Break,
-    });
+    refresh_contact_list(&contact_list, &contacts.borrow());
 
-    let server_entry = server.clone();
-    let username_entry = username.clone();
-    let password_entry = password.clone();
-    let status_for_click = status.clone();
-    login.connect_clicked(move |button| {
-        let server_text = server_entry.text();
-        let base = match validate_server_url(server_text.as_str()) {
-            Ok(value) => value,
-            Err(message) => {
-                status_for_click.set_text(&message);
-                return;
-            }
-        };
-        let user = username_entry.text().to_string();
-        let pass = password_entry.text().to_string();
-        if base.is_empty() || user.is_empty() || pass.is_empty() {
-            status_for_click.set_text("Enter the server address, username and password.");
+    let store_for_import = store.clone();
+    let contacts_for_import = contacts.clone();
+    let list_for_import = contact_list.clone();
+    let input_for_import = card_input.clone();
+    let status_for_import = status.clone();
+    import.connect_clicked(move |_| {
+        let buffer = input_for_import.buffer();
+        let start = buffer.start_iter();
+        let end = buffer.end_iter();
+        let encoded = buffer.text(&start, &end, false).to_string();
+        if encoded.trim().is_empty() {
+            status_for_import.set_text("Paste a signed contact card first.");
             return;
         }
-        button.set_sensitive(false);
-        status_for_click.set_text("Connecting…");
-        let sender = tx.clone();
-        std::thread::spawn(move || {
-            let result = reqwest::blocking::Client::builder()
-                .timeout(Duration::from_secs(20))
-                .connect_timeout(Duration::from_secs(5))
-                .redirect(reqwest::redirect::Policy::none())
-                .build()
-                .map_err(|error| format!("Could not configure connection: {error}"))
-                .and_then(|client| {
-                    let response = client
-                        .post(format!("{base}/api/v1/auth/login"))
-                        .json(&Credentials {
-                            username: &user,
-                            password: &pass,
-                        })
-                        .send()
-                        .map_err(|error| format!("Sign-in failed: {error}"))?;
-                    if response.status().is_redirection() {
-                        return Err(
-                            "The server redirected the login request; redirects are not followed."
-                                .to_string(),
-                        );
-                    }
-                    let response = response
-                        .error_for_status()
-                        .map_err(|error| format!("Sign-in failed: {error}"))?;
-                    response
-                        .json::<LoginResponse>()
-                        .map_err(|error| format!("Invalid server response: {error}"))
-                })
-                .map(|reply| LoginSession {
-                    // Session token remains in memory only; keyring support is a separate task.
-                    base_url: base,
-                    username: reply.user.username,
-                    token: reply.token,
-                });
-            let _ = sender.send(result);
-        });
+        match store_for_import.import(encoded.trim()) {
+            Ok(updated) => {
+                *contacts_for_import.borrow_mut() = updated;
+                refresh_contact_list(&list_for_import, &contacts_for_import.borrow());
+                buffer.set_text("");
+                status_for_import.set_text("Contact card verified and saved in your desktop keyring. Compare its fingerprint out of band before starting a conversation.");
+            }
+            Err(error) => status_for_import.set_text(&format!("Contact was not imported: {error}")),
+        }
     });
 
     window.present();
 }
 
-#[cfg(test)]
-mod tests {
-    use super::validate_server_url;
-
-    #[test]
-    fn accepts_https_remote_server() {
-        assert_eq!(
-            validate_server_url("https://chat.example.com/").unwrap(),
-            "https://chat.example.com"
-        );
+fn refresh_contact_list(list: &gtk::ListBox, contacts: &[contact_card::ContactCard]) {
+    while let Some(child) = list.first_child() {
+        list.remove(&child);
     }
-
-    #[test]
-    fn accepts_exact_localhost_and_loopback_addresses() {
-        assert!(validate_server_url("http://localhost:8080").is_ok());
-        assert!(validate_server_url("http://127.0.0.1:8080").is_ok());
-        assert!(validate_server_url("http://[::1]:8080").is_ok());
+    if contacts.is_empty() {
+        let empty = gtk::Label::new(Some("No contacts yet. Import a signed contact card to get started."));
+        empty.set_margin_top(18);
+        empty.set_margin_bottom(18);
+        list.append(&empty);
+        return;
     }
-
-    #[test]
-    fn rejects_http_for_remote_hosts_and_localhost_lookalikes() {
-        assert!(validate_server_url("http://chat.example.com").is_err());
-        assert!(validate_server_url("http://localhost.attacker.example").is_err());
-        assert!(validate_server_url("http://127.0.0.1.attacker.example").is_err());
-    }
-
-    #[test]
-    fn rejects_credentials_paths_queries_and_fragments() {
-        assert!(validate_server_url("https://user:pass@chat.example.com").is_err());
-        assert!(validate_server_url("https://chat.example.com/api").is_err());
-        assert!(validate_server_url("https://chat.example.com/?x=1").is_err());
-        assert!(validate_server_url("https://chat.example.com/#fragment").is_err());
-    }
-
-    #[test]
-    fn rejects_unsupported_schemes() {
-        assert!(validate_server_url("ftp://chat.example.com").is_err());
-        assert!(validate_server_url("file:///tmp/tomchat").is_err());
+    for contact in contacts {
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        row.set_margin_top(10);
+        row.set_margin_bottom(10);
+        row.set_margin_start(12);
+        row.set_margin_end(12);
+        let details = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        details.set_hexpand(true);
+        let name = gtk::Label::new(Some(&contact.display_name));
+        name.set_xalign(0.0);
+        name.add_css_class("heading");
+        let trust = if contact.is_noise_compatible() {
+            "Signed V2 identity · Noise key bound"
+        } else {
+            "Legacy V1 identity · encrypted sessions unavailable"
+        };
+        let subtitle = gtk::Label::new(Some(&format!("{trust}\n{}", contact.fingerprint)));
+        subtitle.set_xalign(0.0);
+        subtitle.set_wrap(true);
+        subtitle.add_css_class("dim-label");
+        details.append(&name);
+        details.append(&subtitle);
+        row.append(&details);
+        list.append(&row);
     }
 }
