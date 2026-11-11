@@ -13,7 +13,7 @@ permissions:
 jobs:
   publish:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    name: Publish verified Android debug APK
+    name: Publish verified Android test APK
     runs-on: ubuntu-latest
     steps:
       - name: Download APK from successful Android CI run
@@ -32,7 +32,7 @@ jobs:
           file release-assets/app-release.apk
           sha256sum release-assets/app-release.apk | tee release-assets/SHA256SUMS
 
-      - name: Publish GitHub prerelease
+      - name: Publish GitHub test prerelease
         uses: softprops/action-gh-release@v2
         with:
           tag_name: tomchat-android-test-${{ github.event.workflow_run.run_number }}
@@ -42,7 +42,9 @@ jobs:
           draft: false
           make_latest: false
           fail_on_unmatched_files: true
-          files: |\n            release-assets/app-release.apk\n            release-assets/SHA256SUMS
+          files: |
+            release-assets/app-release.apk
+            release-assets/SHA256SUMS
           body: |
             TomChat Android release-variant APK for controlled real-device testing. This APK is signed with the standard Android debug key because no production keystore has been configured.
 
