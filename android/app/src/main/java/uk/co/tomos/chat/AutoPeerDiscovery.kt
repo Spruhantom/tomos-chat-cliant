@@ -37,8 +37,10 @@ class AutoPeerDiscovery(
     private val executor: ScheduledExecutorService = Executors.newScheduledThreadPool(2)
     private val closed = AtomicBoolean(false)
     private val completed = AtomicBoolean(false)
+    private val bluetoothStarted = AtomicBoolean(false)
     private val resolvingServices = ConcurrentHashMap.newKeySet<String>()
     private var timeout: ScheduledFuture<*>? = null
+    private var bluetoothDiscovery: BluetoothPeerDiscovery? = null
     private var registration: NsdManager.RegistrationListener? = null
     private var discovery: NsdManager.DiscoveryListener? = null
     private val serviceType = "_tomchat._tcp."
@@ -173,15 +175,68 @@ class AutoPeerDiscovery(
             session.close()
             return
         }
-        onStatus("Encrypted direct connection established over Wi-Fi")
+        onStatus(if (bluetoothStarted.get()) "Encrypted direct connection established over Bluetooth" else "Encrypted direct connection established over Wi-Fi")
         onConnected(session)
         closeDiscoveryOnly()
+        bluetoothDiscovery?.close()
     }
 
     private fun fail(error: Throwable) {
+        if (closed.get() || completed.get()) return
+        if (bluetoothStarted.compareAndSet(false, true)) {
+            closeDiscoveryOnly()
+            onStatus("Wi-Fi route unavailable; trying direct Bluetooth…")
+            try {
+                val bluetooth = BluetoothPeerDiscovery(
+                    context = appContext,
+                    localFingerprint = localFingerprint,
+                    trustedFingerprint = contact.fingerprint,
+                    onPeerFound = { device ->
+                        if (PeerConnectionRole.shouldInitiate(localFingerprint, contact.fingerprint)) {
+                            executor.execute {
+                                try {
+                                    publishConnected(coordinator.connectBluetooth(device, contact))
+                                } catch (bluetoothError: Exception) {
+                                    failFinal(bluetoothError)
+                                }
+                            }
+                        }
+                    },
+                    onStatus = onStatus,
+                    onError = { failFinal(it) }
+                )
+                bluetoothDiscovery = bluetooth
+                bluetooth.start()
+                if (completed.get()) return
+                if (!PeerConnectionRole.shouldInitiate(localFingerprint, contact.fingerprint)) {
+                    val server = bluetooth.acceptingSocket
+                        ?: throw IOException("Bluetooth listener could not be started.")
+                    executor.execute {
+                        try {
+                            publishConnected(coordinator.acceptBluetooth(server, contact))
+                        } catch (bluetoothError: Exception) {
+                            failFinal(bluetoothError)
+                        }
+                    }
+                }
+                timeout = executor.schedule(
+                    { failFinal(IOException("No direct Wi-Fi or Bluetooth route to this trusted device was found.")) },
+                    60,
+                    TimeUnit.SECONDS
+                )
+            } catch (bluetoothError: Exception) {
+                failFinal(IOException("Wi-Fi discovery failed and Bluetooth fallback could not start.", bluetoothError))
+            }
+        } else {
+            failFinal(error)
+        }
+    }
+
+    private fun failFinal(error: Throwable) {
         if (!closed.get() && completed.compareAndSet(false, true)) {
             onError(error)
             closeDiscoveryOnly()
+            bluetoothDiscovery?.close()
         }
     }
 
@@ -197,6 +252,7 @@ class AutoPeerDiscovery(
     override fun close() {
         if (closed.compareAndSet(false, true)) {
             closeDiscoveryOnly()
+            bluetoothDiscovery?.close()
             executor.shutdownNow()
         }
     }
