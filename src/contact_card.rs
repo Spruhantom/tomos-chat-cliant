@@ -371,7 +371,10 @@ mod tests {
     fn verifies_shared_android_rust_v2_fixture() {
         let fixture = include_str!("../android/app/src/test/resources/contact-card-v2.txt").trim();
         let decoded = ContactCard::decode(fixture).unwrap();
-        assert_eq!(decoded.display_name, "TomChat shared interoperability fixture");
+        assert_eq!(
+            decoded.display_name,
+            "TomChat shared interoperability fixture"
+        );
         assert!(decoded.is_noise_compatible());
     }
 
