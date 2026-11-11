@@ -209,12 +209,18 @@ mod tests {
 
         let responder = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            EncryptedPeerChannel::accept(stream, &bob_private, &alice_public).is_err()
+            match EncryptedPeerChannel::accept(stream, &bob_private, &alice_public) {
+                // Bob's own pin is correct, so his local handshake can finish.
+                // Alice rejects Bob's unexpected static key and closes the TCP
+                // stream; verify Bob cannot receive an application payload.
+                Ok(mut channel) => channel.receive().is_err(),
+                Err(_) => true,
+            }
         });
 
         let stream = TcpStream::connect(address).unwrap();
         let result = EncryptedPeerChannel::connect(stream, &alice_private, &wrong_bob_public);
-        assert!(result.is_err());
+        assert!(matches!(result, Err(PeerTransportError::Noise(NoiseSessionError::PeerKeyMismatch))));
         assert!(responder.join().unwrap());
     }
     #[test]
