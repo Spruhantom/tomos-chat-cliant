@@ -1,12 +1,12 @@
 # TomChat architecture
 
-## Non-negotiable zero-server policy
+## Non-negotiable decentralised peer-to-peer policy
 
-TomChat and the planned TomSocial layer are designed to run without any server, whether operated by TomOS, a third party, a community, or the user. No server is a required or optional network component in the product architecture.
+TomChat and the planned TomSocial layer are designed to run without any centralised service, whether operated by TomOS, a third party, a community, or the user. No centralised service is a required or optional network component in the product architecture.
 
 Prohibited dependencies include hosted rendezvous, bootstrap nodes, DHT bootstrap services, relays, TURN, STUN services, push gateways, central directories, cloud databases, hosted object storage, and central message or feed stores. Do not add a fallback that silently contacts any such service.
 
-The internet's routers and carrier networks are still infrastructure, but TomChat does not deploy or depend on application-layer servers. The app may use local network infrastructure and direct public IP connectivity.
+The internet's routers and carrier networks are still infrastructure, but TomChat does not deploy or depend on application-layer centralised services. The app may use local network infrastructure and direct public IP connectivity.
 
 ## High-level design
 
@@ -34,14 +34,14 @@ Other TomChat peers
 
 Kotlin owns Android lifecycle, permissions, notifications, audio routing, foreground-service policy, and UI. Rust owns protocol state, peer networking, message validation, and cryptographic integration. Keep the FFI surface small, typed, versioned, and asynchronous.
 
-## Peer discovery without servers
+## Peer discovery without centralised services
 
 - Bluetooth LE advertisements and GATT can discover nearby TomChat peers and exchange bounded connection/bootstrap data directly. Use rotating privacy-preserving identifiers; do not advertise a stable public identity or personal details.
 - Bluetooth Classic RFCOMM can provide a direct byte-stream transport on compatible paired devices. Pairing and Android permission requirements must be handled explicitly.
 - Same-network discovery: mDNS / local multicast where Android permits it. This requires no central service.
 - Nearby out-of-band exchange: QR codes, NFC, Bluetooth, or a user-shared contact card containing a signed identity and connection hints.
 - Remote discovery: peers exchange signed address/contact cards directly. Existing contacts can share updated signed reachability hints peer-to-peer.
-- No DHT bootstrap service, hosted rendezvous, central index, public peer directory, or server-seeded discovery.
+- No DHT bootstrap service, hosted rendezvous, central index, public peer directory, or centralised service-seeded discovery.
 - A device may discover peers it already knows or peers on its local network. Finding an arbitrary stranger across the global internet without any shared discovery path is not guaranteed.
 
 ## Direct connectivity and hard limits
@@ -58,7 +58,7 @@ Messages and attachments remain end-to-end encrypted and authenticated identical
 
 Use direct QUIC where possible, with a carefully evaluated direct TCP fallback. Investigate hole punching only as a peer-coordinated technique; do not introduce STUN, TURN, relay nodes, or a hosted signalling service.
 
-**Known limitation:** phones are commonly behind carrier-grade NAT, firewalls, and restrictive networks. Without a rendezvous service or relay, some remote device pairs cannot discover each other or establish a connection. Some carriers do not provide reachable inbound addresses. A strict zero-server product must clearly report "peer unreachable" rather than silently routing through infrastructure.
+**Known limitation:** phones are commonly behind carrier-grade NAT, firewalls, and restrictive networks. Without a rendezvous service or relay, some remote device pairs cannot discover each other or establish a connection. Some carriers do not provide reachable inbound addresses. A strict decentralised peer-to-peer product must clearly report "peer unreachable" rather than silently routing through infrastructure.
 
 The first proof of concept must test two physical Android phones over Bluetooth and on the same LAN. Remote direct-IP tests come after that and must document network conditions and failure cases.
 
@@ -75,7 +75,7 @@ The connection manager should choose the fastest suitable direct path automatica
 - Do not scan or probe continuously: respect Android permissions, battery, user settings, and background-execution limits.
 - Expose the active transport and a manual "prefer Bluetooth / Wi-Fi / automatic" setting for troubleshooting and user control.
 
-There is no universally fastest transport: Bluetooth can win for nearby small payloads when Wi-Fi is unavailable, while Wi-Fi usually wins for large transfers. The app must benchmark real conditions and choose accordingly. Fastest-path selection must never introduce a relay, STUN/TURN, hosted discovery, or any other server dependency.
+There is no universally fastest transport: Bluetooth can win for nearby small payloads when Wi-Fi is unavailable, while Wi-Fi usually wins for large transfers. The app must benchmark real conditions and choose accordingly. Fastest-path selection must never introduce a relay, STUN/TURN, hosted discovery, or any other centralised infrastructure dependency.
 
 ## Messaging model
 
@@ -83,7 +83,7 @@ There is no universally fastest transport: Bluetooth can win for nearby small pa
 - Signed envelopes; encrypt payloads end-to-end before transport.
 - Per-conversation ordering metadata, acknowledgements, and replay protection.
 - Peer-to-peer synchronisation when both peers are reachable.
-- No global delivery guarantee while recipients are offline. The sender retains encrypted pending messages locally and retries when the peer becomes reachable. No server-side mailbox exists.
+- No global delivery guarantee while recipients are offline. The sender retains encrypted pending messages locally and retries when the peer becomes reachable. No centralised service-side mailbox exists.
 - Group state must converge safely; membership changes are authenticated and auditable.
 - A trusted device can receive a user-authorised encrypted backup, but it is another user's device, not a hosted service or guaranteed always-on mailbox.
 
@@ -95,9 +95,9 @@ Transport encryption (for example QUIC/TLS) is not a substitute for end-to-end e
 
 ## Voice
 
-Voice media should use an audited WebRTC media stack where feasible, with DTLS-SRTP or equivalent authenticated media protection. Call signalling must travel over an already-established authenticated peer channel or be exchanged out of band. No signalling server, STUN, or TURN service is allowed. Calls may fail across NATs when direct paths cannot be established.
+Voice media should use an audited WebRTC media stack where feasible, with DTLS-SRTP or equivalent authenticated media protection. Call signalling must travel over an already-established authenticated peer channel or be exchanged out of band. No signalling centralised service, STUN, or TURN service is allowed. Calls may fail across NATs when direct paths cannot be established.
 
-Group voice uses a direct peer mesh for the initial design. Bandwidth and battery costs grow with participant count; establish conservative participant limits through testing. No central SFU or user-hosted forwarding server is assumed. Bluetooth headsets are supported for local audio routing. Direct Bluetooth peer-to-peer voice media is a separate experimental transport and must pass device testing before being advertised as supported.
+Group voice uses a direct peer mesh for the initial design. Bandwidth and battery costs grow with participant count; establish conservative participant limits through testing. No central SFU or user-hosted forwarding centralised service is assumed. Bluetooth headsets are supported for local audio routing. Direct Bluetooth peer-to-peer voice media is a separate experimental transport and must pass device testing before being advertised as supported.
 
 ## Backup and multi-device
 
@@ -115,11 +115,11 @@ Request Bluetooth runtime permissions only when the user invokes nearby discover
 
 ## Social layer compatibility
 
-TomSocial must follow the same zero-server rule. Public posts and profile updates are signed objects exchanged directly between peers. A user's devices keep local copies. Users may explicitly replicate selected public content to their own trusted devices, but there is no shared relay, public content host, global index, or central feed database. Public discovery is limited to known peers, local discovery, and user-shared invitations. Global searchable discovery is not promised.
+TomSocial must follow the same decentralised peer-to-peer rule. Public posts and profile updates are signed objects exchanged directly between peers. A user's devices keep local copies. Users may explicitly replicate selected public content to their own trusted devices, but there is no shared relay, public content host, global index, or central feed database. Public discovery is limited to known peers, local discovery, and user-shared invitations. Global searchable discovery is not promised.
 
 ## Security and privacy requirements
 
-- No passwords/accounts on a TomChat server.
+- No passwords/accounts on a TomChat centralised service.
 - No plaintext message content in logs, crash reports, analytics, or notifications by default.
 - Validate and bound all network inputs; rate-limit peer requests.
 - Explicit contact verification and key-change warnings.
@@ -130,7 +130,7 @@ TomSocial must follow the same zero-server rule. Public posts and profile update
 
 Each Android installation creates a P-256 ECDSA signing key pair in Android Keystore. The private key is non-exportable through the app's identity API; the public key is encoded as X.509 SubjectPublicKeyInfo. A contact card contains a version marker, display name, public key, SHA-256 fingerprint and a signature over the canonical card fields. Import-side verification checks the fingerprint and signature before presenting the card.
 
-The QR representation is generated locally using the versioned signed contact-card payload. It contains no date of birth, phone number, IP address, location, or server URL. A self-signature proves that the card fields match the included public key; it does **not** prove that the person presenting the card is the person named. Users must compare the full fingerprint through a separate trusted channel before accepting a contact. A future contact-import flow must require a clear confirmation and persist the accepted public key locally.
+The QR representation is generated locally using the versioned signed contact-card payload. It contains no date of birth, phone number, IP address, location, or hosted-service URL. A self-signature proves that the card fields match the included public key; it does **not** prove that the person presenting the card is the person named. Users must compare the full fingerprint through a separate trusted channel before accepting a contact. A future contact-import flow must require a clear confirmation and persist the accepted public key locally.
 
 Current implementation status:
 - Android Keystore P-256 identity creation/retrieval: implemented, physical-device testing pending.
