@@ -28,7 +28,6 @@ fn build_contacts(app: &adw::Application) {
 
     let status = gtk::Label::new(None);
     status.set_wrap(true);
-    status.set_text(&store_status);
     status.set_xalign(0.0);
 
     let identity_status = match contact_card::SigningIdentity::load_from_secret_service() {
@@ -47,6 +46,7 @@ fn build_contacts(app: &adw::Application) {
         Ok(loaded) => (loaded, "Contacts loaded from your desktop keyring.".to_string()),
         Err(error) => (Vec::new(), format!("Contact storage is unavailable: {error}")),
     };
+    status.set_text(&store_status);
     let contacts = Rc::new(RefCell::new(initial_contacts));
 
     let card_input = gtk::TextView::builder()
@@ -63,8 +63,8 @@ fn build_contacts(app: &adw::Application) {
     let fingerprint_confirm = gtk::CheckButton::with_label("I have independently checked this contact fingerprint with the person.");
     let import = gtk::Button::with_label("Verify and trust contact");
     import.set_sensitive(false);
-    let confirm_for_button = fingerprint_confirm.clone();
-    fingerprint_confirm.connect_toggled(move |check| import.set_sensitive(check.is_active()));
+    let import_for_toggle = import.clone();
+    fingerprint_confirm.connect_toggled(move |check| import_for_toggle.set_sensitive(check.is_active()));
     import.add_css_class("suggested-action");
     let contact_list = gtk::ListBox::new();
     contact_list.add_css_class("boxed-list");
