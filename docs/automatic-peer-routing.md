@@ -4,18 +4,18 @@ TomChat uses one automatic route policy for chat, voice and file transfer. Users
 
 ## Implementation status
 
-- **Implemented in this branch:** automatic Wi-Fi LAN discovery with Android NSD/mDNS, a bounded multicast-lock window for older Android releases, ephemeral listener ports, deterministic initiator selection, multiple resolved LAN address attempts (including IPv6 where exposed by Android), and the existing authenticated Noise XX session establishment. The normal chat UI no longer exposes manual IP, port, or Listen controls.
+- **Implemented, device testing pending:** automatic Wi-Fi LAN discovery with Android NSD/mDNS, a bounded multicast-lock window for older Android releases, ephemeral listener ports, deterministic initiator selection, multiple resolved LAN address attempts (including IPv6 where exposed by Android), and the existing authenticated Noise XX session establishment. The normal chat UI no longer exposes manual IP, port, or Listen controls.
+- **Implemented, device testing pending:** automatic Bluetooth fallback. BLE advertises an eight-byte hash prefix of the trusted identity fingerprint; discovery of that service starts Bluetooth Classic RFCOMM. RFCOMM uses the same mutual signing-key proof and Noise XX handshake as TCP. BLE is discovery-only and is not used for voice media. Android 12+ Nearby devices permissions are requested when the user starts automatic connection.
 - **Still planned:** Wi-Fi Direct group negotiation and reachable global IPv6 endpoint exchange/probing. The automatic connection path currently tries same-LAN Wi-Fi first, then nearby Bluetooth.
 - **Not yet verified:** two-physical-device Wi-Fi and Bluetooth discovery, RFCOMM handshake, reconnect and audio tests. CI and device testing are required before this can be considered ready.
 - **Android platform follow-up:** the app currently targets SDK 35. Android 17 (API 37) introduces enforced local-network permission controls for raw LAN sockets; before raising target SDK to 37, implement the `ACCESS_LOCAL_NETWORK` runtime permission flow or migrate to the system NSD service picker where its user-selected-device interaction is acceptable.
 
 ## Planned direct transports
 
-1. Wi-Fi LAN: advertise and discover the TomChat service with Android NSD/mDNS.
-2. Wi-Fi Direct: discover and establish a peer group when the devices are not attached to the same access point.
-3. Bluetooth Classic: use RFCOMM as a low-throughput fallback for nearby peers.
-4. Bluetooth LE: use BLE for nearby discovery and control; negotiate a suitable data path rather than sending sustained voice media over BLE.
-5. Global IPv6: connect directly when both peers have reachable IPv6 addresses and have exchanged a signed endpoint. Never assume a private IPv4 address is reachable from the public internet.
+1. Wi-Fi LAN: implemented using Android NSD/mDNS.
+2. Bluetooth: implemented BLE fingerprint-hash discovery followed by authenticated RFCOMM.
+3. Wi-Fi Direct: planned; establish a peer group when devices are not attached to the same access point.
+4. Global IPv6: planned; connect directly when both peers have reachable IPv6 addresses and have exchanged a signed endpoint. Never assume a private IPv4 address is reachable from the public internet.
 
 Every candidate must pass a bounded reachability probe. The selected socket is then subjected to the existing signed peer-identity proof and pinned-key Noise XX handshake. Discovery metadata is never an identity credential.
 
