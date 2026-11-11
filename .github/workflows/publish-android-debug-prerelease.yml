@@ -46,7 +46,7 @@ jobs:
           body: |
             TomChat Android release-variant APK for controlled real-device testing. This APK is signed with the standard Android debug key because no production keystore has been configured.
 
-            Includes the adult-only debug test mode for signed contact-card exchange, private approved-contact messaging and one-to-one voice calls. This override is restricted to debug builds and adult-classified accounts with guardian state NOT_REQUIRED. Child and teen accounts remain subject to normal age-assurance and guardian requirements. Public discovery, public posting, groups and file sharing are not enabled by this override.
+            This build is intended for controlled installation and testing. Review the app's current functionality and limitations before relying on it.
 
             Automated Android CI passed for the exact commit attached to this release, including Rust Noise/JNI tests, JVM loopback integration tests, Android instrumentation source compilation, APK build and JNI export verification.
 
