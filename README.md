@@ -33,7 +33,7 @@ Uninstall the user-local executable and launcher (this does not delete identity/
 curl -fsSL https://raw.githubusercontent.com/Spruhantom/tomos-chat-cliant/main/install.sh | bash -s -- --uninstall
 ```
 
-Supported package managers: `pacman` (Arch Linux and Omarchy) and `apt-get` (Debian 13+ and Ubuntu 24.04+). The GTK client requires libadwaita 1.5 or newer; older Debian/Ubuntu releases may not provide a compatible version. The installer requires an active desktop session with a working Secret Service/keyring for secure identity and trusted-contact storage. It fails closed if secure storage is unavailable.
+Supported package managers: `pacman` (Arch Linux and Omarchy) and `apt-get` (Debian 13+ and Ubuntu 24.04+). The GTK client requires libadwaita 1.5 or newer; older Debian/Ubuntu releases may not provide a compatible version. QR contact support uses `qrencode` and `zbar`; live webcam QR scanning uses `zbarcam` and requires a working camera device and permission for your desktop user. The installer requires an active desktop session with a working Secret Service/keyring for secure identity and trusted-contact storage. It fails closed if secure storage is unavailable.
 
 ### Android
 
@@ -83,7 +83,7 @@ See [Android build and debug releases](docs/android-debug-test-releases.md) and 
 - Device identities are generated locally. Android uses Android Keystore; the Linux client uses the desktop Secret Service/keyring.
 - Signed V2 contact cards bind the P-256 signing identity to the X25519 Noise static key. Users must independently compare contact fingerprints before trusting them.
 - The shared Rust core implements a Noise XX transport with pinned remote static-key verification and bounded encrypted frames.
-- The Linux GTK client supports local identity setup, V2 contact import/trust, direct TCP connect/listen and encrypted peer chat.
+- The Linux GTK client supports local identity setup, V2 contact import/trust, QR display, QR image import, live webcam QR scanning, direct TCP connect/listen and encrypted peer chat.
 - Android provides the Kotlin application and JNI integration with the Rust Noise core.
 - No network route is trusted as an identity. The peer's signed identity and pinned Noise key must be verified before encrypted application traffic is accepted.
 
