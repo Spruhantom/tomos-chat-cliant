@@ -32,13 +32,7 @@ fn build_contacts(app: &adw::Application) {
 
     let identity_status = match contact_card::SigningIdentity::load_from_secret_service() {
         Ok(_) => "Your P-256 signing identity is loaded from your desktop keyring.".to_string(),
-        Err(_) => match contact_card::SigningIdentity::generate() {
-            Ok(identity) => match identity.save_to_secret_service() {
-                Ok(()) => "A new P-256 signing identity has been saved in your desktop keyring.".to_string(),
-                Err(error) => format!("Secure identity setup failed: {error}"),
-            },
-            Err(error) => format!("Identity setup failed: {error}"),
-        },
+        Err(error) => format!("Signing identity is unavailable: {error}. TomChat will not silently create or replace an identity."),
     };
 
     let store = Rc::new(contact_store::TrustedContactStore::default());
