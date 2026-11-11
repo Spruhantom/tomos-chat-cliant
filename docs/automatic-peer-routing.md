@@ -2,7 +2,13 @@
 
 TomChat uses one automatic route policy for chat, voice and file transfer. Users must not need to enter peer IP addresses, ports, or choose a "direct connection" mode.
 
-## Direct transports
+## Implementation status
+
+- **Implemented in this branch:** automatic Wi-Fi LAN discovery with Android NSD/mDNS, ephemeral listener ports, deterministic initiator selection, and the existing authenticated Noise XX session establishment. The normal chat UI no longer exposes manual IP, port, or Listen controls.
+- **Implemented policy, adapters still pending:** route scoring includes Wi-Fi Direct, Bluetooth Classic/LE, and global IPv6, but those transports are not yet connected to the Android session coordinator. The current automatic connection path is same-LAN Wi-Fi only.
+- **Not yet verified:** two-physical-device discovery and reconnect tests. CI and device testing are required before this can be considered ready.
+
+## Planned direct transports
 
 1. Wi-Fi LAN: advertise and discover the TomChat service with Android NSD/mDNS.
 2. Wi-Fi Direct: discover and establish a peer group when the devices are not attached to the same access point.
