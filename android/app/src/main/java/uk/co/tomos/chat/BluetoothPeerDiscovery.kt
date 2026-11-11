@@ -88,7 +88,6 @@ class BluetoothPeerDiscovery(
         )
 
         val advertisingData = AdvertiseData.Builder()
-            .addServiceUuid(serviceUuid)
             .addServiceData(serviceUuid, fingerprintToken(localFingerprint))
             .setIncludeDeviceName(false)
             .build()
@@ -110,7 +109,6 @@ class BluetoothPeerDiscovery(
         advertiser.startAdvertising(settings, advertisingData, advertiserListener)
 
         val filter = ScanFilter.Builder()
-            .setServiceUuid(serviceUuid)
             .setServiceData(serviceUuid, expectedToken, ByteArray(expectedToken.size) { 0xFF.toByte() })
             .build()
         val scanSettings = ScanSettings.Builder()
