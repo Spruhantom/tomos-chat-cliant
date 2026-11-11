@@ -5,6 +5,7 @@ mod peer_chat;
 
 use adw::prelude::*;
 use gtk::prelude::*;
+use gtk::glib;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::mpsc;
