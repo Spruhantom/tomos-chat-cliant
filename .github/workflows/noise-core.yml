@@ -2,7 +2,7 @@ name: TomChat Noise Core CI
 
 on:
   push:
-    branches: [android-rebuild]
+    branches: [main, android-rebuild]
     paths:
       - 'android/native/tomchat-noise/**'
       - '.github/workflows/noise-core.yml'
