@@ -1,3 +1,4 @@
+pub mod identity;
 pub mod peer_transport;
 
 //! Experimental Noise session core for TomChat.
