@@ -106,3 +106,46 @@ jobs:
           name: tomchat-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Build debug-key-signed release APK for testing
+        run: gradle --no-daemon :android:app:assembleRelease
+
+      - name: Verify test-release APK signature and native libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
+          NDK_NM="$(find "$ANDROID_HOME/ndk" -type f -name llvm-nm -print -quit)"
+          test -n "$NDK_NM"
+          TMP="$(mktemp -d)"
+          trap 'rm -rf "$TMP"' EXIT
+          unzip -q "$APK" 'lib/*/libtomchat_noise.so' -d "$TMP"
+          for ABI in arm64-v8a armeabi-v7a x86_64; do
+            LIB="$TMP/lib/$ABI/libtomchat_noise.so"
+            test -s "$LIB" || { echo "Missing native library for $ABI"; exit 1; }
+            SYMBOLS="$("$NDK_NM" -D --defined-only "$LIB")"
+            for SYMBOL in \
+              Java_uk_co_tomos_chat_NoiseNative_nativeCreateSession \
+              Java_uk_co_tomos_chat_NoiseNative_nativeWriteHandshake \
+              Java_uk_co_tomos_chat_NoiseNative_nativeReadHandshake \
+              Java_uk_co_tomos_chat_NoiseNative_nativeFinishHandshake \
+              Java_uk_co_tomos_chat_NoiseNative_nativeEncrypt \
+              Java_uk_co_tomos_chat_NoiseNative_nativeDecrypt \
+              Java_uk_co_tomos_chat_NoiseNative_nativeCloseSession; do
+              grep -Fq "$SYMBOL" <<< "$SYMBOLS" || {
+                echo "Missing JNI export $SYMBOL in $ABI"
+                exit 1
+              }
+            done
+            echo "Verified release $ABI native library and JNI exports"
+          done
+          sha256sum "$APK"
+
+      - name: Upload debug-key-signed release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: tomchat-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
