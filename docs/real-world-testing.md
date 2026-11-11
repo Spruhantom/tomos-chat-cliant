@@ -6,7 +6,7 @@
 ## Before distributing a build
 
 - [ ] Select and record the exact commit SHA and build variant.
-- [ ] Confirm the Android, Rust client and TUI CI workflows pass for that SHA.
+- [ ] Confirm the Android CI and Linux GTK/Rust CI workflows pass for that SHA.
 - [ ] Archive the APK and record its SHA-256 checksum.
 - [ ] Record supported Android versions and Linux distributions for this build.
 - [ ] Back up test identities and understand that identity recovery is not yet guaranteed.
