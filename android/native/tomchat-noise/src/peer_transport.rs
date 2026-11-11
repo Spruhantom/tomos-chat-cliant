@@ -7,7 +7,7 @@
 use crate::{NoiseSession, NoiseSessionError};
 use std::fmt;
 use std::io::{self, Read, Write};
-use std::net::TcpStream;
+use std::net::{Shutdown, TcpStream};
 use std::sync::{Arc, Mutex};
 
 const MAX_FRAME: usize = 65_535;
@@ -119,6 +119,10 @@ impl PeerSender {
         let ciphertext = self.noise.lock().map_err(|_| PeerTransportError::SessionLock)?
             .encrypt(plaintext)?;
         write_frame(&mut self.stream, &ciphertext)
+    }
+
+    pub fn shutdown(&self) {
+        let _ = self.stream.shutdown(Shutdown::Both);
     }
 }
 
