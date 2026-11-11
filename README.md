@@ -76,7 +76,7 @@ The debug APK is produced at `android/app/build/outputs/apk/debug/app-debug.apk`
 gradle --no-daemon :android:app:connectedDebugAndroidTest
 ```
 
-See [Android build and debug releases](docs/android-debug-test-releases.md) and [the Android device test checklist](docs/android-device-test-checklist.md).
+See [Android build and debug releases](docs/android-debug-test-releases.md) and [the Android device test checklist](docs/android-device-test-checklist.md). For Linux installation, QR contact sharing, webcam scanning and source builds, see the [Linux desktop guide](docs/linux-desktop.md).
 
 ## Architecture and security
 
