@@ -1,10 +1,10 @@
-name: Publish TomChat Android test release
+name: Publish TomChat Android debug prerelease
 
 on:
   workflow_run:
     workflows: ["TomChat Android CI"]
     types: [completed]
-    branches: [main]
+    branches: [android-rebuild]
 
 permissions:
   actions: read
@@ -13,13 +13,13 @@ permissions:
 jobs:
   publish:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    name: Publish verified Android test APK
+    name: Publish verified Android debug APK
     runs-on: ubuntu-latest
     steps:
       - name: Download APK from successful Android CI run
         uses: actions/download-artifact@v4
         with:
-          name: tomchat-release-apk
+          name: tomchat-debug-apk
           path: release-assets
           repository: ${{ github.repository }}
           run-id: ${{ github.event.workflow_run.id }}
@@ -28,28 +28,26 @@ jobs:
       - name: Verify APK
         run: |
           set -euo pipefail
-          test -s release-assets/app-release.apk
-          file release-assets/app-release.apk
-          sha256sum release-assets/app-release.apk | tee release-assets/SHA256SUMS
+          test -s release-assets/app-debug.apk
+          file release-assets/app-debug.apk
+          sha256sum release-assets/app-debug.apk
 
-      - name: Publish GitHub test prerelease
+      - name: Publish GitHub prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: tomchat-android-test-${{ github.event.workflow_run.run_number }}
+          tag_name: tomchat-android-debug-2026.11.09-${{ github.event.workflow_run.run_number }}
           target_commitish: ${{ github.event.workflow_run.head_sha }}
-          name: TomChat Android Test Release
+          name: TomChat Android Debug Test Build - 9 November 2026
           prerelease: true
           draft: false
           make_latest: false
           fail_on_unmatched_files: true
-          files: |
-            release-assets/app-release.apk
-            release-assets/SHA256SUMS
+          files: release-assets/app-debug.apk
           body: |
-            TomChat Android release-variant APK for controlled real-device testing. This APK is signed with the standard Android debug key because no production keystore has been configured.
+            TomChat Android debug build for controlled real-device testing.
 
-            This build is intended for controlled installation and testing. Review the app's current functionality and limitations before relying on it.
+            Includes the adult-only debug test mode for signed contact-card exchange, private approved-contact messaging and one-to-one voice calls. This override is restricted to debug builds and adult-classified accounts with guardian state NOT_REQUIRED. Child and teen accounts remain subject to normal age-assurance and guardian requirements. Public discovery, public posting, groups and file sharing are not enabled by this override.
 
             Automated Android CI passed for the exact commit attached to this release, including Rust Noise/JNI tests, JVM loopback integration tests, Android instrumentation source compilation, APK build and JNI export verification.
 
-            This is a TEST prerelease, not a production-signed release. The APK uses the Android debug signing key; do not distribute it as a public production build. Future updates must use the same debug key to install over this test build. Voice calling remains a prototype and must be tested on physical Android devices. Use only with consenting adult testers.
+            This is a debug prerelease, not a production release. Voice calling remains a prototype and must be tested on physical Android devices. Use only with consenting adult testers.
