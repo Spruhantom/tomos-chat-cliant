@@ -104,7 +104,7 @@ class AutoPeerDiscovery(
             nsd.discoverServices(serviceType, NsdManager.PROTOCOL_DNS_SD, listener)
             timeout = executor.schedule(
                 { fail(IOException("No trusted device was found on this Wi-Fi network.")) },
-                45,
+                15,
                 TimeUnit.SECONDS
             )
 
