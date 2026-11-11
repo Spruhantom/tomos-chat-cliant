@@ -13,8 +13,8 @@ import java.util.concurrent.TimeUnit
 import java.security.KeyPair
 
 /**
- * Owns the direct TCP listener/connector used by automatic peer discovery and turns an authenticated
- * peer socket into a Noise-protected conversation. It has no server, relay,
+ * Owns the Wi-Fi TCP and Bluetooth RFCOMM connectors used by automatic peer discovery and turns
+ * an authenticated peer transport into a Noise-protected conversation. It has no server, relay,
  * directory, rendezvous or push-service dependency.
  */
 class PeerMessagingCoordinator(
