@@ -14,9 +14,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * LAN-only automatic peer discovery. NSD is used solely to find a trusted
- * contact on the same local network; the advertised fingerprint is a lookup
- * hint, never an authentication credential. The existing pinned identity proof
+ * Automatic direct peer discovery. Wi-Fi NSD is tried first, then nearby
+ * Bluetooth discovery is used as a fallback. Advertised fingerprint hints are
+ * never authentication credentials. The existing pinned identity proof
  * and Noise XX handshake remain mandatory before a session is returned.
  *
  * No relay, directory, rendezvous server, or cloud endpoint is contacted.
