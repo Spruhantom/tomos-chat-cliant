@@ -1,10 +1,11 @@
-# Experimental TomChat Noise core
+# TomChat shared Noise and application protocol core
 
-This crate is an isolated Rust protocol prototype using the established
+This crate is the shared Rust protocol core used by the Linux GTK client and
+through JNI by the Android client. It uses the established
 [snow](https://github.com/mcginty/snow) implementation of the Noise Protocol
 Framework revision 34.
 
-## Fixed protocol suite
+## Fixed peer protocol suite
 
 - Pattern: Noise XX
 - DH: X25519
@@ -15,32 +16,51 @@ Framework revision 34.
 XX provides a three-message interactive handshake and forward-secret session
 keys. The wrapper requires the caller to pin the remote static X25519 public key.
 The pin is checked before the session enters transport mode. Transport records
-are encrypted and authenticated by Noise; its ordered transport state rejects
-out-of-order/replayed records through the protocol nonce sequence.
+are encrypted and authenticated by Noise.
+
+## Shared application framing
+
+- `app_protocol` implements the version-1, 22-byte-header application frame
+  used by Android `AppFrameCodec` and the Linux direct peer chat.
+- Frame types are text, group control, voice signal, group voice control and
+  delivery acknowledgement.
+- `group_protocol` implements a bounded version-1 envelope for MLS proposals,
+  commits, welcomes and application messages. Android Kotlin and Rust share a
+  golden wire-format test vector.
+- Both codecs are framing only. The caller must send their bytes inside an
+  authenticated Noise channel. They do not encrypt, authenticate membership,
+  decrypt MLS messages or establish delivery guarantees.
+- Linux direct text messages now use the same outer frame as Android. Linux can
+  carry an opaque group protocol frame inside the encrypted peer channel.
 
 ## Current scope and limitations
 
 - The crate accepts caller-supplied 32-byte local static private keys and pinned
   remote public keys.
+- Android and Linux use the same Noise XX suite and application frame layout;
+  physical Android/Linux interoperability still needs to be demonstrated.
+- Android has a Kotlin direct conversation session and Linux has a direct peer
+  chat worker. Local history, reconnect, multi-peer fan-out and background
+  delivery are not yet a unified cross-platform implementation.
+- OpenMLS is not integrated in this crate. Group frames are only a transport
+  envelope; no group can yet be created, joined, advanced or used to protect
+  application messages through this API.
+- Durable MLS storage, atomic epoch transitions and restart recovery are not
+  implemented.
 - Secure Android key generation, encryption-at-rest, persistence, rotation and
-  recovery for Noise static keys are not implemented.
-- The existing QR contact card currently signs an ECDSA identity key, not a
-  Noise X25519 static key. A signed binding between those keys must be designed
-  and added before this crate can authenticate existing trusted contacts.
-- A reusable Rust direct TCP adapter now performs the three-message Noise XX handshake, pins the remote static key, and carries length-bounded encrypted frames. It is covered by loopback integration tests.
-- The Android JNI wrapper does not yet route Kotlin sockets through this adapter; that cross-platform integration remains future work.
-- The existing Kotlin signed-nonce handshake is not replaced yet.
-- The Linux GTK UI and Android application message paths do not yet use this shared TCP adapter.
+  recovery for Noise static keys still require release validation.
+- Contact-card signing and the signed binding to the Noise static key must be
+  independently reviewed before production use.
 
 ## Security status
 
-This is experimental code, not production E2EE. Snow itself explicitly states
-that it has not received a formal security audit. The wrapper and the identity
-binding have not been independently reviewed. Do not expose encrypted messaging
-as production-ready or send user messages over this prototype.
+This is experimental code, not production E2EE. Snow itself has not received a
+formal security audit, and this wrapper and its identity binding have not been
+independently reviewed. The group envelope must never be mistaken for MLS
+security. Do not send real user group content through it until OpenMLS is
+integrated and the storage, membership, interoperability and negative security
+tests pass.
 
-Before integration, complete a threat model and independent review, validate
-Noise test vectors and malformed-message handling, bind the Noise static key to
-the user's fingerprint-verified ECDSA contact identity, store private key
-material using an Android Keystore-protected design, and test on physical
-Android devices. Do not add a custom handshake or custom cryptographic primitive.
+Do not add a custom handshake or custom cryptographic primitive. Use OpenMLS
+for group cryptography and retain the platform key stores for local wrapping
+keys.
