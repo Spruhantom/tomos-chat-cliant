@@ -79,6 +79,8 @@ impl EncryptedPeerChannel {
         let address = SocketAddr::new(candidate.address, candidate.port);
         let stream = TcpStream::connect_timeout(&address, timeout)?;
         stream.set_nodelay(true)?;
+        stream.set_read_timeout(Some(timeout))?;
+        stream.set_write_timeout(Some(timeout))?;
         Self::connect(stream, local_private_key, expected_peer_static_key)
     }
 
