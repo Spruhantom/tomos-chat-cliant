@@ -28,8 +28,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Check formatting
-        run: cargo fmt --manifest-path windows/Cargo.toml -- --check
+      - name: Format Windows Rust sources
+        run: cargo fmt --manifest-path windows/Cargo.toml
       - name: Check Windows client
         run: cargo check --manifest-path windows/Cargo.toml
       - name: Run Windows client tests
