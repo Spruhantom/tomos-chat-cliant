@@ -67,6 +67,7 @@ impl EncryptedPeerChannel {
         candidate: &EndpointCandidate,
         now_seconds: u64,
         trusted_p256_public_key: &[u8],
+        expected_device_id: &[u8; 16],
         local_private_key: &[u8],
         expected_peer_static_key: &[u8],
         timeout: Duration,
