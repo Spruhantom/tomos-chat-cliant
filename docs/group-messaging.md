@@ -1,6 +1,6 @@
 # Decentralised conversations and group messaging
 
-Status: design and implementation plan. This document does not claim that group messaging is implemented.
+Status: transport groundwork implemented; MLS group cryptography, durable storage and group UI are not yet implemented.
 
 ## Product contract
 
@@ -26,9 +26,9 @@ The first interoperable target is Android ↔ Linux. A device identity is a memb
 
 ## Wire protocol
 
-Use a versioned, length-bounded application envelope with a conversation identifier, message identifier, message kind and opaque payload. Group protocol payloads distinguish MLS proposals, commits, welcomes and application messages. The payload is passed only through an authenticated direct Noise channel. Unknown versions/types, oversized payloads, malformed encodings, duplicate message IDs, stale epochs and unauthenticated control events are rejected.
+The shared Rust application-frame codec now matches Android AppFrameCodec v1 (version, type, message UUID, bounded payload length and payload). A second bounded group envelope is implemented in Rust and Kotlin, distinguishing MLS proposals, commits, welcomes and application messages. Golden wire vectors and nested-envelope tests cover both implementations. Linux direct text chat now uses the same outer application frame as Android. Group payloads are passed only through an authenticated direct Noise channel. Unknown versions/types, oversized payloads, malformed encodings, duplicate message IDs, stale epochs and unauthenticated control events are rejected.
 
-Do not invent a second group cryptography protocol. Use OpenMLS 0.9.x APIs and MLS protocol semantics, with exact dependency versions and cross-platform test vectors. The Kotlin roster reducer remains a UI projection only; it must consume already authenticated MLS state and never authorise changes itself.
+Do not invent a second group cryptography protocol. Use OpenMLS 0.9.x APIs and MLS protocol semantics, with exact dependency versions and cross-platform test vectors. The current envelope codec is not an MLS implementation and does not prove membership, encrypt group content or prevent removed members from reading messages. The Kotlin roster reducer remains a UI projection only; it must consume already authenticated MLS state and never authorise changes itself.
 
 ## Direct peer distribution
 
