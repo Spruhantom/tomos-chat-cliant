@@ -14,13 +14,13 @@ The Android prototype provides direct TCP transport, automatic route selection, 
 
 Bluetooth discovery is for finding nearby devices and selecting a direct connection; it is not identity authentication. Network changes, Android permission changes, background limits, and device sleep can interrupt a direct session. Reconnection and failover must preserve peer identity and session safety.
 
-The Linux GTK application currently includes a legacy REST/WebSocket conversation browser in addition to its direct peer foundations. That legacy path transports opaque server-stored envelopes and is not the decentralised product architecture. It must be replaced by the shared direct peer protocol before Android/Linux messaging can be called interoperable.
+The active Linux GTK application uses a direct peer chat worker over the shared Noise XX transport. The obsolete REST/WebSocket conversation modules and their unused runtime dependencies have been removed. Linux now encodes text using the same version-1 application-frame layout as Android. Physical Android/Linux interoperability still needs to be demonstrated.
 
 ## 3. Encryption, identity and groups
 
 Each installation has its own device identity. Contact cards are exchanged out of band and the user approves the full fingerprint before trusting a peer. IP addresses, Bluetooth addresses, display names, and discovery advertisements are not identity credentials.
 
-The Android prototype contains a native Rust Noise XX core exposed through JNI, Kotlin session integration, encrypted application-frame foundations and a one-peer conversation session. A bounded group-control frame and Kotlin group-roster reducer also exist. The reducer is explicitly only a UI/domain projection: it assumes membership events were already authenticated and committed by a future MLS layer. It is not a group cryptographic protocol.
+The Android prototype contains a native Rust Noise XX core exposed through JNI, Kotlin session integration, encrypted application-frame foundations and a one-peer conversation session. Linux and Android now share the version-1 application frame format and matching Rust/Kotlin golden tests. A bounded group-control frame, a versioned group-protocol envelope in Rust and Kotlin, and a Kotlin group-roster reducer also exist. Linux and Android can now carry opaque group envelopes inside the authenticated Noise channel. The reducer is explicitly only a UI/domain projection: it assumes membership events were already authenticated and committed by a future MLS layer. The envelope is not a group cryptographic protocol.
 
 The current tomchat-noise Rust crate contains Noise/JNI dependencies; OpenMLS is not yet integrated into the shared core. Durable MLS group storage, transactional group-state updates, restart restoration, epoch handling and multi-device recovery are not implemented. The group design is specified in [group-messaging.md](group-messaging.md).
 
@@ -62,6 +62,7 @@ MLS state changes and outbound messages must be committed transactionally. A cra
 - Android encrypted one-to-one conversation session: implemented foundation; physical Android/Linux interoperability remains unverified.
 - Local network and Bluetooth discovery foundations: implemented; physical-device coverage remains required.
 - Automatic peer route selection: implemented as an initial foundation; live route measurement and robust failover remain future work.
+- Shared Android/Linux application framing and group envelope: implemented with matching wire-format tests; this is transport framing only.
 - Android group-control frame and roster projection: present; not a cryptographic group implementation.
 - OpenMLS integration and durable group-state storage: not implemented in the shared Rust core.
 - Linux direct peer foundations exist, but its legacy REST/WebSocket conversation browser must be replaced for decentralised messaging parity.
