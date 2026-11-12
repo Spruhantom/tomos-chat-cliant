@@ -99,7 +99,7 @@ These are prototype implementations, not a security audit. See [architecture](do
 
 ## Development status and roadmap
 
-The current phase is feature freeze and validation. Priorities are reproducible bug fixes, security fixes, build fixes, documentation and test coverage—not new product features.
+The current phase is protocol convergence and implementation of internet-wide direct peer connectivity and decentralised status updates. A second feature freeze will begin after this scope and interoperable group messaging are complete; during that freeze only security, data-loss, compatibility, release-blocking fixes, tests and documentation will be accepted.
 
 1. Verify Android and Linux installation on supported real systems.
 2. Test identity creation, secure persistence, contact-card exchange and fingerprint verification.
@@ -107,7 +107,7 @@ The current phase is feature freeze and validation. Priorities are reproducible 
 4. Exercise reconnect, malformed/tampered frames, key mismatch, network changes and failure recovery.
 5. Complete independent security review, privacy/age-safety review and release hardening.
 
-See [the roadmap](docs/roadmap.md) and [real-world testing plan](docs/real-world-testing.md).
+See [the roadmap](docs/roadmap.md), [internet peer connectivity](docs/internet-peer-connectivity.md), [status updates](docs/status-updates.md), [second feature freeze](docs/feature-freeze-2.md), and [real-world testing plan](docs/real-world-testing.md).
 
 ## Contributing
 
