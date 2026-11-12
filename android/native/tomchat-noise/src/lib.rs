@@ -10,6 +10,7 @@
 
 pub mod app_protocol;
 pub mod group_protocol;
+pub mod internet_peer;
 pub mod identity;
 pub mod peer_transport;
 
