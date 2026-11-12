@@ -1,6 +1,6 @@
 # Internet-wide decentralised peer connectivity
 
-Status: architecture and implementation plan. Internet-wide direct connectivity is not yet implemented or physically validated.
+Status: initial shared candidate codec and Linux direct TCP dial helper are implemented on the feature branch. Peer discovery, Android connection integration, NAT traversal and real-world internet validation remain outstanding.
 
 ## Product contract
 
@@ -21,7 +21,7 @@ Try connection methods in this order, subject to platform/network capability:
 
 There is no TURN-style relay fallback. A peer-assisted DHT carries only signed endpoint hints and short-lived rendezvous coordination; it never stores messages, status content, media or private keys. No single bootstrap peer should be required for normal operation. Users can import/share a bootstrap peer list out of band and run their own peers.
 
-## Candidate and rendezvous rules
+## Implemented protocol foundation\n\nThe Rust core now defines a bounded IPv4/IPv6 endpoint-candidate record with a 5-minute maximum lifetime, public-address checks, a nonce and detached Ed25519 signature. The signature covers all endpoint and timing fields and is verified against a separately trusted Ed25519 contact signing key; the Noise X25519 static key is never reused as a signing key. Android has a matching Kotlin encoder/decoder and validation tests. Linux Rust can dial a TCP candidate only after signature and expiry validation, then completes the existing pinned-key Noise XX handshake. UDP candidates are currently encoded but not connected. These are protocol primitives, not a complete peer-discovery or NAT traversal system.\n\n## Candidate and rendezvous rules
 
 - Candidate records are signed by the device identity and include device ID, transport, address/port, expiry, nonce and protocol version.
 - Records have a short TTL, are replay-protected and are discarded when expired or when the contact is revoked.
