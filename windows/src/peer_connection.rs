@@ -8,7 +8,7 @@ use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::time::Duration;
 use tomchat_noise::contact_card::ContactCard;
 use tomchat_noise::identity::NoiseIdentity;
-use tomchat_noise::peer_transport::{EncryptedPeerChannel, PeerTransportError};
+use tomchat_noise::peer_transport::EncryptedPeerChannel;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(12);
 
@@ -105,7 +105,7 @@ mod tests {
             let (mut sender, mut receiver) = channel.split().unwrap();
             let received = AppFrame::decode(&receiver.receive().unwrap()).unwrap();
             assert_eq!(received.frame_type, AppFrameType::Text);
-            assert_eq!(received.payload, b"hello from Windows");
+            assert_eq!(received.payload.as_slice(), b"hello from Windows");
             let ack = AppFrame::with_id(
                 AppFrameType::DeliveryAck,
                 received.message_id,
