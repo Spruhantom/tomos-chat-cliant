@@ -10,7 +10,7 @@ Not yet implemented:
 
 - Windows DPAPI-protected identity persistence (CurrentUser scope), with create/load onboarding controls
 - Automatic QR display/scanning and explicit contact acceptance after out-of-band fingerprint comparison
-- Direct TCP listener/connector using the shared Noise peer transport
+- Direct TCP listener/connector helper with pinned-key Noise authentication is implemented and has loopback tests; UI connection controls are still pending
 - Conversation protocol, group messaging and message history
 - Bluetooth route discovery/fallback
 - Webcam QR scanning, voice/video calling and notifications
