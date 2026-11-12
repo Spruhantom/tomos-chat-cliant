@@ -1,6 +1,6 @@
 # Internet-wide decentralised peer connectivity
 
-Status: initial shared candidate codec and Linux direct TCP dial helper are implemented on the feature branch. Peer discovery, Android connection integration, NAT traversal and real-world internet validation remain outstanding.
+Status: shared candidate codecs and direct TCP dial helpers are implemented on the feature branch for Android and Linux. Peer discovery, NAT traversal and real-world internet validation remain outstanding.
 
 ## Product contract
 
