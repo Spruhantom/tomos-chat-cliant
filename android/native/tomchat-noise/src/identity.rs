@@ -64,8 +64,11 @@ impl NoiseIdentity {
 }
 
 impl NoiseIdentity {
-    pub fn from_stored(private_key: [u8; 32], public_key: [u8; 32]) -> Result<Self, String> {
-        validate_keypair(&private_key, &public_key)?;
+    pub fn from_stored(mut private_key: [u8; 32], public_key: [u8; 32]) -> Result<Self, String> {
+        if let Err(error) = validate_keypair(&private_key, &public_key) {
+            private_key.zeroize();
+            return Err(error);
+        }
         Ok(Self {
             private_key,
             public_key,
