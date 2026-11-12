@@ -66,7 +66,7 @@ impl EncryptedPeerChannel {
     pub fn connect_candidate(
         candidate: &EndpointCandidate,
         now_seconds: u64,
-        trusted_ed25519_public_key: &[u8],
+        trusted_p256_public_key: &[u8],
         local_private_key: &[u8],
         expected_peer_static_key: &[u8],
         timeout: Duration,
