@@ -10,9 +10,11 @@ The Android and Linux clients have been brought together, but their conversation
 - [x] Signed V2 contact cards binding P-256 signing identity to the X25519 Noise key.
 - [x] Android direct TCP/Bluetooth transport foundations and encrypted one-to-one session.
 - [x] Android group roster projection and bounded group-control frame foundation (not MLS).
-- [ ] Replace the Linux legacy REST/WebSocket conversation path with the direct peer protocol.
-- [ ] Extract a shared Rust application protocol and cross-platform wire-format test vectors.
-- [ ] Add direct one-to-one conversation UI parity on Android and Linux.
+- [x] Remove the unused Linux REST/WebSocket conversation implementation and its runtime dependencies.
+- [x] Add a shared Rust application-frame codec matching Android AppFrameCodec v1, with golden wire tests.
+- [x] Route Linux direct text chat through the same application frames used by Android.
+- [x] Add matching Rust/Kotlin group envelopes and carry them inside authenticated Noise GROUP_CONTROL frames.
+- [ ] Complete direct one-to-one conversation UI parity, history and lifecycle handling on Android and Linux.
 - [ ] Integrate OpenMLS 0.9.x in the shared Rust core; implement create, add/Welcome, commit, application messages, remove and epoch transitions.
 - [ ] Implement encrypted, atomic, durable MLS storage and restart/crash recovery on Android and Linux.
 - [ ] Add group creation, invitation, member management, group history and group messaging UI on both clients.
