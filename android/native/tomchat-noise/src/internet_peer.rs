@@ -302,6 +302,20 @@ mod tests {
     }
 
     #[test]
+    fn verifies_p256_signature_and_rejects_modified_endpoint() {
+        use ring::rand::SystemRandom;
+        use ring::signature::{EcdsaKeyPair, KeyPair, ECDSA_P256_SHA256_FIXED_SIGNING};
+        let rng = SystemRandom::new();
+        let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &rng).unwrap();
+        let key = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, pkcs8.as_ref(), &rng).unwrap();
+        let mut value = sample("1.1.1.1".parse().unwrap());
+        value.signature.copy_from_slice(key.sign(&rng, &value.signing_bytes().unwrap()).unwrap().as_ref());
+        value.verify_signature(key.public_key().as_ref()).unwrap();
+        value.port += 1;
+        assert_eq!(value.verify_signature(key.public_key().as_ref()), Err(CandidateError::InvalidSignature));
+    }
+
+    #[test]
     fn signing_bytes_exclude_detached_signature() {
         let value = sample("1.1.1.1".parse().unwrap());
         assert_eq!(value.encode().unwrap().len(), value.signing_bytes().unwrap().len() + 64);
