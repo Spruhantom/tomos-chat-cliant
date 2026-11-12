@@ -12,7 +12,7 @@ pub const VERSION: u8 = 1;
 pub const STATUS_TTL_SECS: u64 = 24 * 60 * 60;
 pub const MAX_CIPHERTEXT_BYTES: u32 = 10 * 1024 * 1024;
 const SIGNATURE_LEN: usize = 64;
-pub const MANIFEST_LEN: usize = 186;
+pub const MANIFEST_LEN: usize = 185;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -151,10 +151,6 @@ impl StatusManifest {
         ciphertext_digest.copy_from_slice(&bytes[89..121]);
         let mut signature = [0; SIGNATURE_LEN];
         signature.copy_from_slice(&bytes[121..185]);
-        // Byte 185 is included in the fixed layout as a reserved flags byte.
-        if bytes[185] != 0 {
-            return Err(StatusError::InvalidLength);
-        }
         let value = Self {
             status_id, author_device_id, created_at, expires_at, audience,
             audience_digest, content_type, ciphertext_len, ciphertext_digest, signature,
