@@ -32,7 +32,7 @@ class DeviceSignatureCodecTest {
             StatusManifest.ContentType.TEXT, 128, ByteArray(32) { 4 }, ByteArray(64)
         )
         val signed = unsigned.sign(pair.private)
-        assertTrue(signed.verifySignature(pair.public.encoded))
-        assertFalse(signed.copy(ciphertextLength = 129).verifySignature(pair.public.encoded))
+        assertTrue(signed.verifySignature(pair.public.encoded, unsigned.authorDeviceId))
+        assertFalse(signed.copy(ciphertextLength = 129).verifySignature(pair.public.encoded, unsigned.authorDeviceId))
     }
 }
