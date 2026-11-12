@@ -25,6 +25,19 @@ data class RendezvousQuery(
             .put(targetDeviceId).put(requesterDeviceId).put(nonce)
             .putLong(issuedAtSeconds).array()
     }
+
+    companion object {
+        fun decode(bytes: ByteArray): RendezvousQuery {
+            require(bytes.size == 59)
+            val input = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
+            require(input.get() == 0x54.toByte() && input.get() == 0x52.toByte() && input.get() == 2.toByte())
+            val target = ByteArray(16).also(input::get)
+            val requester = ByteArray(16).also(input::get)
+            val nonce = ByteArray(16).also(input::get)
+            val issuedAt = input.long
+            return RendezvousQuery(target, requester, nonce, issuedAt).also { it.encode() }
+        }
+    }
 }
 
 /** Signed UDP reachability probe. It is not an application data channel. */
