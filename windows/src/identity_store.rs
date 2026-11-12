@@ -288,3 +288,123 @@ mod tests {
         assert!(decode_bundle(&mut wrong).is_err());
     }
 }
+
+
+/// Local trust-on-explicit-confirmation store for signed V2 contacts.
+/// Contact cards are public data, but DPAPI protects their local trust records
+/// against casual file editing. A valid signature alone never creates trust.
+pub struct TrustedContactStore;
+
+impl TrustedContactStore {
+    pub fn accept_encoded(
+        encoded_card: &str,
+        independently_confirmed_fingerprint: &str,
+    ) -> Result<(), String> {
+        let card = tomchat_noise::contact_card::ContactCard::decode(encoded_card.trim())
+            .map_err(|error| format!("Contact card verification failed: {error}"))?;
+        if !card.is_noise_compatible() {
+            return Err("Legacy V1 contacts cannot be trusted for authenticated Noise sessions.".into());
+        }
+
+        let expected = normalize_fingerprint(independently_confirmed_fingerprint);
+        let actual = normalize_fingerprint(&card.fingerprint);
+        if expected.is_empty() || expected != actual {
+            return Err(
+                "Fingerprint confirmation does not match. Compare the full fingerprint with the contact through a separate trusted channel."
+                    .into(),
+            );
+        }
+
+        let path = trusted_contact_path(&actual)?;
+        let mut plaintext = encoded_card.trim().as_bytes().to_vec();
+        let protected = protect(&plaintext);
+        plaintext.zeroize();
+        let mut protected = protected?;
+        let result = write_new_atomically(&path, &protected);
+        protected.zeroize();
+        result
+    }
+
+    pub fn load_all() -> Result<Vec<tomchat_noise::contact_card::ContactCard>, String> {
+        let root = identity_path()?
+            .parent()
+            .ok_or_else(|| "Identity directory is invalid.".to_string())?
+            .join("trusted-contacts");
+        if !root.exists() {
+            return Ok(Vec::new());
+        }
+        let mut contacts = Vec::new();
+        for entry in fs::read_dir(&root)
+            .map_err(|error| format!("Could not read trusted contacts: {error}"))?
+        {
+            if contacts.len() >= 1000 {
+                return Err("Trusted contact limit reached.".into());
+            }
+            let entry = entry.map_err(|error| error.to_string())?;
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("dpapi") {
+                continue;
+            }
+            let metadata = fs::metadata(&path).map_err(|error| error.to_string())?;
+            if metadata.len() == 0 || metadata.len() as usize > MAX_BUNDLE {
+                return Err("A trusted contact record has an invalid size.".into());
+            }
+            let mut protected = fs::read(&path).map_err(|error| error.to_string())?;
+            let mut plaintext = unprotect(&protected);
+            protected.zeroize();
+            let mut plaintext = plaintext?;
+            let decoded = String::from_utf8(plaintext.clone())
+                .map_err(|_| "A trusted contact record is not valid UTF-8.".to_string())?;
+            plaintext.zeroize();
+            let card = tomchat_noise::contact_card::ContactCard::decode(&decoded)
+                .map_err(|error| format!("A stored trusted contact failed verification: {error}"))?;
+            if !card.is_noise_compatible() {
+                return Err("A stored trusted contact is not Noise-compatible.".into());
+            }
+            contacts.push(card);
+        }
+        Ok(contacts)
+    }
+}
+
+fn normalize_fingerprint(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| !character.is_whitespace() && *character != ':')
+        .flat_map(char::to_uppercase)
+        .collect()
+}
+
+fn trusted_contact_path(fingerprint: &str) -> Result<PathBuf, String> {
+    if fingerprint.len() != 64 || !fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("Contact fingerprint is malformed.".into());
+    }
+    let root = identity_path()?
+        .parent()
+        .ok_or_else(|| "Identity directory is invalid.".to_string())?
+        .join("trusted-contacts");
+    Ok(root.join(format!("{fingerprint}.dpapi")))
+}
+
+#[cfg(test)]
+mod trusted_contact_tests {
+    use super::*;
+
+    #[test]
+    fn fingerprint_confirmation_normalizes_grouping_but_not_value() {
+        assert_eq!(
+            normalize_fingerprint("A1B2 C3D4:E5F6"),
+            "A1B2C3D4E5F6"
+        );
+        assert_ne!(
+            normalize_fingerprint("A1B2 C3D4"),
+            normalize_fingerprint("A1B2 C3D5")
+        );
+    }
+
+    #[test]
+    fn trusted_contact_path_accepts_only_sha256_hex() {
+        assert!(trusted_contact_path(&"A".repeat(64)).is_ok());
+        assert!(trusted_contact_path("not-a-fingerprint").is_err());
+    }
+}
