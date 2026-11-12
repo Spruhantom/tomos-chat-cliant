@@ -63,7 +63,7 @@ pub struct StatusManifest {
     pub ciphertext_len: u32,
     /// SHA-256 of the encrypted content blob, not plaintext.
     pub ciphertext_digest: [u8; 32],
-    /// Detached Ed25519 signature over signing_bytes().
+    /// Detached P-256 ECDSA signature in fixed 64-byte r||s form.
     pub signature: [u8; SIGNATURE_LEN],
 }
 
@@ -170,9 +170,9 @@ impl StatusManifest {
         Ok(())
     }
 
-    pub fn verify_signature(&self, trusted_ed25519_public_key: &[u8]) -> Result<(), StatusError> {
-        use ring::signature::{UnparsedPublicKey, ED25519};
-        UnparsedPublicKey::new(&ED25519, trusted_ed25519_public_key)
+    pub fn verify_signature(&self, trusted_p256_public_key: &[u8]) -> Result<(), StatusError> {
+        use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_FIXED};
+        UnparsedPublicKey::new(&ECDSA_P256_SHA256_FIXED, trusted_p256_public_key)
             .verify(&self.signing_bytes()?, &self.signature)
             .map_err(|_| StatusError::InvalidSignature)
     }
@@ -251,10 +251,10 @@ mod tests {
     #[test]
     fn verifies_detached_ed25519_author_signature() {
         use ring::rand::SystemRandom;
-        use ring::signature::{Ed25519KeyPair, KeyPair};
-        let key = Ed25519KeyPair::from_pkcs8(
-            Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap().as_ref()
-        ).unwrap();
+        use ring::signature::{EcdsaKeyPair, KeyPair, ECDSA_P256_SHA256_FIXED_SIGNING};
+        let rng = SystemRandom::new();
+        let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &rng).unwrap();
+        let key = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, pkcs8.as_ref(), &rng).unwrap();
         let mut value = sample();
         value.signature.copy_from_slice(key.sign(&value.signing_bytes().unwrap()).as_ref());
         value.verify_signature(key.public_key().as_ref()).unwrap();
