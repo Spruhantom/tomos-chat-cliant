@@ -266,3 +266,51 @@ fn main() -> Result<(), String> {
 
     Ok(())
 }
+
+
+#[cfg(test)]
+mod interoperability_tests {
+    use super::ContactCard;
+    use tomchat_noise::contact_card::SigningIdentity;
+    use tomchat_noise::identity::NoiseIdentity;
+
+    #[test]
+    fn verifies_the_android_shared_v2_contact_card_fixture() {
+        let fixture =
+            include_str!("../../app/src/test/resources/contact-card-v2.txt").trim();
+        let card = ContactCard::decode(fixture).expect("Android V2 fixture must verify");
+        assert!(card.is_noise_compatible());
+        assert_eq!(
+            card.display_name,
+            "TomChat shared interoperability fixture"
+        );
+    }
+
+    #[test]
+    fn windows_generated_contact_card_round_trips_with_noise_binding() {
+        let noise = NoiseIdentity::generate().expect("Noise identity generation");
+        let signing = SigningIdentity::generate().expect("signing identity generation");
+        let card = ContactCard::create(
+            "TomChat Windows test",
+            &signing,
+            *noise.public_key(),
+        )
+        .expect("V2 card creation");
+        let encoded = card.encode().expect("V2 card encoding");
+        let decoded = ContactCard::decode(&encoded).expect("V2 card verification");
+        assert_eq!(decoded, card);
+        assert!(decoded.is_noise_compatible());
+    }
+
+    #[test]
+    fn rejects_contact_card_with_changed_noise_key() {
+        let noise = NoiseIdentity::generate().expect("Noise identity generation");
+        let signing = SigningIdentity::generate().expect("signing identity generation");
+        let card = ContactCard::create("Tamper test", &signing, *noise.public_key())
+            .expect("V2 card creation");
+        let encoded = card.encode().expect("V2 card encoding");
+        let mut fields: Vec<String> = encoded.split('.').map(str::to_owned).collect();
+        fields[4] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        assert!(ContactCard::decode(&fields.join(".")).is_err());
+    }
+}
