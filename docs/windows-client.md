@@ -6,17 +6,17 @@ TomChat for Windows is a native Rust desktop client. The initial implementation 
 
 The Windows client must reuse the shared Rust Noise XX implementation in `android/native/tomchat-noise`. The current shared crate exposes the Noise session and direct TCP encrypted peer transport. Its JNI exports exist for Android, while the Rust API remains available to native clients.
 
-The existing Linux client currently owns separate contact-card and signing-identity code. Before the Windows client can exchange contacts safely, these identity and signed V2 contact-card contracts should be extracted into platform-neutral Rust modules and covered by shared tests. Platform key storage remains separate.
+The shared Rust crate now owns the signed V2 contact-card implementation and fixture tests. The Linux client imports that shared implementation. Windows onboarding creates/loads its DPAPI-protected identity, displays its signed V2 card, and verifies imported card signatures without automatically trusting contacts. Platform key storage remains separate.
 
 ## Milestones
 
 1. **Native application shell:** Win32 executable, CI build and test job. (Started.)
-2. **Windows identity adapter:** DPAPI or Windows Credential Manager, atomic create/load behavior, no silent identity replacement, key validation and recovery documentation.
-3. **Shared identity/contact layer:** extract signed V2 contact-card verification and fingerprint formatting from Linux-specific code; verify identical fixtures on Android, Linux and Windows.
+2. **Windows identity adapter:** DPAPI CurrentUser storage, atomic create/load behavior, no silent identity replacement and key validation. (Storage module and basic onboarding controls implemented; portable recovery/export remains.)
+3. **Shared identity/contact layer:** shared signed V2 contact-card verification and fingerprint formatting; Linux adapter now reuses the shared crate, Windows can create and verify cards. Cross-platform CI/fixture confirmation remains.
 4. **Encrypted direct messaging:** integrate the shared Noise peer transport with bounded, versioned application frames and a cancellable connection lifecycle.
 5. **Cross-platform groups:** define and test a shared authenticated group protocol before exposing group UI; preserve sender authentication and replay protection.
 6. **Transport routing:** implement direct LAN/TCP first. Add Bluetooth only as an optional transport beneath the same authenticated encrypted channel; never downgrade to plaintext.
-7. **Desktop features:** QR import/display, webcam scanning, notifications, tray behavior, attachments and call capabilities where protocol support exists.
+7. **Desktop features:** QR import/display, webcam scanning, notifications, tray behavior, attachments and call capabilities where protocol support exists. (Text-based contact-card import/display is started.)
 8. **Release hardening:** Windows signing, installer, upgrade-safe identity/data migration, reproducible builds, interoperability tests and independent security review.
 
 ## Non-goals
