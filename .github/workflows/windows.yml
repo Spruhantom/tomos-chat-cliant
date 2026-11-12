@@ -17,6 +17,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: windows-client-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows:
     name: Windows x64 build and tests
