@@ -23,7 +23,7 @@ There is no TURN-style relay fallback. A peer-assisted DHT carries only signed e
 
 ## Implemented protocol foundation
 
-The Rust core now defines a bounded IPv4/IPv6 endpoint-candidate record with a 5-minute maximum lifetime, public-address checks, a nonce and detached P-256 ECDSA signature. The signature covers all endpoint and timing fields and is verified against a separately trusted P-256 ECDSA contact signing key; the Noise X25519 static key is never reused as a signing key. Android has a matching Kotlin encoder/decoder and validation tests. Linux Rust can dial a TCP candidate only after signature and expiry validation, then completes the existing pinned-key Noise XX handshake. UDP candidates are currently encoded but not connected. These are protocol primitives, not a complete peer-discovery or NAT traversal system.
+The Rust core now defines a bounded IPv4/IPv6 endpoint-candidate record with a 5-minute maximum lifetime, public-address checks, a nonce and a detached P-256 ECDSA signature in fixed r||s form. The signature covers all endpoint and timing fields and is verified against the trusted contact's P-256 identity key and expected device ID; the Noise X25519 static key is never reused as a signing key. Android has matching Kotlin encoding, decoding, signing and verification, plus a direct TCP connector that validates the candidate before invoking the existing identity/Noise authenticator. Linux Rust can dial a TCP candidate only after signature, device-ID and expiry validation, then completes the existing pinned-key Noise XX handshake. UDP candidates are currently encoded but not connected. These are protocol primitives, not a complete peer-discovery or NAT traversal system.
 
 ## Candidate and rendezvous rules
 
