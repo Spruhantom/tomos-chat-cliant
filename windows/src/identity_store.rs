@@ -260,6 +260,26 @@ mod tests {
     }
 
     #[test]
+    fn dpapi_protect_unprotect_round_trip() {
+        let mut secret = b"TomChat DPAPI round-trip test material".to_vec();
+        let mut protected = protect(&secret).unwrap();
+        assert_ne!(protected, secret);
+        let mut restored = unprotect(&protected).unwrap();
+        assert_eq!(restored, secret);
+        secret.zeroize();
+        protected.zeroize();
+        restored.zeroize();
+    }
+
+    #[test]
+    fn dpapi_rejects_tampered_ciphertext() {
+        let mut protected = protect(b"identity test").unwrap();
+        protected[0] ^= 0x80;
+        assert!(unprotect(&protected).is_err());
+        protected.zeroize();
+    }
+
+    #[test]
     fn bundle_codec_rejects_truncation_and_wrong_version() {
         let mut truncated = MAGIC.to_vec();
         assert!(decode_bundle(&mut truncated).is_err());
