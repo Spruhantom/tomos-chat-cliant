@@ -61,7 +61,8 @@ impl SigningIdentity {
         Self::from_pkcs8(pkcs8.as_ref().to_vec())
     }
 
-    fn from_pkcs8(pkcs8: Vec<u8>) -> Result<Self, ContactCardError> {
+    /// Restore a signing identity from key bytes obtained from an OS-protected store.
+    pub fn from_pkcs8(pkcs8: Vec<u8>) -> Result<Self, ContactCardError> {
         let rng = SystemRandom::new();
         let pair = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &pkcs8, &rng)
             .map_err(|_| ContactCardError::Crypto)?;
@@ -75,6 +76,11 @@ impl SigningIdentity {
 
     pub fn public_key_der(&self) -> &[u8] {
         &self.public_key_der
+    }
+
+    /// Expose PKCS#8 bytes only inside a caller-provided secure-storage operation.
+    pub fn with_pkcs8<T>(&self, operation: impl FnOnce(&[u8]) -> T) -> T {
+        operation(&self.pkcs8)
     }
 
     fn sign(&self, message: &[u8]) -> Result<Vec<u8>, ContactCardError> {
