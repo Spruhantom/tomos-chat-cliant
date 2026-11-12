@@ -249,14 +249,14 @@ mod tests {
     }
 
     #[test]
-    fn verifies_detached_ed25519_author_signature() {
+    fn verifies_detached_p256_author_signature() {
         use ring::rand::SystemRandom;
         use ring::signature::{EcdsaKeyPair, KeyPair, ECDSA_P256_SHA256_FIXED_SIGNING};
         let rng = SystemRandom::new();
         let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &rng).unwrap();
         let key = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, pkcs8.as_ref(), &rng).unwrap();
         let mut value = sample();
-        value.signature.copy_from_slice(key.sign(&value.signing_bytes().unwrap()).as_ref());
+        value.signature.copy_from_slice(key.sign(&rng, &value.signing_bytes().unwrap()).unwrap().as_ref());
         value.verify_signature(key.public_key().as_ref()).unwrap();
         value.ciphertext_len += 1;
         assert_eq!(value.verify_signature(key.public_key().as_ref()), Err(StatusError::InvalidSignature));
