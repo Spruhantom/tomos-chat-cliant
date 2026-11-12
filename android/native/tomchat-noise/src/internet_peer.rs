@@ -3,7 +3,7 @@
 //! This module only encodes and validates the public endpoint record. The
 //! 64-byte signature covers every preceding byte and MUST be verified against
 //! the contact's separately trusted signing identity by the caller before use.
-//! A Noise static key is not an Ed25519 signing key and must not be reused as
+//! A Noise static key is not an P-256 signing key and must not be reused as
 //! one. This codec performs no discovery, NAT traversal or message routing.
 
 use std::fmt;
@@ -43,7 +43,7 @@ pub struct EndpointCandidate {
     pub nonce: [u8; 16],
     pub address: IpAddr,
     pub port: u16,
-    /// Detached Ed25519 signature over `signing_bytes()`.
+    /// Detached P-256 ECDSA signature in fixed 64-byte r||s form.
     pub signature: [u8; SIGNATURE_LEN],
 }
 
