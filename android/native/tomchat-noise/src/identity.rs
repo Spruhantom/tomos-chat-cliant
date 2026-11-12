@@ -64,8 +64,7 @@ impl NoiseIdentity {
 }
 
 impl NoiseIdentity {
-    #[cfg(target_os = "linux")]
-    fn from_stored(private_key: [u8; 32], public_key: [u8; 32]) -> Result<Self, String> {
+    pub fn from_stored(private_key: [u8; 32], public_key: [u8; 32]) -> Result<Self, String> {
         validate_keypair(&private_key, &public_key)?;
         Ok(Self {
             private_key,
@@ -170,7 +169,6 @@ impl NoiseIdentity {
     }
 }
 
-#[cfg(target_os = "linux")]
 fn validate_keypair(private_key: &[u8; 32], public_key: &[u8; 32]) -> Result<(), String> {
     let mut initiator = crate::NoiseSession::initiator(private_key, public_key)
         .map_err(|_| "Stored Noise identity is invalid.".to_string())?;
