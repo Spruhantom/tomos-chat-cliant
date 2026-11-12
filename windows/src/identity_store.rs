@@ -64,6 +64,10 @@ impl IdentityBundle {
             .open(&path)
             .and_then(|mut file| file.read_to_end(&mut protected))
             .map_err(|error| format!("Could not read the protected TomChat identity: {error}"))?;
+        if protected.is_empty() || protected.len() > MAX_BUNDLE {
+            protected.zeroize();
+            return Err("The protected TomChat identity file changed size while being read.".into());
+        }
         let mut plaintext = unprotect(&protected);
         protected.zeroize();
         let mut plaintext = plaintext?;
@@ -117,13 +121,15 @@ fn decode_bundle(bytes: &mut [u8]) -> Result<IdentityBundle, String> {
         private.zeroize();
         return Err("Protected TomChat signing identity has an invalid length.".into());
     }
-    let noise = NoiseIdentity::from_stored(private, public)
-        .map_err(|error| format!("Stored Noise identity failed validation: {error}"))?;
+    let noise_result = NoiseIdentity::from_stored(private, public);
     private.zeroize();
+    let noise = noise_result
+        .map_err(|error| format!("Stored Noise identity failed validation: {error}"))?;
     let mut pkcs8 = bytes[offset..].to_vec();
-    let signing = SigningIdentity::from_pkcs8(std::mem::take(&mut pkcs8))
-        .map_err(|error| format!("Stored signing identity failed validation: {error}"))?;
+    let signing_result = SigningIdentity::from_pkcs8(std::mem::take(&mut pkcs8));
     pkcs8.zeroize();
+    let signing = signing_result
+        .map_err(|error| format!("Stored signing identity failed validation: {error}"))?;
     Ok(IdentityBundle { noise, signing })
 }
 
