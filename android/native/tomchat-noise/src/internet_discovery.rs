@@ -16,7 +16,7 @@ use std::time::Duration;
 const RV_MAGIC: [u8; 2] = *b"TR";
 const PUNCH_MAGIC: [u8; 2] = *b"TH";
 pub const MAX_CANDIDATES: usize = 8;
-pub const MAX_RENDEZVOUS_RECORD: usize = 2 + 1 + 16 + 8 + 8 + 1 + MAX_CANDIDATES * 135 + 64;
+pub const MAX_RENDEZVOUS_RECORD: usize = 2 + 1 + 16 + 8 + 8 + 1 + MAX_CANDIDATES * (2 + 135) + 64;
 pub const MAX_RENDEZVOUS_TTL_SECS: u64 = 300;
 pub const MAX_PUNCH_CLOCK_SKEW_SECS: u64 = 30;
 pub const MAX_GATEWAY_LEASE_SECS: u32 = 600;
