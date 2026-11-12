@@ -13,6 +13,7 @@ pub mod group_protocol;
 pub mod internet_peer;
 pub mod identity;
 pub mod peer_transport;
+pub mod status_protocol;
 
 use jni::objects::{JByteArray, JClass};
 use jni::sys::{jboolean, jbyteArray, jlong};
