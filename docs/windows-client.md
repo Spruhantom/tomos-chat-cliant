@@ -13,7 +13,7 @@ The shared Rust crate now owns the signed V2 contact-card implementation and fix
 1. **Native application shell:** Win32 executable, CI build and test job. (Started.)
 2. **Windows identity adapter:** DPAPI CurrentUser storage, atomic create/load behavior, no silent identity replacement and key validation. (Storage module and basic onboarding controls implemented; portable recovery/export remains.)
 3. **Shared identity/contact layer:** shared signed V2 contact-card verification and fingerprint formatting; Linux adapter now reuses the shared crate, Windows can create and verify cards. Cross-platform CI/fixture confirmation remains.
-4. **Encrypted direct messaging:** integrate the shared Noise peer transport with bounded, versioned application frames and a cancellable connection lifecycle.
+4. **Encrypted direct messaging:** shared bounded version-1 application-frame codec now matches Android's wire format; Linux peer chat now sends framed text and authenticated delivery acknowledgements through Noise. Windows connection lifecycle and UI wiring remain.
 5. **Cross-platform groups:** define and test a shared authenticated group protocol before exposing group UI; preserve sender authentication and replay protection.
 6. **Transport routing:** implement direct LAN/TCP first. Add Bluetooth only as an optional transport beneath the same authenticated encrypted channel; never downgrade to plaintext.
 7. **Desktop features:** QR import/display, webcam scanning, notifications, tray behavior, attachments and call capabilities where protocol support exists. (Text-based contact-card import/display is started.)
