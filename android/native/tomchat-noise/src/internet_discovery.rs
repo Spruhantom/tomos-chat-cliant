@@ -313,7 +313,7 @@ mod tests {
 
     #[test] fn rendezvous_record_round_trips_and_rejects_trailing_bytes() {\n        let candidate=EndpointCandidate { transport:crate::internet_peer::CandidateTransport::Udp, issued_at:100, expires_at:200, device_id:[1;16], nonce:[2;16], address:IpAddr::V4(Ipv4Addr::new(8,8,8,8)), port:4000, signature:[3;64] }.encode().unwrap();\n        let value=RendezvousRecord { device_id:[1;16], sequence:7, issued_at:100, expires_at:200, candidates:vec![candidate], signature:[4;64] };\n        let bytes=value.encode().unwrap(); assert_eq!(RendezvousRecord::decode(&bytes).unwrap(),value);\n        let mut bad=bytes; bad.push(0); assert!(RendezvousRecord::decode(&bad).is_err());\n    }\n    #[test] fn query_is_fixed_and_rejects_zero_ids() {
         let q=RendezvousQuery { target_device_id:[1;16], requester_device_id:[2;16], nonce:[3;16], issued_at:100 };
-        assert_eq!(q.encode().unwrap().len(),59);
+        let encoded=q.encode().unwrap(); assert_eq!(encoded.len(),59); assert_eq!(RendezvousQuery::decode(&encoded).unwrap(),q);
         let mut bad=q; bad.nonce=[0;16]; assert!(bad.encode().is_err());
     }
     #[test] fn hole_punch_probe_is_fixed_size_and_identity_bound() {
