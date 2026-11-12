@@ -44,8 +44,9 @@ data class PeerEndpointCandidate(
     fun sign(privateKey: java.security.PrivateKey): PeerEndpointCandidate =
         copy(signature = DeviceSignatureCodec.sign(signingBytes(), privateKey))
 
-    fun verifySignature(encodedTrustedPublicKey: ByteArray): Boolean =
-        DeviceSignatureCodec.verify(signingBytes(), signature, encodedTrustedPublicKey)
+    fun verifySignature(encodedTrustedPublicKey: ByteArray, expectedDeviceId: ByteArray): Boolean =
+        expectedDeviceId.size == 16 && deviceId.contentEquals(expectedDeviceId) &&
+            DeviceSignatureCodec.verify(signingBytes(), signature, encodedTrustedPublicKey)
 
     fun encode(): ByteArray = signingBytes() + signature
 
