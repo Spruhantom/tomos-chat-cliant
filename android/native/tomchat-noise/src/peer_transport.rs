@@ -73,7 +73,7 @@ impl EncryptedPeerChannel {
         timeout: Duration,
     ) -> Result<Self, PeerTransportError> {
         candidate.validate_at(now_seconds)?;
-        candidate.verify_signature(trusted_ed25519_public_key)?;
+        candidate.verify_signature(trusted_p256_public_key, expected_device_id)?;
         if candidate.transport != CandidateTransport::Tcp {
             return Err(PeerTransportError::UnsupportedCandidateTransport);
         }
