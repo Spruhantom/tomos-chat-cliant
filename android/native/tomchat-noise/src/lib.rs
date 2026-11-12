@@ -8,6 +8,7 @@
 //! Prototype only; not independently audited. Do not enable app messaging
 //! until key provisioning, identity binding, FFI and security review complete.
 
+pub mod app_frame;
 pub mod contact_card;
 pub mod identity;
 pub mod peer_transport;
