@@ -34,7 +34,7 @@ data class PeerEndpointCandidate(
             .putLong(expiresAtSeconds)
             .put(deviceId)
             .put(nonce)
-            .put(if (address is Inet4Address) 4 else 6)
+            .put((if (address is Inet4Address) 4 else 6).toByte())
             .put(addressBytes)
             .putShort(port.toShort())
             .array()
