@@ -22,7 +22,7 @@ The Android and Linux clients have been brought together, but their conversation
 - [ ] Demonstrate direct peer messaging on physical systems over Wi-Fi and Android Bluetooth.
 - [ ] Complete install/upgrade, lifecycle, reconnect and independent security validation.
 
-## Platform responsibilities
+## Next phase — internet peer connectivity and status updates\n\n- [ ] Direct IPv6 and manually shared internet endpoint connections.\n- [ ] Signed, short-lived peer-assisted rendezvous records with multiple bootstrap peers; no single required operator.\n- [ ] Authenticated UDP hole punching and opt-in UPnP/NAT-PMP/PCP where safe and supported.\n- [ ] Network-change recovery, route diagnostics and clear no-direct-path handling; no TURN relay.\n- [ ] Status manifests, signed authorship, contact/group audience selection and 24-hour expiry.\n- [ ] Encrypted direct status/media distribution, local encrypted storage and expiry cleanup.\n- [ ] Android/Linux status timeline, mute/hide, local seen state and encrypted replies.\n- [ ] Physical Android↔Linux internet tests across IPv6, NAT and restrictive firewall networks.\n\n## Second feature freeze — planned after scope completion\n\nOnce the internet peer, group messaging and status scope is complete, enter a stabilisation-only freeze. Permit only security, data-loss, compatibility, release-blocking fixes, tests and documentation. See [second feature freeze](feature-freeze-2.md). The freeze is not active yet.\n\n## Platform responsibilities
 
 ### Android
 - Kotlin, Jetpack Compose and Material 3 UI.
@@ -55,7 +55,7 @@ The Android and Linux clients have been brought together, but their conversation
 - Offline delivery is not guaranteed without an always-on peer; clients must show availability and delivery status honestly.
 - Do not claim production-ready E2EE or group messaging until protocol, persistence, interoperability and physical-device gates pass.
 
-See [the group messaging design](group-messaging.md) and [real-world testing](real-world-testing.md).
+See [the group messaging design](group-messaging.md), [internet peer connectivity](internet-peer-connectivity.md), [status updates](status-updates.md), [second feature freeze](feature-freeze-2.md), and [real-world testing](real-world-testing.md).
 
 ## Release gates
 
