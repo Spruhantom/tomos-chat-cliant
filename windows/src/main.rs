@@ -21,9 +21,11 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 const WINDOW_CLASS: &[u16] = &[84, 111, 109, 67, 104, 97, 116, 87, 105, 110, 100, 111, 119, 0];
 const CREATE_ID: usize = 1001;
 const LOAD_ID: usize = 1002;
+const VERIFY_ID: usize = 1003;
 static STATUS_WINDOW: AtomicIsize = AtomicIsize::new(0);
 static NAME_WINDOW: AtomicIsize = AtomicIsize::new(0);
 static CARD_WINDOW: AtomicIsize = AtomicIsize::new(0);
+static IMPORT_WINDOW: AtomicIsize = AtomicIsize::new(0);
 
 unsafe extern "system" fn window_proc(
     hwnd: HWND,
@@ -34,11 +36,32 @@ unsafe extern "system" fn window_proc(
     match message {
         WM_COMMAND => {
             let command_id = wparam & 0xffff;
+            if command_id == VERIFY_ID {
+                let import_hwnd = IMPORT_WINDOW.load(Ordering::Relaxed) as HWND;
+                let status_hwnd = STATUS_WINDOW.load(Ordering::Relaxed) as HWND;
+                let encoded = read_control_text(import_hwnd, 4096);
+                let message = match ContactCard::decode(encoded.trim()) {
+                    Ok(card) if !card.is_noise_compatible() => format!(
+                        "This is a valid legacy contact card for '{}', but it has no authenticated Noise key. It cannot be used to establish a trusted encrypted peer session.",
+                        card.display_name
+                    ),
+                    Ok(card) => format!(
+                        "Signature valid for '{}'. Fingerprint: {}. Compare this fingerprint with the contact through a separate trusted channel before accepting them. TomChat has not added this contact.",
+                        card.display_name, card.fingerprint
+                    ),
+                    Err(error) => format!("Contact card verification failed: {error}"),
+                };
+                let text = wide(&message);
+                if !status_hwnd.is_null() {
+                    SetWindowTextW(status_hwnd, text.as_ptr());
+                }
+                return 0;
+            }
             if command_id == CREATE_ID || command_id == LOAD_ID {
                 let name_hwnd = NAME_WINDOW.load(Ordering::Relaxed) as HWND;
                 let status_hwnd = STATUS_WINDOW.load(Ordering::Relaxed) as HWND;
                 let card_hwnd = CARD_WINDOW.load(Ordering::Relaxed) as HWND;
-                let display_name = read_control_text(name_hwnd);
+                let display_name = read_control_text(name_hwnd, 64);
                 let outcome = if display_name.trim().is_empty() {
                     Err("Enter a display name before continuing.".to_string())
                 } else {
@@ -97,12 +120,12 @@ fn wide(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
-unsafe fn read_control_text(hwnd: HWND) -> String {
+unsafe fn read_control_text(hwnd: HWND, max_length: i32) -> String {
     if hwnd.is_null() {
         return String::new();
     }
     let length = GetWindowTextLengthW(hwnd);
-    if length <= 0 || length > 128 {
+    if length <= 0 || length > max_length {
         return String::new();
     }
     let mut buffer = vec![0u16; length as usize + 1];
@@ -145,7 +168,7 @@ fn main() -> Result<(), String> {
             CW_USEDEFAULT,
             CW_USEDEFAULT,
             820,
-            620,
+            820,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
             instance,
@@ -212,9 +235,26 @@ fn main() -> Result<(), String> {
         );
         CARD_WINDOW.store(card as isize, Ordering::Relaxed);
 
+        let import_label = wide("Verify a contact card (paste the full card here)");
+        CreateWindowExW(0, static_class.as_ptr(), import_label.as_ptr(), WS_CHILD | WS_VISIBLE,
+            28, 520, 720, 24, hwnd, std::ptr::null_mut(), instance, std::ptr::null());
+
+        let empty_import = wide("");
+        let import_control = CreateWindowExW(
+            0, edit_class.as_ptr(), empty_import.as_ptr(),
+            WS_CHILD | WS_VISIBLE | WS_BORDER | WS_TABSTOP | ES_MULTILINE | WS_VSCROLL,
+            28, 548, 720, 120, hwnd, std::ptr::null_mut(), instance, std::ptr::null(),
+        );
+        IMPORT_WINDOW.store(import_control as isize, Ordering::Relaxed);
+
+        let verify_label = wide("Verify contact card");
+        CreateWindowExW(0, button_class.as_ptr(), verify_label.as_ptr(),
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+            28, 684, 190, 38, hwnd, VERIFY_ID as _, instance, std::ptr::null());
+
         let note = wide("TomChat is decentralised and peer-to-peer. No central account or message server is used.");
         CreateWindowExW(0, static_class.as_ptr(), note.as_ptr(), WS_CHILD | WS_VISIBLE,
-            28, 516, 720, 30, hwnd, std::ptr::null_mut(), instance, std::ptr::null());
+            28, 744, 720, 30, hwnd, std::ptr::null_mut(), instance, std::ptr::null());
 
         ShowWindow(hwnd, SW_SHOW);
         let mut message: MSG = std::mem::zeroed();
