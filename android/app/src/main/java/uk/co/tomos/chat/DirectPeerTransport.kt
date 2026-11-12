@@ -64,7 +64,6 @@ object DirectPeerConnector {
         candidate: PeerEndpointCandidate,
         nowSeconds: Long,
         trustedContact: TrustedContact,
-        expectedDeviceId: ByteArray,
         authenticator: DirectPeerAuthenticator,
         timeoutMs: Int = 8_000
     ): AuthenticatedPeerConnection {
@@ -73,7 +72,7 @@ object DirectPeerConnector {
             require(candidate.transport == PeerEndpointCandidate.Transport.TCP) {
                 "This connector currently supports TCP candidates only."
             }
-            require(candidate.verifySignature(trustedContact.encodedPublicKey, expectedDeviceId)) {
+            require(candidate.verifySignature(trustedContact.encodedPublicKey, DeviceSignatureCodec.deviceId(trustedContact.encodedPublicKey))) {
                 "Peer endpoint signature or trusted device binding is invalid."
             }
             return connect(candidate.address.hostAddress ?: throw IOException("Peer address is unavailable."),
