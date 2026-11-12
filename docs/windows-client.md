@@ -6,7 +6,7 @@ TomChat for Windows is a native Rust desktop client. The initial implementation 
 
 The Windows client must reuse the shared Rust Noise XX implementation in `android/native/tomchat-noise`. The current shared crate exposes the Noise session and direct TCP encrypted peer transport. Its JNI exports exist for Android, while the Rust API remains available to native clients.
 
-The shared Rust crate now owns the signed V2 contact-card implementation and fixture tests. The Linux client imports that shared implementation. Windows onboarding creates/loads its DPAPI-protected identity, displays its signed V2 card, and verifies imported card signatures without automatically trusting contacts. Platform key storage remains separate.
+The shared Rust crate now owns the signed V2 contact-card implementation and fixture tests. The Linux client imports that shared implementation. Windows onboarding creates/loads its DPAPI-protected identity, displays its signed V2 card, verifies imported card signatures, and only stores a contact after explicit entry of a separately confirmed matching fingerprint. Trusted contact records are also DPAPI-protected. Platform key storage remains separate.
 
 ## Milestones
 
