@@ -4,6 +4,7 @@
 compile_error!("TomChat Windows must be built for a Windows target.");
 
 mod identity_store;
+mod peer_connection;
 
 use std::ptr::null;
 use std::sync::atomic::{AtomicIsize, Ordering};
