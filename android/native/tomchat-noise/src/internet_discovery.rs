@@ -246,8 +246,8 @@ mod tests {
     #[test] fn hole_punch_probe_is_fixed_size_and_identity_bound() {
         let p=HolePunchProbe { session_id:[1;16], nonce:[2;16], device_id:[3;16], sent_at:100, signature:[4;64] };
         assert_eq!(p.encode().unwrap().len(),123);
-        assert_eq!(p.verify(101,&[0;65],&[3;16]),Err(DiscoveryError::InvalidSignature));
-        assert_eq!(p.verify(101,&[0;65],&[9;16]),Err(DiscoveryError::IdentityMismatch));
+        assert!(matches!(p.verify(101,&[0;65],&[3;16]),Err(DiscoveryError::InvalidSignature)));
+        assert!(matches!(p.verify(101,&[0;65],&[9;16]),Err(DiscoveryError::IdentityMismatch)));
     }
     #[test] fn ipv6_precedes_ipv4_and_reconnect_is_bounded() {
         let make=|address:&str,issued_at| EndpointCandidate { transport:crate::internet_peer::CandidateTransport::Udp,
