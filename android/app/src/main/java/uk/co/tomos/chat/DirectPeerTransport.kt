@@ -55,6 +55,34 @@ class DirectPeerListener(
 }
 
 object DirectPeerConnector {
+    /** Connect to a signed public endpoint hint. The endpoint signature and
+     * device ID are checked against the trusted contact before opening a socket;
+     * DirectPeerAuthenticator still performs the pinned identity/Noise checks.
+     */
+    @Throws(IOException::class)
+    fun connectCandidate(
+        candidate: PeerEndpointCandidate,
+        nowSeconds: Long,
+        trustedContact: TrustedContact,
+        authenticator: DirectPeerAuthenticator,
+        timeoutMs: Int = 8_000
+    ): AuthenticatedPeerConnection {
+        try {
+            candidate.validateAt(nowSeconds)
+            require(candidate.transport == PeerEndpointCandidate.Transport.TCP) {
+                "This connector currently supports TCP candidates only."
+            }
+            require(candidate.verifySignature(trustedContact.encodedPublicKey, DeviceSignatureCodec.deviceId(trustedContact.encodedPublicKey))) {
+                "Peer endpoint signature or trusted device binding is invalid."
+            }
+            return connect(candidate.address.hostAddress ?: throw IOException("Peer address is unavailable."),
+                candidate.port, authenticator, timeoutMs)
+        } catch (error: Exception) {
+            if (error is IOException) throw error
+            throw IOException("Signed peer endpoint candidate was rejected.", error)
+        }
+    }
+
     @Throws(IOException::class)
     fun connect(
         address: String,

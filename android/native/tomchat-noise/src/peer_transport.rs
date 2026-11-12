@@ -5,9 +5,11 @@
 //! authenticated contact identity before opening a channel.
 
 use crate::{NoiseSession, NoiseSessionError};
+use crate::internet_peer::{CandidateError, CandidateTransport, EndpointCandidate};
 use std::fmt;
 use std::io::{self, Read, Write};
-use std::net::{Shutdown, TcpStream};
+use std::net::{Shutdown, SocketAddr, TcpStream};
+use std::time::Duration;
 use std::sync::{Arc, Mutex};
 
 const MAX_FRAME: usize = 65_535;
@@ -19,6 +21,8 @@ pub enum PeerTransportError {
     Noise(NoiseSessionError),
     InvalidFrame,
     SessionLock,
+    Candidate(CandidateError),
+    UnsupportedCandidateTransport,
 }
 
 impl fmt::Display for PeerTransportError {
@@ -28,6 +32,8 @@ impl fmt::Display for PeerTransportError {
             Self::Noise(error) => write!(f, "Peer encryption failed: {error}"),
             Self::InvalidFrame => f.write_str("Peer sent an invalid or oversized frame."),
             Self::SessionLock => f.write_str("Peer encryption state is unavailable."),
+            Self::Candidate(error) => write!(f, "Peer endpoint candidate rejected: {error}"),
+            Self::UnsupportedCandidateTransport => f.write_str("This direct connector currently supports TCP candidates only."),
         }
     }
 }
@@ -36,6 +42,9 @@ impl From<io::Error> for PeerTransportError {
     fn from(value: io::Error) -> Self {
         Self::Io(value)
     }
+}
+impl From<CandidateError> for PeerTransportError {
+    fn from(value: CandidateError) -> Self { Self::Candidate(value) }
 }
 impl From<NoiseSessionError> for PeerTransportError {
     fn from(value: NoiseSessionError) -> Self {
@@ -51,6 +60,31 @@ pub struct EncryptedPeerChannel {
 }
 
 impl EncryptedPeerChannel {
+    /// Verify a signed public endpoint hint and establish a pinned Noise
+    /// session over direct TCP. Candidate discovery is deliberately external;
+    /// this method never contacts a directory or relay.
+    pub fn connect_candidate(
+        candidate: &EndpointCandidate,
+        now_seconds: u64,
+        trusted_p256_public_key: &[u8],
+        expected_device_id: &[u8; 16],
+        local_private_key: &[u8],
+        expected_peer_static_key: &[u8],
+        timeout: Duration,
+    ) -> Result<Self, PeerTransportError> {
+        candidate.validate_at(now_seconds)?;
+        candidate.verify_signature(trusted_p256_public_key, expected_device_id)?;
+        if candidate.transport != CandidateTransport::Tcp {
+            return Err(PeerTransportError::UnsupportedCandidateTransport);
+        }
+        let address = SocketAddr::new(candidate.address, candidate.port);
+        let stream = TcpStream::connect_timeout(&address, timeout)?;
+        stream.set_nodelay(true)?;
+        stream.set_read_timeout(Some(timeout))?;
+        stream.set_write_timeout(Some(timeout))?;
+        Self::connect(stream, local_private_key, expected_peer_static_key)
+    }
+
     /// Connect as initiator to a peer whose static key is already trusted.
     pub fn connect(
         mut stream: TcpStream,

@@ -22,6 +22,25 @@ The Android and Linux clients have been brought together, but their conversation
 - [ ] Demonstrate direct peer messaging on physical systems over Wi-Fi and Android Bluetooth.
 - [ ] Complete install/upgrade, lifecycle, reconnect and independent security validation.
 
+## Next phase — internet peer connectivity and status updates
+
+- [x] Shared Rust/Kotlin signed endpoint-candidate codec with expiry and public-address validation.
+- [x] Android direct TCP connector that validates signed candidates before the existing identity/Noise handshake.
+- [x] Linux direct TCP dial helper that verifies the candidate signature/device ID before the pinned Noise handshake.
+- [ ] Direct IPv6 and manually shared internet endpoint connections.
+- [ ] Signed, short-lived peer-assisted rendezvous records with multiple bootstrap peers; no single required operator.
+- [ ] Authenticated UDP hole punching and opt-in UPnP/NAT-PMP/PCP where safe and supported.
+- [ ] Network-change recovery, route diagnostics and clear no-direct-path handling; no TURN relay.
+- [x] Shared Rust/Kotlin signed status manifest codec with audience digest and 24-hour expiry validation.
+- [ ] Status payload encryption, recipient key envelopes and contact/group audience distribution.
+- [ ] Encrypted direct status/media distribution, local encrypted storage and expiry cleanup.
+- [ ] Android/Linux status timeline, mute/hide, local seen state and encrypted replies.
+- [ ] Physical Android↔Linux internet tests across IPv6, NAT and restrictive firewall networks.
+
+## Second feature freeze — planned after scope completion
+
+Once the internet peer, group messaging and status scope is complete, enter a stabilisation-only freeze. Permit only security, data-loss, compatibility, release-blocking fixes, tests and documentation. See [second feature freeze](feature-freeze-2.md). The freeze is not active yet.
+
 ## Platform responsibilities
 
 ### Android
@@ -55,7 +74,7 @@ The Android and Linux clients have been brought together, but their conversation
 - Offline delivery is not guaranteed without an always-on peer; clients must show availability and delivery status honestly.
 - Do not claim production-ready E2EE or group messaging until protocol, persistence, interoperability and physical-device gates pass.
 
-See [the group messaging design](group-messaging.md) and [real-world testing](real-world-testing.md).
+See [the group messaging design](group-messaging.md), [internet peer connectivity](internet-peer-connectivity.md), [status updates](status-updates.md), [second feature freeze](feature-freeze-2.md), and [real-world testing](real-world-testing.md).
 
 ## Release gates
 
