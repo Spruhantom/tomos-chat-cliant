@@ -600,7 +600,23 @@ fn build_contacts(app: &adw::Application) {
         if let Some(chat) = poll_chat.borrow().as_ref() {
             while let Some(message) = chat.try_receive() {
                 match message {
-                    Ok(text) => append_chat_line(&poll_view, "Peer", &text),
+                    Ok(peer_chat::PeerChatEvent::Text(text)) => {
+                        append_chat_line(&poll_view, "Peer", &text)
+                    }
+                    Ok(peer_chat::PeerChatEvent::GroupProtocol(frame)) => {
+                        poll_status.set_text(&format!(
+                            "Received an MLS group {:?} frame for group {} at epoch {}. Group processing is not enabled until the MLS engine is integrated.",
+                            frame.kind,
+                            frame.group_id.iter().map(|byte| format!("{byte:02x}")).collect::<String>(),
+                            frame.epoch
+                        ));
+                    }
+                    Ok(peer_chat::PeerChatEvent::DeliveryConfirmed(_)) => {
+                        poll_status.set_text("Peer confirmed delivery of a message.");
+                    }
+                    Ok(peer_chat::PeerChatEvent::UnsupportedFrame(frame_type)) => {
+                        poll_status.set_text(&format!("Received an unsupported peer frame: {frame_type:?}."));
+                    }
                     Err(error) => {
                         poll_status.set_text(&error);
                         poll_send.set_sensitive(false);
