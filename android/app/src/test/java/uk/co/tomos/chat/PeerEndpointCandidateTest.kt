@@ -20,6 +20,17 @@ class PeerEndpointCandidateTest {
         signature = ByteArray(64) { 3 }
     )
 
+    @Test fun signsAndVerifiesCandidateAgainstTrustedContactIdentity() {
+        val pair = java.security.KeyPairGenerator.getInstance("EC").apply {
+            initialize(java.security.spec.ECGenParameterSpec("secp256r1"))
+        }.generateKeyPair()
+        val id = DeviceSignatureCodec.deviceId(pair.public.encoded)
+        val unsigned = sample().copy(deviceId = id)
+        val signed = unsigned.sign(pair.private)
+        assert(signed.verifySignature(pair.public.encoded, id))
+        assert(!signed.verifySignature(pair.public.encoded, ByteArray(16)))
+    }
+
     @Test fun roundTripsIpv4CandidateAndRustWireLayout() {
         val candidate = sample()
         val bytes = candidate.encode()
