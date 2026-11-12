@@ -33,6 +33,13 @@ data class StatusManifest(
             .putInt(ciphertextLength).put(ciphertextDigest).array()
     }
 
+
+    fun sign(privateKey: java.security.PrivateKey): StatusManifest =
+        copy(signature = DeviceSignatureCodec.sign(signingBytes(), privateKey))
+
+    fun verifySignature(encodedTrustedPublicKey: ByteArray): Boolean =
+        DeviceSignatureCodec.verify(signingBytes(), signature, encodedTrustedPublicKey)
+
     fun encode(): ByteArray = signingBytes() + signature
 
     fun validateAt(nowSeconds: Long) {
