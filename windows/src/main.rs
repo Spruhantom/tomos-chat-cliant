@@ -185,7 +185,14 @@ fn main() -> Result<(), String> {
             std::ptr::null(),
         );
 
-        let status_label = wide("Identity status");
+        let initial_status = match identity_store::IdentityBundle::path() {
+            Ok(path) if path.exists() => {
+                "An existing protected identity was found. Load it to continue; creating a new one will not overwrite it."
+            }
+            Ok(_) => "No identity exists on this device yet. Create one to get started.",
+            Err(_) => "Windows identity storage is unavailable. Check your user profile settings.",
+        };
+        let status_label = wide(initial_status);
         let status_class = wide("STATIC");
         let status = CreateWindowExW(
             0,
