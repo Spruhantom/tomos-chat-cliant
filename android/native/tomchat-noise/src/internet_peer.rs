@@ -61,6 +61,7 @@ pub enum CandidateError {
     EmptyIdentity,
     EmptyNonce,
     InvalidSignature,
+    IdentityMismatch,
 }
 
 impl fmt::Display for CandidateError {
@@ -78,6 +79,7 @@ impl fmt::Display for CandidateError {
             Self::EmptyIdentity => "Peer candidate device identity is empty.",
             Self::EmptyNonce => "Peer candidate nonce is empty.",
             Self::InvalidSignature => "Peer candidate signature is invalid.",
+            Self::IdentityMismatch => "Peer candidate device ID does not match the trusted contact.",
         })
     }
 }
@@ -117,7 +119,8 @@ impl EndpointCandidate {
 
     /// Verify the detached P-256 signature using the SEC1 uncompressed public
     /// point bound to the trusted contact identity. Do not pass the Noise key.
-    pub fn verify_signature(&self, trusted_p256_public_key: &[u8]) -> Result<(), CandidateError> {
+    pub fn verify_signature(&self, trusted_p256_public_key: &[u8], expected_device_id: &[u8; 16]) -> Result<(), CandidateError> {
+        if &self.device_id != expected_device_id { return Err(CandidateError::IdentityMismatch); }
         use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_FIXED};
         UnparsedPublicKey::new(&ECDSA_P256_SHA256_FIXED, trusted_p256_public_key)
             .verify(&self.signing_bytes()?, &self.signature)
@@ -310,9 +313,9 @@ mod tests {
         let key = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, pkcs8.as_ref(), &rng).unwrap();
         let mut value = sample("1.1.1.1".parse().unwrap());
         value.signature.copy_from_slice(key.sign(&rng, &value.signing_bytes().unwrap()).unwrap().as_ref());
-        value.verify_signature(key.public_key().as_ref()).unwrap();
+        value.verify_signature(key.public_key().as_ref(), &value.device_id).unwrap();
         value.port += 1;
-        assert_eq!(value.verify_signature(key.public_key().as_ref()), Err(CandidateError::InvalidSignature));
+        assert_eq!(value.verify_signature(key.public_key().as_ref(), &value.device_id), Err(CandidateError::InvalidSignature));
     }
 
     #[test]
