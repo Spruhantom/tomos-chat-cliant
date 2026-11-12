@@ -1,0 +1,38 @@
+name: Windows client
+
+on:
+  push:
+    branches: [main, "feature/windows-native-rust"]
+    paths:
+      - "windows/**"
+      - "android/native/tomchat-noise/**"
+      - ".github/workflows/windows.yml"
+  pull_request:
+    paths:
+      - "windows/**"
+      - "android/native/tomchat-noise/**"
+      - ".github/workflows/windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-client-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows x64 build and tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Format Windows Rust sources
+        run: cargo fmt --manifest-path windows/Cargo.toml
+      - name: Check Windows client
+        run: cargo check --manifest-path windows/Cargo.toml
+      - name: Run Windows client tests
+        run: cargo test --manifest-path windows/Cargo.toml
+      - name: Build release executable
+        run: cargo build --release --manifest-path windows/Cargo.toml
