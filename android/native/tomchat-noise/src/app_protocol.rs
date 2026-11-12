@@ -73,9 +73,6 @@ impl AppFrame {
         if self.frame_type == AppFrameType::DeliveryAck && !self.payload.is_empty() {
             return Err(AppFrameError::InvalidPayload);
         }
-        if matches!(self.frame_type, AppFrameType::Text) && self.payload.is_empty() {
-            return Err(AppFrameError::InvalidPayload);
-        }
         let mut out = Vec::with_capacity(HEADER_LEN + self.payload.len());
         out.push(VERSION);
         out.push(self.frame_type as u8);
@@ -105,9 +102,7 @@ impl AppFrame {
             return Err(AppFrameError::InvalidLength);
         }
         let payload = input[HEADER_LEN..].to_vec();
-        if (frame_type == AppFrameType::DeliveryAck && !payload.is_empty())
-            || (frame_type == AppFrameType::Text && payload.is_empty())
-        {
+        if frame_type == AppFrameType::DeliveryAck && !payload.is_empty() {
             return Err(AppFrameError::InvalidPayload);
         }
         Ok(Self { frame_type, message_id, payload })
