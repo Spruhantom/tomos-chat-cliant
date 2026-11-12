@@ -8,7 +8,7 @@ The first milestone establishes a native Win32 application target and includes t
 
 Not yet implemented:
 
-- Windows-protected identity persistence (DPAPI / Windows Credential Manager)
+- Windows DPAPI-protected identity persistence (CurrentUser scope) is implemented as a storage module; UI-driven onboarding and recovery are not yet wired
 - Signed contact-card and fingerprint verification UI
 - Direct TCP listener/connector using the shared Noise peer transport
 - Conversation protocol, group messaging and message history
