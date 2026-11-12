@@ -81,6 +81,7 @@ pub enum StatusError {
     InvalidAudienceDigest,
     InvalidCiphertext,
     InvalidSignature,
+    IdentityMismatch,
 }
 impl fmt::Display for StatusError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -97,6 +98,7 @@ impl fmt::Display for StatusError {
             Self::InvalidAudienceDigest => "Status audience digest is inconsistent.",
             Self::InvalidCiphertext => "Status encrypted content metadata is invalid.",
             Self::InvalidSignature => "Status author signature is invalid.",
+            Self::IdentityMismatch => "Status author device ID does not match the trusted contact.",
         })
     }
 }
@@ -170,7 +172,8 @@ impl StatusManifest {
         Ok(())
     }
 
-    pub fn verify_signature(&self, trusted_p256_public_key: &[u8]) -> Result<(), StatusError> {
+    pub fn verify_signature(&self, trusted_p256_public_key: &[u8], expected_author_device_id: &[u8; 16]) -> Result<(), StatusError> {
+        if &self.author_device_id != expected_author_device_id { return Err(StatusError::IdentityMismatch); }
         use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_FIXED};
         UnparsedPublicKey::new(&ECDSA_P256_SHA256_FIXED, trusted_p256_public_key)
             .verify(&self.signing_bytes()?, &self.signature)
@@ -257,8 +260,8 @@ mod tests {
         let key = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, pkcs8.as_ref(), &rng).unwrap();
         let mut value = sample();
         value.signature.copy_from_slice(key.sign(&rng, &value.signing_bytes().unwrap()).unwrap().as_ref());
-        value.verify_signature(key.public_key().as_ref()).unwrap();
+        value.verify_signature(key.public_key().as_ref(), &value.author_device_id).unwrap();
         value.ciphertext_len += 1;
-        assert_eq!(value.verify_signature(key.public_key().as_ref()), Err(StatusError::InvalidSignature));
+        assert_eq!(value.verify_signature(key.public_key().as_ref(), &value.author_device_id), Err(StatusError::InvalidSignature));
     }
 }
