@@ -60,6 +60,7 @@ pub enum CandidateError {
     IssuedInFuture,
     EmptyIdentity,
     EmptyNonce,
+    InvalidSignature,
 }
 
 impl fmt::Display for CandidateError {
@@ -76,6 +77,7 @@ impl fmt::Display for CandidateError {
             Self::IssuedInFuture => "Peer candidate issue time is too far in the future.",
             Self::EmptyIdentity => "Peer candidate device identity is empty.",
             Self::EmptyNonce => "Peer candidate nonce is empty.",
+            Self::InvalidSignature => "Peer candidate signature is invalid.",
         })
     }
 }
@@ -111,6 +113,15 @@ impl EndpointCandidate {
         let mut out = self.signing_bytes()?;
         out.extend_from_slice(&self.signature);
         Ok(out)
+    }
+
+    /// Verify the detached P-256 signature using the SEC1 uncompressed public
+    /// point bound to the trusted contact identity. Do not pass the Noise key.
+    pub fn verify_signature(&self, trusted_p256_public_key: &[u8]) -> Result<(), CandidateError> {
+        use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_FIXED};
+        UnparsedPublicKey::new(&ECDSA_P256_SHA256_FIXED, trusted_p256_public_key)
+            .verify(&self.signing_bytes()?, &self.signature)
+            .map_err(|_| CandidateError::InvalidSignature)
     }
 
     /// Decode and enforce structural/time/routability constraints. The caller
