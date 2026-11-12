@@ -3,6 +3,8 @@
 #[cfg(not(target_os = "windows"))]
 compile_error!("TomChat Windows must be built for a Windows target.");
 
+mod identity_store;
+
 use std::ptr::null;
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
