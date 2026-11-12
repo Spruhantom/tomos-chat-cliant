@@ -4,7 +4,7 @@ This is the native Windows desktop client, implemented primarily in Rust using W
 
 ## Current status
 
-The native Win32 window provides first-launch controls to create a DPAPI-protected identity or load the existing identity, generate a signed V2 contact card, and verify an imported card's signature and fingerprint. Verification does not automatically add or trust a contact. Encrypted peer messaging and identity recovery/export remain under development.
+The native Win32 window provides first-launch controls to create a DPAPI-protected identity or load the existing identity, generate a signed V2 contact card, and verify an imported card's signature and fingerprint. Verification does not automatically add or trust a contact. The shared Rust crate now contains the same bounded versioned application-frame format used by Android, and the Linux peer chat adapter uses it for text and delivery acknowledgements. Windows peer connection and conversation UI, plus identity recovery/export, remain under development.
 
 Not yet implemented:
 
