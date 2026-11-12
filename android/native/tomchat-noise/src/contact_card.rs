@@ -62,10 +62,15 @@ impl SigningIdentity {
     }
 
     /// Restore a signing identity from key bytes obtained from an OS-protected store.
-    pub fn from_pkcs8(pkcs8: Vec<u8>) -> Result<Self, ContactCardError> {
+    pub fn from_pkcs8(mut pkcs8: Vec<u8>) -> Result<Self, ContactCardError> {
         let rng = SystemRandom::new();
-        let pair = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &pkcs8, &rng)
-            .map_err(|_| ContactCardError::Crypto)?;
+        let pair = match EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &pkcs8, &rng) {
+            Ok(pair) => pair,
+            Err(_) => {
+                pkcs8.zeroize();
+                return Err(ContactCardError::Crypto);
+            }
+        };
         let mut public_key_der = SPKI_P256_PREFIX.to_vec();
         public_key_der.extend_from_slice(pair.public_key().as_ref());
         Ok(Self {
