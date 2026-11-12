@@ -37,8 +37,9 @@ data class StatusManifest(
     fun sign(privateKey: java.security.PrivateKey): StatusManifest =
         copy(signature = DeviceSignatureCodec.sign(signingBytes(), privateKey))
 
-    fun verifySignature(encodedTrustedPublicKey: ByteArray): Boolean =
-        DeviceSignatureCodec.verify(signingBytes(), signature, encodedTrustedPublicKey)
+    fun verifySignature(encodedTrustedPublicKey: ByteArray, expectedAuthorDeviceId: ByteArray): Boolean =
+        expectedAuthorDeviceId.size == 16 && authorDeviceId.contentEquals(expectedAuthorDeviceId) &&
+            DeviceSignatureCodec.verify(signingBytes(), signature, encodedTrustedPublicKey)
 
     fun encode(): ByteArray = signingBytes() + signature
 
