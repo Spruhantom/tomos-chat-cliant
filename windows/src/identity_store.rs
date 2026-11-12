@@ -325,6 +325,18 @@ impl TrustedContactStore {
         result
     }
 
+    pub fn find_by_fingerprint(
+        fingerprint: &str,
+    ) -> Result<Option<tomchat_noise::contact_card::ContactCard>, String> {
+        let wanted = normalize_fingerprint(fingerprint);
+        if wanted.len() != 64 || !wanted.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err("Contact fingerprint is malformed.".into());
+        }
+        Ok(Self::load_all()?
+            .into_iter()
+            .find(|card| normalize_fingerprint(&card.fingerprint) == wanted))
+    }
+
     pub fn load_all() -> Result<Vec<tomchat_noise::contact_card::ContactCard>, String> {
         let root = identity_path()?
             .parent()
