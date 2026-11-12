@@ -22,10 +22,12 @@ const WINDOW_CLASS: &[u16] = &[84, 111, 109, 67, 104, 97, 116, 87, 105, 110, 100
 const CREATE_ID: usize = 1001;
 const LOAD_ID: usize = 1002;
 const VERIFY_ID: usize = 1003;
+const TRUST_ID: usize = 1004;
 static STATUS_WINDOW: AtomicIsize = AtomicIsize::new(0);
 static NAME_WINDOW: AtomicIsize = AtomicIsize::new(0);
 static CARD_WINDOW: AtomicIsize = AtomicIsize::new(0);
 static IMPORT_WINDOW: AtomicIsize = AtomicIsize::new(0);
+static FINGERPRINT_WINDOW: AtomicIsize = AtomicIsize::new(0);
 
 unsafe extern "system" fn window_proc(
     hwnd: HWND,
@@ -36,6 +38,25 @@ unsafe extern "system" fn window_proc(
     match message {
         WM_COMMAND => {
             let command_id = wparam & 0xffff;
+            if command_id == TRUST_ID {
+                let import_hwnd = IMPORT_WINDOW.load(Ordering::Relaxed) as HWND;
+                let fingerprint_hwnd = FINGERPRINT_WINDOW.load(Ordering::Relaxed) as HWND;
+                let status_hwnd = STATUS_WINDOW.load(Ordering::Relaxed) as HWND;
+                let encoded = read_control_text(import_hwnd, 4096);
+                let confirmed_fingerprint = read_control_text(fingerprint_hwnd, 128);
+                let message = match identity_store::TrustedContactStore::accept_encoded(
+                    &encoded,
+                    &confirmed_fingerprint,
+                ) {
+                    Ok(()) => "Contact added to this device's protected trusted-contact list. It may now be used for pinned-key Noise authentication.".to_string(),
+                    Err(error) => error,
+                };
+                let text = wide(&message);
+                if !status_hwnd.is_null() {
+                    SetWindowTextW(status_hwnd, text.as_ptr());
+                }
+                return 0;
+            }
             if command_id == VERIFY_ID {
                 let import_hwnd = IMPORT_WINDOW.load(Ordering::Relaxed) as HWND;
                 let status_hwnd = STATUS_WINDOW.load(Ordering::Relaxed) as HWND;
@@ -168,7 +189,7 @@ fn main() -> Result<(), String> {
             CW_USEDEFAULT,
             CW_USEDEFAULT,
             820,
-            820,
+            900,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
             instance,
@@ -250,11 +271,28 @@ fn main() -> Result<(), String> {
         let verify_label = wide("Verify contact card");
         CreateWindowExW(0, button_class.as_ptr(), verify_label.as_ptr(),
             WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
-            28, 684, 190, 38, hwnd, VERIFY_ID as _, instance, std::ptr::null());
+            28, 680, 190, 38, hwnd, VERIFY_ID as _, instance, std::ptr::null());
+
+        let fingerprint_label = wide("Fingerprint confirmed separately with this contact");
+        CreateWindowExW(0, static_class.as_ptr(), fingerprint_label.as_ptr(), WS_CHILD | WS_VISIBLE,
+            28, 730, 520, 24, hwnd, std::ptr::null_mut(), instance, std::ptr::null());
+
+        let empty_fingerprint = wide("");
+        let fingerprint_control = CreateWindowExW(
+            0, edit_class.as_ptr(), empty_fingerprint.as_ptr(),
+            WS_CHILD | WS_VISIBLE | WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL,
+            28, 756, 520, 30, hwnd, std::ptr::null_mut(), instance, std::ptr::null(),
+        );
+        FINGERPRINT_WINDOW.store(fingerprint_control as isize, Ordering::Relaxed);
+
+        let trust_label = wide("Confirm fingerprint and trust contact");
+        CreateWindowExW(0, button_class.as_ptr(), trust_label.as_ptr(),
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+            28, 800, 280, 38, hwnd, TRUST_ID as _, instance, std::ptr::null());
 
         let note = wide("TomChat is decentralised and peer-to-peer. No central account or message server is used.");
         CreateWindowExW(0, static_class.as_ptr(), note.as_ptr(), WS_CHILD | WS_VISIBLE,
-            28, 744, 720, 30, hwnd, std::ptr::null_mut(), instance, std::ptr::null());
+            28, 852, 720, 30, hwnd, std::ptr::null_mut(), instance, std::ptr::null());
 
         ShowWindow(hwnd, SW_SHOW);
         let mut message: MSG = std::mem::zeroed();
