@@ -50,6 +50,65 @@ impl std::error::Error for DiscoveryError {}
 impl From<CandidateError> for DiscoveryError { fn from(e: CandidateError) -> Self { Self::Candidate(e) } }
 impl From<std::io::Error> for DiscoveryError { fn from(e: std::io::Error) -> Self { Self::Io(e) } }
 
+
+/// Kademlia routing table core. Network I/O and peer liveness probes are
+/// supplied by the platform adapter; a full bucket is not silently evicted.
+pub const KADEMLIA_K: usize = 20;
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DhtPeer {
+    pub node_id: [u8; 32],
+    pub endpoint: SocketAddr,
+    pub last_seen: u64,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RoutingInsert { Inserted, Updated, BucketFull, SelfPeer }
+pub struct KademliaRoutingTable {
+    local_id: [u8; 32],
+    buckets: Vec<Vec<DhtPeer>>,
+}
+impl KademliaRoutingTable {
+    pub fn new(local_id: [u8; 32]) -> Self {
+        Self { local_id, buckets: (0..256).map(|_| Vec::new()).collect() }
+    }
+    fn bucket_index(&self, remote: &[u8; 32]) -> Option<usize> {
+        for (i, (a,b)) in self.local_id.iter().zip(remote.iter()).enumerate() {
+            let diff=*a ^ *b;
+            if diff != 0 { return Some(i*8 + diff.leading_zeros() as usize); }
+        }
+        None
+    }
+    pub fn observe(&mut self, peer: DhtPeer) -> RoutingInsert {
+        let Some(index)=self.bucket_index(&peer.node_id) else { return RoutingInsert::SelfPeer; };
+        let bucket=&mut self.buckets[index];
+        if let Some(existing)=bucket.iter_mut().find(|p| p.node_id==peer.node_id) {
+            *existing=peer; return RoutingInsert::Updated;
+        }
+        if bucket.len()>=KADEMLIA_K { return RoutingInsert::BucketFull; }
+        bucket.push(peer); RoutingInsert::Inserted
+    }
+    pub fn remove(&mut self, node_id: &[u8;32]) -> bool {
+        let Some(index)=self.bucket_index(node_id) else { return false; };
+        let bucket=&mut self.buckets[index];
+        let old=bucket.len(); bucket.retain(|p| &p.node_id!=node_id); bucket.len()!=old
+    }
+    pub fn closest(&self, target: &[u8;32], limit: usize) -> Vec<DhtPeer> {
+        let mut peers:Vec<DhtPeer>=self.buckets.iter().flatten().cloned().collect();
+        peers.sort_by_key(|p| {
+            let mut distance=[0u8;32];
+            for i in 0..32 { distance[i]=p.node_id[i]^target[i]; }
+            distance
+        });
+        peers.truncate(limit.min(KADEMLIA_K)); peers
+    }
+}
+
+/// Stable DHT key for a device record; it reveals no endpoint or identity data.
+pub fn rendezvous_key(device_id: &[u8;16]) -> [u8;32] {
+    use ring::digest::{digest, SHA256};
+    let value=digest(&SHA256,device_id);
+    let mut key=[0u8;32]; key.copy_from_slice(value.as_ref()); key
+}
+
 /// A short-lived, identity-signed DHT value. The DHT key is the target device
 /// ID; the value contains no private information beyond approved public routes.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -238,6 +297,20 @@ impl NatPmpClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test] fn kademlia_table_uses_xor_distance_and_never_evicts_full_bucket() {
+        let mut table=KademliaRoutingTable::new([0u8;32]);
+        let endpoint:SocketAddr="8.8.8.8:4000".parse().unwrap();
+        for n in 1..=KADEMLIA_K as u8 {
+            let mut id=[0u8;32]; id[0]=n;
+            assert_eq!(table.observe(DhtPeer { node_id:id, endpoint, last_seen:n as u64 }),RoutingInsert::Inserted);
+        }
+        let mut extra=[0u8;32]; extra[0]=99;
+        assert_eq!(table.observe(DhtPeer { node_id:extra, endpoint, last_seen:99 }),RoutingInsert::BucketFull);
+        assert_eq!(table.closest(&[1;32],5).len(),5);
+        let mut first=[0u8;32]; first[0]=1;
+        assert!(table.remove(&first));
+    }
+
     #[test] fn rendezvous_record_round_trips_and_rejects_trailing_bytes() {\n        let candidate=EndpointCandidate { transport:crate::internet_peer::CandidateTransport::Udp, issued_at:100, expires_at:200, device_id:[1;16], nonce:[2;16], address:IpAddr::V4(Ipv4Addr::new(8,8,8,8)), port:4000, signature:[3;64] }.encode().unwrap();\n        let value=RendezvousRecord { device_id:[1;16], sequence:7, issued_at:100, expires_at:200, candidates:vec![candidate], signature:[4;64] };\n        let bytes=value.encode().unwrap(); assert_eq!(RendezvousRecord::decode(&bytes).unwrap(),value);\n        let mut bad=bytes; bad.push(0); assert!(RendezvousRecord::decode(&bad).is_err());\n    }\n    #[test] fn query_is_fixed_and_rejects_zero_ids() {
         let q=RendezvousQuery { target_device_id:[1;16], requester_device_id:[2;16], nonce:[3;16], issued_at:100 };
         assert_eq!(q.encode().unwrap().len(),59);
