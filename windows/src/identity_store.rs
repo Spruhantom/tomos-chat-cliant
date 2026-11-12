@@ -403,6 +403,23 @@ mod trusted_contact_tests {
     }
 
     #[test]
+    fn contact_is_not_trusted_when_fingerprint_confirmation_differs() {
+        let noise = NoiseIdentity::generate().unwrap();
+        let signing = SigningIdentity::generate().unwrap();
+        let card = tomchat_noise::contact_card::ContactCard::create(
+            "Trust confirmation test",
+            &signing,
+            *noise.public_key(),
+        )
+        .unwrap();
+        let encoded = card.encode().unwrap();
+        let wrong_fingerprint = "0".repeat(64);
+        let result = TrustedContactStore::accept_encoded(&encoded, &wrong_fingerprint);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("does not match"));
+    }
+
+    #[test]
     fn trusted_contact_path_accepts_only_sha256_hex() {
         assert!(trusted_contact_path(&"A".repeat(64)).is_ok());
         assert!(trusted_contact_path("not-a-fingerprint").is_err());
