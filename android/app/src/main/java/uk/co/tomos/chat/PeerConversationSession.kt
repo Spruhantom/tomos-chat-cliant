@@ -14,6 +14,7 @@ sealed interface PeerConversationEvent {
     data object DuplicateMessage : PeerConversationEvent
     data class VoiceSignalReceived(val callId: UUID, val signal: PeerVoiceSignal) : PeerConversationEvent
     data class VoiceFrameReceived(val callId: UUID, val pcm: ByteArray) : PeerConversationEvent
+    data class GroupProtocolReceived(val frame: GroupProtocolFrame) : PeerConversationEvent
 }
 
 /**
@@ -69,6 +70,18 @@ class PeerConversationSession(
         }
     }
 
+    /** Sends an opaque MLS protocol envelope inside the established Noise channel.
+     * This does not itself authenticate MLS membership or decrypt group content.
+     */
+    fun sendGroupProtocolFrame(frame: GroupProtocolFrame) {
+        check(status == PeerConnectionStatus.CONNECTED) { "Encrypted peer connection is not active." }
+        channel.send(EncryptedAppFrame(
+            EncryptedAppFrame.Type.GROUP_CONTROL,
+            UUID.randomUUID(),
+            GroupProtocolCodec.encode(frame)
+        ))
+    }
+
     /** Sends call control inside the established Noise channel. */
     fun sendVoiceSignal(callId: UUID, signal: PeerVoiceSignal) {
         check(status == PeerConnectionStatus.CONNECTED) { "Encrypted peer connection is not active." }
@@ -102,6 +115,9 @@ class PeerConversationSession(
                         }
                     }
                 }
+                EncryptedAppFrame.Type.GROUP_CONTROL -> PeerConversationEvent.GroupProtocolReceived(
+                    GroupProtocolCodec.decode(frame.payload)
+                )
                 EncryptedAppFrame.Type.VOICE_SIGNAL -> when (val voice = PeerVoiceCallCodec.decode(frame.payload)) {
                     is PeerVoicePayload.Signal -> PeerConversationEvent.VoiceSignalReceived(frame.messageId, voice.signal)
                     is PeerVoicePayload.Media -> PeerConversationEvent.VoiceFrameReceived(frame.messageId, voice.pcm)
@@ -147,7 +163,8 @@ class PeerConversationSession(
         PeerConversationEvent.DuplicateMessage ->
             throw IOException("A duplicate message was received and acknowledged.")
         is PeerConversationEvent.VoiceSignalReceived,
-        is PeerConversationEvent.VoiceFrameReceived ->
+        is PeerConversationEvent.VoiceFrameReceived,
+        is PeerConversationEvent.GroupProtocolReceived ->
             throw IOException("A voice frame was received while waiting for a text message.")
     }
 
