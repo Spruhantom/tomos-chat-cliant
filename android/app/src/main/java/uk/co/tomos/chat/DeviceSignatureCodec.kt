@@ -32,6 +32,9 @@ object DeviceSignatureCodec {
             verifier.verify(fixedToDer(fixedSignature))
         } catch (_: Exception) { false }
 
+    fun deviceId(encodedPublicKey: ByteArray): ByteArray =
+        java.security.MessageDigest.getInstance("SHA-256").digest(encodedPublicKey).copyOf(16)
+
     /** SEC1 uncompressed P-256 point for the Rust ring verifier. */
     fun rawPublicKey(publicKey: PublicKey): ByteArray {
         val ec = publicKey as? ECPublicKey ?: throw IllegalArgumentException("Expected a P-256 EC public key.")
