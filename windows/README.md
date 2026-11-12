@@ -4,18 +4,18 @@ This is the native Windows desktop client, implemented primarily in Rust using W
 
 ## Current status
 
-The first milestone establishes a native Win32 application target and includes the shared `tomchat-noise` Rust crate as a dependency. The current window is a deliberately small bootstrap shell; it is not yet a usable messaging client.
+The first milestone establishes a native Win32 application target and includes the shared `tomchat-noise` Rust crate as a dependency. The native Win32 window now provides first-launch controls to create a DPAPI-protected identity or load the existing identity. Messaging, contact management and recovery export are still under development.
 
 Not yet implemented:
 
-- Windows DPAPI-protected identity persistence (CurrentUser scope) is implemented as a storage module; UI-driven onboarding and recovery are not yet wired
+- Windows DPAPI-protected identity persistence (CurrentUser scope), with create/load onboarding controls
 - Signed contact-card and fingerprint verification UI
 - Direct TCP listener/connector using the shared Noise peer transport
 - Conversation protocol, group messaging and message history
 - Bluetooth route discovery/fallback
 - Webcam QR scanning, voice/video calling and notifications
 
-Do not create or advertise a new identity until secure Windows persistence and identity recovery behavior are implemented. Never replace an existing identity silently.
+Identity creation refuses to replace an existing identity. DPAPI data is bound to the current Windows user; moving an identity to another device requires a separately designed, user-approved recovery/export flow.
 
 ## Build
 
