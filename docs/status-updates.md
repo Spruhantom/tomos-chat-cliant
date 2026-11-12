@@ -13,7 +13,11 @@ Status: initial signed manifest codec is implemented in the Rust core and Androi
 - Replies open a normal encrypted direct conversation.
 - Seen state is local by default; no global read receipt is sent unless a future explicit privacy setting is designed.
 
-## Implemented protocol foundation\n\nThe shared 185-byte manifest records the status ID, author device ID, creation and expiry timestamps, audience mode and digest, content type, encrypted-payload length and digest, plus a detached Ed25519 author signature. It enforces a fixed 24-hour lifetime, a bounded encrypted payload size and consistent audience digest rules. Rust verifies the signature against a trusted Ed25519 signing key. The manifest contains no plaintext status text or photo. This is metadata framing only; it does not yet encrypt payloads, distribute content keys or deliver updates.\n\n## Decentralised delivery
+## Implemented protocol foundation
+
+The shared 185-byte manifest records the status ID, author device ID, creation and expiry timestamps, audience mode and digest, content type, encrypted-payload length and digest, plus a detached P-256 ECDSA author signature. It enforces a fixed 24-hour lifetime, a bounded encrypted payload size and consistent audience digest rules. Rust verifies the signature against a trusted P-256 ECDSA signing key. The manifest contains no plaintext status text or photo. This is metadata framing only; it does not yet encrypt payloads, distribute content keys or deliver updates.
+
+## Decentralised delivery
 
 A status is an authored, signed object distributed directly to the selected trusted recipients. There is no global feed, central upload, public profile service or cloud media store.
 
