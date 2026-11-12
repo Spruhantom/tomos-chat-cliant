@@ -156,6 +156,28 @@ mod tests {
     }
 
     #[test]
+    fn group_protocol_envelope_is_carried_by_group_control_frame() {
+        use crate::group_protocol::{GroupMessageKind, GroupProtocolFrame};
+        let group = GroupProtocolFrame {
+            kind: GroupMessageKind::Application,
+            group_id: [0x11; 16],
+            epoch: 3,
+            payload: vec![1, 2, 3],
+        };
+        let outer = AppFrame {
+            frame_type: AppFrameType::GroupControl,
+            message_id: [0x22; 16],
+            payload: group.encode().unwrap(),
+        };
+        let decoded_outer = AppFrame::decode(&outer.encode().unwrap()).unwrap();
+        assert_eq!(decoded_outer.frame_type, AppFrameType::GroupControl);
+        assert_eq!(
+            GroupProtocolFrame::decode(&decoded_outer.payload).unwrap(),
+            group
+        );
+    }
+
+    #[test]
     fn delivery_ack_must_have_an_empty_payload() {
         let frame = AppFrame {
             frame_type: AppFrameType::DeliveryAck,
