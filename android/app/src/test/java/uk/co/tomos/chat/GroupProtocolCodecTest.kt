@@ -51,6 +51,22 @@ class GroupProtocolCodecTest {
         }
     }
 
+    @Test fun groupEnvelopeFitsInsideEncryptedApplicationControlFrame() {
+        val group = sample()
+        val payload = GroupProtocolCodec.encode(group)
+        val outer = EncryptedAppFrame(
+            EncryptedAppFrame.Type.GROUP_CONTROL,
+            UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
+            payload
+        )
+        val decodedOuter = AppFrameCodec.decode(AppFrameCodec.encode(outer))
+        assertEquals(EncryptedAppFrame.Type.GROUP_CONTROL, decodedOuter.type)
+        val decodedGroup = GroupProtocolCodec.decode(decodedOuter.payload)
+        assertEquals(group.groupId, decodedGroup.groupId)
+        assertEquals(group.epoch, decodedGroup.epoch)
+        assertArrayEquals(group.payload, decodedGroup.payload)
+    }
+
     @Test fun rejectsEmptyOversizedAndMismatchedPayloads() {
         assertThrows(IllegalArgumentException::class.java) {
             GroupProtocolCodec.encode(sample().copy(payload = byteArrayOf()))
