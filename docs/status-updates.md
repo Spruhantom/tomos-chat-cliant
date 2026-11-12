@@ -15,7 +15,7 @@ Status: initial signed manifest codec is implemented in the Rust core and Androi
 
 ## Implemented protocol foundation
 
-The shared 185-byte manifest records the status ID, author device ID, creation and expiry timestamps, audience mode and digest, content type, encrypted-payload length and digest, plus a detached P-256 ECDSA author signature using the same device identity as signed contact cards. Android can sign and verify with the existing device key; Rust verifies using the matching SEC1 public point and expected device ID. It enforces a fixed 24-hour lifetime, a bounded encrypted payload size and consistent audience digest rules. Rust verifies the signature against a trusted P-256 ECDSA signing key. The manifest contains no plaintext status text or photo. This is metadata framing only; it does not yet encrypt payloads, distribute content keys or deliver updates.
+The shared 185-byte manifest records the status ID, author device ID, creation and expiry timestamps, audience mode and digest, content type, encrypted-payload length and digest, plus a detached P-256 ECDSA author signature using the same device identity as signed contact cards. Android can sign and verify with the existing device key; Rust verifies using the matching SEC1 public point and expected device ID. It enforces a fixed 24-hour lifetime, a bounded encrypted payload size and consistent audience digest rules. The manifest contains no plaintext status text or photo. This is metadata framing only; it does not yet encrypt payloads, distribute content keys or deliver updates.
 
 ## Decentralised delivery
 
