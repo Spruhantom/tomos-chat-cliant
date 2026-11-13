@@ -18,7 +18,7 @@ const HANDSHAKE: u8 = 1;
 const DATA: u8 = 2;
 const ACK: u8 = 3;
 const MAX_PACKET: usize = 65_507;
-const MAX_PLAINTEXT: usize = crate::app_protocol::MAX_FRAME_BYTES;
+const MAX_PLAINTEXT: usize = crate::app_protocol::MAX_FRAME_LEN;
 const MAX_FRAGMENT_BYTES: usize = 1_000;
 const MAX_FRAGMENTS: usize = 32;
 const FRAGMENT_HEADER_BYTES: usize = 18;
@@ -237,6 +237,7 @@ impl UdpNoiseChannel {
                         queued: VecDeque::new(), last_ack: None,
                         duplicate_handshake: m3_seen.map(|m| (m, handshake_packet(4, &[]))),
                         retry_timeout: timeout,
+                        reassembly: None,
                     });
                 }
                 Ok(_) => {}
@@ -249,7 +250,7 @@ impl UdpNoiseChannel {
     fn new(socket: UdpSocket, noise: NoiseSession, timeout: Duration) -> Self {
         Self { socket, noise, send_sequence: 0, receive_sequence: 0,
             queued: VecDeque::new(), last_ack: None, duplicate_handshake: None,
-            retry_timeout: timeout }
+            retry_timeout: timeout, reassembly: None }
     }
 
     pub fn send(&mut self, plaintext: &[u8]) -> Result<(), UdpNoiseError> {
