@@ -17,7 +17,11 @@ class InternetPeerDiscoveryTest {
             ByteArray(16) { 3 }, 1234)
         val encoded = query.encode()
         assertEquals(59, encoded.size)
-        assertEquals(query, RendezvousQuery.decode(encoded))
+        val decoded = RendezvousQuery.decode(encoded)
+        assertArrayEquals(query.targetDeviceId, decoded.targetDeviceId)
+        assertArrayEquals(query.requesterDeviceId, decoded.requesterDeviceId)
+        assertArrayEquals(query.nonce, decoded.nonce)
+        assertEquals(query.issuedAtSeconds, decoded.issuedAtSeconds)
         assertEquals(0x54.toByte(), encoded[0])
         assertEquals(2.toByte(), encoded[2])
     }
