@@ -113,6 +113,25 @@ impl EndpointCandidate {
         Ok(out)
     }
 
+    /// Sign the candidate using the device's dedicated P-256 identity key.
+    pub fn sign(&mut self, pkcs8_private_key: &[u8]) -> Result<(), CandidateError> {
+        use ring::rand::SystemRandom;
+        use ring::signature::{EcdsaKeyPair, ECDSA_P256_SHA256_FIXED_SIGNING};
+        let rng = SystemRandom::new();
+        let key = EcdsaKeyPair::from_pkcs8(
+            &ECDSA_P256_SHA256_FIXED_SIGNING,
+            pkcs8_private_key,
+            &rng,
+        )
+        .map_err(|_| CandidateError::InvalidSignature)?;
+        let bytes = self.signing_bytes()?;
+        let signature = key
+            .sign(&rng, &bytes)
+            .map_err(|_| CandidateError::InvalidSignature)?;
+        self.signature.copy_from_slice(signature.as_ref());
+        Ok(())
+    }
+
     pub fn encode(&self) -> Result<Vec<u8>, CandidateError> {
         let mut out = self.signing_bytes()?;
         out.extend_from_slice(&self.signature);
@@ -350,9 +369,7 @@ mod tests {
         let key = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, pkcs8.as_ref(), &rng)
             .unwrap();
         let mut value = sample("1.1.1.1".parse().unwrap());
-        let signing_bytes = value.signing_bytes().unwrap();
-        let signature = key.sign(&rng, &signing_bytes).unwrap();
-        value.signature.copy_from_slice(signature.as_ref());
+        value.sign(pkcs8.as_ref()).unwrap();
         value
             .verify_signature(key.public_key().as_ref(), &value.device_id)
             .unwrap();
