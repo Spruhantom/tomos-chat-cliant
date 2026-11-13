@@ -208,10 +208,9 @@ impl UdpNoiseChannel {
     }
 
     fn handle_incoming(&mut self, packet: &[u8]) -> Result<bool, UdpNoiseError> {
-        if packet.len() == 4 && packet[..3] == [MAGIC[0], MAGIC[1], HANDSHAKE] && packet[3] == 3 {
+        if packet.len() >= 4 && packet[..3] == [MAGIC[0], MAGIC[1], HANDSHAKE] && packet[3] == 3 {
             if let Some((original, ack)) = &self.duplicate_handshake {
-                let _ = original;
-                self.socket.send(ack)?;
+                if original.as_slice() == packet { self.socket.send(ack)?; }
             }
             return Ok(true);
         }
