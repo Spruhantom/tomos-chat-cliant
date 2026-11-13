@@ -75,7 +75,7 @@ impl UdpNoiseChannel {
             for _ in 0..RETRIES {
                 socket.send(&p1)?;
                 match recv_packet(&socket, timeout)? {
-                    Some(packet) if packet.len() >= 3 && packet[..3] == [MAGIC[0], MAGIC[1], HANDSHAKE] && packet[3] == 2 => {
+                    Some(packet) if packet.len() >= 4 && packet[..3] == [MAGIC[0], MAGIC[1], HANDSHAKE] && packet[3] == 2 => {
                         found = Some(packet[4..].to_vec()); break;
                     }
                     _ => {}
