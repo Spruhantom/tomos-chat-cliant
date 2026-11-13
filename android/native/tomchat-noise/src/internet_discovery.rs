@@ -200,6 +200,26 @@ pub struct HolePunchProbe {
     pub signature: [u8;64],
 }
 impl HolePunchProbe {
+    pub fn decode(bytes: &[u8]) -> Result<Self, DiscoveryError> {
+        if bytes.len()!=123 || bytes[..2]!=PUNCH_MAGIC || bytes[2]!=1 { return Err(DiscoveryError::InvalidRecord); }
+        let mut session_id=[0;16]; session_id.copy_from_slice(&bytes[3..19]);
+        let mut nonce=[0;16]; nonce.copy_from_slice(&bytes[19..35]);
+        let mut device_id=[0;16]; device_id.copy_from_slice(&bytes[35..51]);
+        let sent_at=u64::from_be_bytes(bytes[51..59].try_into().unwrap());
+        let mut signature=[0;64]; signature.copy_from_slice(&bytes[59..123]);
+        let value=Self { session_id, nonce, device_id, sent_at, signature };
+        value.signing_bytes()?; Ok(value)
+    }
+    pub fn sign(&mut self, pkcs8_private_key: &[u8]) -> Result<(), DiscoveryError> {
+        use ring::rand::SystemRandom;
+        use ring::signature::{EcdsaKeyPair, ECDSA_P256_SHA256_FIXED_SIGNING};
+        let rng=SystemRandom::new();
+        let key=EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING,pkcs8_private_key,&rng)
+            .map_err(|_| DiscoveryError::InvalidSignature)?;
+        let signature=key.sign(&rng,&self.signing_bytes()?).map_err(|_| DiscoveryError::InvalidSignature)?;
+        self.signature.copy_from_slice(signature.as_ref());
+        Ok(())
+    }
     pub fn signing_bytes(&self) -> Result<[u8;59], DiscoveryError> {
         if self.session_id.iter().all(|b| *b == 0) || self.nonce.iter().all(|b| *b == 0)
             || self.device_id.iter().all(|b| *b == 0) { return Err(DiscoveryError::InvalidRecord); }
@@ -222,6 +242,47 @@ impl HolePunchProbe {
         UnparsedPublicKey::new(&ECDSA_P256_SHA256_FIXED, public_key)
             .verify(&self.signing_bytes()?, &self.signature).map_err(|_| DiscoveryError::InvalidSignature)
     }
+}
+
+
+/// Simultaneous-open UDP reachability check. The probe itself is identity
+/// signed; after this returns, callers must run UdpNoiseChannel::connect or
+/// accept on the same socket. No application data is sent before Noise.
+pub fn udp_hole_punch(
+    socket: &UdpSocket,
+    remote: SocketAddr,
+    local_probe: &HolePunchProbe,
+    trusted_peer_p256_key: &[u8],
+    expected_peer_device_id: &[u8;16],
+    now: u64,
+    timeout: Duration,
+) -> Result<(), DiscoveryError> {
+    if timeout.is_zero() || timeout > Duration::from_secs(15) { return Err(DiscoveryError::InvalidRecord); }
+    let encoded=local_probe.encode()?;
+    socket.set_read_timeout(Some(Duration::from_millis(200)))?;
+    socket.set_write_timeout(Some(Duration::from_secs(2)))?;
+    let deadline=std::time::Instant::now()+timeout;
+    let mut buffer=[0u8;256];
+    let mut last_send=std::time::Instant::now()-Duration::from_secs(1);
+    while std::time::Instant::now()<deadline {
+        if last_send.elapsed()>=Duration::from_millis(100) {
+            socket.send_to(&encoded,remote)?;
+            last_send=std::time::Instant::now();
+        }
+        match socket.recv_from(&mut buffer) {
+            Ok((len,source)) if source==remote && len==123 => {
+                let peer=HolePunchProbe::decode(&buffer[..len])?;
+                if peer.session_id==local_probe.session_id
+                    && peer.verify(now,trusted_peer_p256_key,expected_peer_device_id).is_ok() {
+                    return Ok(());
+                }
+            }
+            Ok(_) => {}
+            Err(e) if e.kind()==std::io::ErrorKind::WouldBlock || e.kind()==std::io::ErrorKind::TimedOut => {}
+            Err(e) => return Err(DiscoveryError::Io(e)),
+        }
+    }
+    Err(DiscoveryError::Io(std::io::Error::new(std::io::ErrorKind::TimedOut,"UDP hole punch did not establish a verified peer path.")))
 }
 
 /// IPv6 candidates are attempted before IPv4 when both are available. Within
