@@ -31,7 +31,7 @@ class UdpNoisePeerChannel private constructor(
     private var ackedSequence: Long? = null
     private var lastAckSequence: Long? = null
     private var lastAck: ByteArray? = null
-    private var failure: IOException? = null
+    @Volatile private var failure: IOException? = null
     private val reader = Thread({ readLoop() }, "tomchat-udp-noise-reader").apply {
         isDaemon = true
         start()
@@ -109,7 +109,7 @@ class UdpNoisePeerChannel private constructor(
                     input.position(3)
                     val sequence = input.long
                     val ciphertext = ByteArray(input.remaining()).also(input::get)
-                    val plaintext = noise.decrypt(ciphertext)
+                    val plaintext = try { noise.decrypt(ciphertext) } catch (_: Exception) { continue }
                     if (sequence == txSequence && plaintext.contentEquals(ackPayload(sequence))) {
                         synchronized(stateLock) {
                             ackedSequence = sequence
@@ -147,7 +147,7 @@ class UdpNoisePeerChannel private constructor(
         val sequence = input.long
         val ciphertext = ByteArray(input.remaining()).also(input::get)
         if (sequence == rxSequence) {
-            val plaintext = noise.decrypt(ciphertext)
+            val plaintext = try { noise.decrypt(ciphertext) } catch (_: Exception) { return }
             val ack = synchronized(outboundLock) {
                 val ackCiphertext = noise.encrypt(ackPayload(sequence))
                 val encoded = dataPacket(ACK, sequence, ackCiphertext)
