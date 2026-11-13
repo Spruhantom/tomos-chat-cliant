@@ -57,11 +57,12 @@ class UdpNoisePeerChannel private constructor(
     @Throws(IOException::class)
     fun receive(): ByteArray {
         if (queued.isNotEmpty()) return queued.removeFirst()
-        while (true) {
-            val packet = receivePacket()
-                ?: throw SocketTimeoutException("Timed out waiting for an encrypted UDP message.")
+        val deadline = System.nanoTime() + 30_000_000_000L
+        while (System.nanoTime() < deadline) {
+            val packet = receivePacket() ?: continue
             if (handle(packet) && queued.isNotEmpty()) return queued.removeFirst()
         }
+        throw SocketTimeoutException("Timed out waiting for an encrypted UDP message.")
     }
 
     private fun handle(packet: ByteArray): Boolean {
