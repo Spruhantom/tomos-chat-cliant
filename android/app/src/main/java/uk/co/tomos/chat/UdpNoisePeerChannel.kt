@@ -18,16 +18,22 @@ class UdpNoisePeerChannel private constructor(
     private val socket: DatagramSocket,
     private val noise: NoisePeerSession,
     private val duplicateHandshake: ByteArray
-) : Closeable {
+) : EncryptedPeerTransport {
     private var txSequence = 0L
     private var rxSequence = 0L
     private var lastAckSequence: Long? = null
     private var lastAck: ByteArray? = null
     private val queued = ArrayDeque<ByteArray>()
 
+    override val isOpen: Boolean get() = !socket.isClosed && socket.isConnected
+
+    override fun send(frame: EncryptedAppFrame) = sendEncryptedPayload(AppFrameCodec.encode(frame))
+
+    override fun receive(): EncryptedAppFrame = AppFrameCodec.decode(receiveEncryptedPayload())
+
     @Synchronized
     @Throws(IOException::class)
-    fun send(plaintext: ByteArray) {
+    private fun sendEncryptedPayload(plaintext: ByteArray) {
         require(plaintext.size <= MAX_PLAINTEXT)
         val packet = dataPacket(DATA, txSequence, noise.encrypt(plaintext))
         repeat(MAX_RETRIES) {
@@ -55,7 +61,7 @@ class UdpNoisePeerChannel private constructor(
 
     @Synchronized
     @Throws(IOException::class)
-    fun receive(): ByteArray {
+    private fun receiveEncryptedPayload(): ByteArray {
         if (queued.isNotEmpty()) return queued.removeFirst()
         val deadline = System.nanoTime() + 30_000_000_000L
         while (System.nanoTime() < deadline) {
