@@ -18,7 +18,11 @@ const HANDSHAKE: u8 = 1;
 const DATA: u8 = 2;
 const ACK: u8 = 3;
 const MAX_PACKET: usize = 65_507;
-const MAX_PLAINTEXT: usize = 60_000;
+const MAX_PLAINTEXT: usize = crate::app_protocol::MAX_FRAME_BYTES;
+const MAX_FRAGMENT_BYTES: usize = 1_000;
+const MAX_FRAGMENTS: usize = 32;
+const FRAGMENT_HEADER_BYTES: usize = 18;
+const FRAGMENT_MAGIC: [u8;2] = *b"TF";
 const RETRIES: usize = 8;
 const RETRY_MS: u64 = 400;
 
@@ -64,6 +68,15 @@ pub struct UdpNoiseChannel {
     last_ack: Option<(u64, Vec<u8>)>,
     duplicate_handshake: Option<(Vec<u8>, Vec<u8>)>,
     retry_timeout: Duration,
+    reassembly: Option<Reassembly>,
+}
+
+struct Reassembly {
+    message_id: u64,
+    fragment_count: usize,
+    total_length: usize,
+    next_index: usize,
+    bytes: Vec<u8>,
 }
 
 impl UdpNoiseChannel {
@@ -240,26 +253,39 @@ impl UdpNoiseChannel {
     }
 
     pub fn send(&mut self, plaintext: &[u8]) -> Result<(), UdpNoiseError> {
-        if plaintext.len() > MAX_PLAINTEXT { return Err(UdpNoiseError::InvalidPacket); }
-        let ciphertext = self.noise.encrypt(plaintext)?;
-        let packet = data_packet(DATA, self.send_sequence, &ciphertext);
+        if plaintext.is_empty() || plaintext.len() > MAX_PLAINTEXT { return Err(UdpNoiseError::InvalidPacket); }
+        let message_id=self.send_sequence;
+        let count=(plaintext.len()+MAX_FRAGMENT_BYTES-1)/MAX_FRAGMENT_BYTES;
+        if count==0 || count>MAX_FRAGMENTS { return Err(UdpNoiseError::InvalidPacket); }
+        for index in 0..count {
+            let start=index*MAX_FRAGMENT_BYTES;
+            let end=(start+MAX_FRAGMENT_BYTES).min(plaintext.len());
+            let fragment=encode_fragment(message_id,index,count,plaintext.len(),&plaintext[start..end]);
+            self.send_fragment(&fragment)?;
+        }
+        Ok(())
+    }
+
+    fn send_fragment(&mut self, plaintext: &[u8]) -> Result<(), UdpNoiseError> {
+        let ciphertext=self.noise.encrypt(plaintext)?;
+        let packet=data_packet(DATA,self.send_sequence,&ciphertext);
         for _ in 0..RETRIES {
             self.socket.send(&packet)?;
-            let deadline = std::time::Instant::now() + Duration::from_millis(RETRY_MS);
-            while std::time::Instant::now() < deadline {
-                match recv_packet(&self.socket, self.retry_timeout)? {
+            let deadline=std::time::Instant::now()+Duration::from_millis(RETRY_MS);
+            while std::time::Instant::now()<deadline {
+                match recv_packet(&self.socket,self.retry_timeout)? {
                     Some(incoming) => {
                         if self.handle_incoming(&incoming)? { continue; }
-                        if incoming.len() >= 11 && incoming[..3] == [MAGIC[0], MAGIC[1], ACK] {
-                            let seq = u64::from_be_bytes(incoming[3..11].try_into().unwrap());
-                            let ack_plain = self.noise.decrypt(&incoming[11..])?;
-                            if seq == self.send_sequence && ack_plain == ack_payload(seq) {
-                                self.send_sequence = self.send_sequence.checked_add(1).ok_or(UdpNoiseError::Sequence)?;
+                        if incoming.len()>=11 && incoming[..3]==[MAGIC[0],MAGIC[1],ACK] {
+                            let seq=u64::from_be_bytes(incoming[3..11].try_into().unwrap());
+                            let ack_plain=self.noise.decrypt(&incoming[11..])?;
+                            if seq==self.send_sequence && ack_plain==ack_payload(seq) {
+                                self.send_sequence=self.send_sequence.checked_add(1).ok_or(UdpNoiseError::Sequence)?;
                                 return Ok(());
                             }
                         }
                     }
-                    None => break,
+                    None=>break,
                 }
             }
         }
@@ -280,6 +306,38 @@ impl UdpNoiseChannel {
         }
     }
 
+    fn accept_fragment(&mut self, sequence:u64, bytes:&[u8]) -> Result<Option<Vec<u8>>,UdpNoiseError> {
+        if bytes.len()<FRAGMENT_HEADER_BYTES || bytes[..2]!=FRAGMENT_MAGIC { return Err(UdpNoiseError::InvalidPacket); }
+        let message_id=u64::from_be_bytes(bytes[2..10].try_into().unwrap());
+        let index=u16::from_be_bytes(bytes[10..12].try_into().unwrap()) as usize;
+        let count=u16::from_be_bytes(bytes[12..14].try_into().unwrap()) as usize;
+        let total_length=u32::from_be_bytes(bytes[14..18].try_into().unwrap()) as usize;
+        let chunk=&bytes[FRAGMENT_HEADER_BYTES..];
+        if count==0 || count>MAX_FRAGMENTS || index>=count || total_length==0 || total_length>MAX_PLAINTEXT
+            || count!=(total_length+MAX_FRAGMENT_BYTES-1)/MAX_FRAGMENT_BYTES
+            || message_id!=sequence.saturating_sub(index as u64) {
+            return Err(UdpNoiseError::InvalidPacket);
+        }
+        let expected=(MAX_FRAGMENT_BYTES).min(total_length-index*MAX_FRAGMENT_BYTES);
+        if chunk.len()!=expected { return Err(UdpNoiseError::InvalidPacket); }
+        if index==0 {
+            if self.reassembly.is_some() { return Err(UdpNoiseError::InvalidPacket); }
+            self.reassembly=Some(Reassembly { message_id,fragment_count:count,total_length,next_index:0,bytes:Vec::with_capacity(total_length) });
+        }
+        let state=self.reassembly.as_mut().ok_or(UdpNoiseError::InvalidPacket)?;
+        if state.message_id!=message_id || state.fragment_count!=count || state.total_length!=total_length || state.next_index!=index {
+            return Err(UdpNoiseError::InvalidPacket);
+        }
+        state.bytes.extend_from_slice(chunk);
+        state.next_index+=1;
+        if state.next_index==state.fragment_count {
+            let state=self.reassembly.take().ok_or(UdpNoiseError::InvalidPacket)?;
+            if state.bytes.len()!=state.total_length { return Err(UdpNoiseError::InvalidPacket); }
+            return Ok(Some(state.bytes));
+        }
+        Ok(None)
+    }
+
     fn handle_incoming(&mut self, packet: &[u8]) -> Result<bool, UdpNoiseError> {
         if packet.len() >= 4 && packet[..3] == [MAGIC[0], MAGIC[1], HANDSHAKE] && packet[3] == 3 {
             if let Some((original, ack)) = &self.duplicate_handshake {
@@ -292,12 +350,13 @@ impl UdpNoiseChannel {
         let ciphertext = &packet[11..];
         if seq == self.receive_sequence {
             let plaintext = self.noise.decrypt(ciphertext)?;
+            let complete = self.accept_fragment(seq,&plaintext)?;
             let ack_cipher = self.noise.encrypt(&ack_payload(seq))?;
             let ack = data_packet(ACK, seq, &ack_cipher);
             self.socket.send(&ack)?;
             self.last_ack = Some((seq, ack));
             self.receive_sequence = self.receive_sequence.checked_add(1).ok_or(UdpNoiseError::Sequence)?;
-            self.queued.push_back(plaintext);
+            if let Some(message)=complete { self.queued.push_back(message); }
             return Ok(true);
         }
         if self.receive_sequence > 0 && seq == self.receive_sequence - 1 {
@@ -311,7 +370,17 @@ impl UdpNoiseChannel {
     }
 }
 
-fn handshake_packet(phase: u8, payload: &[u8]) -> Vec<u8> {
+fn encode_fragment(message_id:u64,index:usize,count:usize,total_length:usize,chunk:&[u8])->Vec<u8> {
+    let mut out=Vec::with_capacity(FRAGMENT_HEADER_BYTES+chunk.len());
+    out.extend_from_slice(&FRAGMENT_MAGIC);
+    out.extend_from_slice(&message_id.to_be_bytes());
+    out.extend_from_slice(&(index as u16).to_be_bytes());
+    out.extend_from_slice(&(count as u16).to_be_bytes());
+    out.extend_from_slice(&(total_length as u32).to_be_bytes());
+    out.extend_from_slice(chunk);
+    out
+}
+\nfn handshake_packet(phase: u8, payload: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(4 + payload.len());
     out.extend_from_slice(&MAGIC); out.push(HANDSHAKE); out.push(phase); out.extend_from_slice(payload); out
 }
