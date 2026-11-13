@@ -14,6 +14,7 @@ pub mod internet_peer;
 pub mod internet_discovery;
 pub mod identity;
 pub mod peer_transport;
+pub mod udp_transport;
 pub mod status_protocol;
 
 use jni::objects::{JByteArray, JClass};
