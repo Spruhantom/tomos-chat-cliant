@@ -1,106 +1,171 @@
 package uk.co.tomos.chat
 
-import java.io.Closeable
 import java.io.IOException
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetSocketAddress
+import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.ArrayDeque
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Noise XX over a punched UDP socket, followed by stop-and-wait encrypted
- * datagrams. Calls are serialized; ACKs are also Noise-encrypted.
+ * Noise XX over a punched UDP socket, followed by reliable ordered encrypted
+ * datagrams. A dedicated reader handles inbound DATA/ACK packets so the
+ * conversation can send and receive concurrently without racing socket reads.
  */
 class UdpNoisePeerChannel private constructor(
     private val socket: DatagramSocket,
     private val noise: NoisePeerSession,
     private val duplicateHandshake: ByteArray
 ) : EncryptedPeerTransport {
-    private var txSequence = 0L
+    private val closed = AtomicBoolean(false)
+    private val sendLock = Any()
+    private val outboundLock = Any()
+    private val stateLock = java.lang.Object()
+    private val queued = ArrayDeque<ByteArray>()
+    @Volatile private var txSequence = 0L
     private var rxSequence = 0L
+    private var ackedSequence: Long? = null
     private var lastAckSequence: Long? = null
     private var lastAck: ByteArray? = null
-    private val queued = ArrayDeque<ByteArray>()
+    private var failure: IOException? = null
+    private val reader = Thread({ readLoop() }, "tomchat-udp-noise-reader").apply {
+        isDaemon = true
+        start()
+    }
 
-    override val isOpen: Boolean get() = !socket.isClosed && socket.isConnected
+    override val isOpen: Boolean get() = !closed.get() && !socket.isClosed && socket.isConnected
 
-    override fun send(frame: EncryptedAppFrame) = sendEncryptedPayload(AppFrameCodec.encode(frame))
+    override fun send(frame: EncryptedAppFrame) {
+        sendPayload(AppFrameCodec.encode(frame))
+    }
 
-    override fun receive(): EncryptedAppFrame = AppFrameCodec.decode(receiveEncryptedPayload())
+    override fun receive(): EncryptedAppFrame =
+        AppFrameCodec.decode(receivePayload())
 
-    @Synchronized
-    @Throws(IOException::class)
-    private fun sendEncryptedPayload(plaintext: ByteArray) {
+    private fun sendPayload(plaintext: ByteArray) = synchronized(sendLock) {
+        checkOpen()
         require(plaintext.size <= MAX_PLAINTEXT)
-        val packet = dataPacket(DATA, txSequence, noise.encrypt(plaintext))
+        val sequence = txSequence
+        val packet = synchronized(outboundLock) {
+            val bytes = dataPacket(DATA, sequence, noise.encrypt(plaintext))
+            socket.send(DatagramPacket(bytes, bytes.size))
+            bytes
+        }
         repeat(MAX_RETRIES) {
-            socket.send(DatagramPacket(packet, packet.size))
-            val deadline = System.nanoTime() + RETRY_MS * 1_000_000L
-            while (System.nanoTime() < deadline) {
-                val incoming = receivePacket() ?: break
-                if (handle(incoming)) continue
-                if (incoming.size >= HEADER_SIZE + MIN_CIPHERTEXT &&
-                    incoming[0] == M0 && incoming[1] == M1 && incoming[2] == ACK) {
-                    val input = ByteBuffer.wrap(incoming).order(ByteOrder.BIG_ENDIAN)
-                    input.position(3)
-                    val sequence = input.long
-                    val cipher = ByteArray(input.remaining()).also(input::get)
-                    val ack = noise.decrypt(cipher)
-                    if (sequence == txSequence && ack.contentEquals(ackPayload(sequence))) {
-                        txSequence++
-                        return
-                    }
-                }
+            if (awaitAck(sequence, RETRY_MS)) {
+                txSequence++
+                return@synchronized
+            }
+            checkOpen()
+            synchronized(outboundLock) {
+                socket.send(DatagramPacket(packet, packet.size))
             }
         }
         throw SocketTimeoutException("The peer did not acknowledge the encrypted UDP message.")
     }
 
-    @Synchronized
-    @Throws(IOException::class)
-    private fun receiveEncryptedPayload(): ByteArray {
-        if (queued.isNotEmpty()) return queued.removeFirst()
-        val deadline = System.nanoTime() + 30_000_000_000L
-        while (System.nanoTime() < deadline) {
-            val packet = receivePacket() ?: continue
-            if (handle(packet) && queued.isNotEmpty()) return queued.removeFirst()
+    private fun awaitAck(sequence: Long, waitMs: Long): Boolean {
+        val deadline = System.nanoTime() + waitMs * 1_000_000L
+        synchronized(stateLock) {
+            while (ackedSequence != sequence && failure == null && !closed.get()) {
+                val remaining = deadline - System.nanoTime()
+                if (remaining <= 0) return false
+                stateLock.wait((remaining / 1_000_000L).coerceAtLeast(1L))
+            }
+            failure?.let { throw IOException("UDP Noise receive loop failed.", it) }
+            if (ackedSequence == sequence) {
+                ackedSequence = null
+                return true
+            }
+            throw IOException("UDP Noise channel is closed.")
         }
-        throw SocketTimeoutException("Timed out waiting for an encrypted UDP message.")
     }
 
-    private fun handle(packet: ByteArray): Boolean {
+    private fun receivePayload(): ByteArray {
+        val deadline = System.nanoTime() + RECEIVE_TIMEOUT_MS * 1_000_000L
+        synchronized(stateLock) {
+            while (queued.isEmpty() && failure == null && !closed.get()) {
+                val remaining = deadline - System.nanoTime()
+                if (remaining <= 0) throw SocketTimeoutException("Timed out waiting for an encrypted UDP message.")
+                stateLock.wait((remaining / 1_000_000L).coerceAtLeast(1L))
+            }
+            failure?.let { throw IOException("UDP Noise receive loop failed.", it) }
+            if (queued.isEmpty()) throw IOException("UDP Noise channel is closed.")
+            return queued.removeFirst()
+        }
+    }
+
+    private fun readLoop() {
+        try {
+            while (!closed.get()) {
+                val packet = receivePacket() ?: continue
+                if (packet.size >= HEADER_SIZE + MIN_CIPHERTEXT &&
+                    packet[0] == M0 && packet[1] == M1 && packet[2] == ACK) {
+                    val input = ByteBuffer.wrap(packet).order(ByteOrder.BIG_ENDIAN)
+                    input.position(3)
+                    val sequence = input.long
+                    val ciphertext = ByteArray(input.remaining()).also(input::get)
+                    val plaintext = noise.decrypt(ciphertext)
+                    if (sequence == txSequence && plaintext.contentEquals(ackPayload(sequence))) {
+                        synchronized(stateLock) {
+                            ackedSequence = sequence
+                            stateLock.notifyAll()
+                        }
+                    }
+                    continue
+                }
+                handleIncoming(packet)
+            }
+        } catch (error: Exception) {
+            if (!closed.get()) {
+                synchronized(stateLock) {
+                    failure = if (error is IOException) error else IOException("Invalid UDP Noise packet.", error)
+                    stateLock.notifyAll()
+                }
+                try { socket.close() } catch (_: Exception) { }
+            }
+        }
+    }
+
+    private fun handleIncoming(packet: ByteArray) {
         if (packet.size >= 4 && packet[0] == M0 && packet[1] == M1 &&
             packet[2] == HANDSHAKE && packet[3] == 3.toByte()) {
             if (packet.contentEquals(duplicateHandshake)) {
                 val ack = handshakePacket(4, byteArrayOf())
-                socket.send(DatagramPacket(ack, ack.size))
+                synchronized(outboundLock) { socket.send(DatagramPacket(ack, ack.size)) }
             }
-            return true
+            return
         }
         if (packet.size < HEADER_SIZE + MIN_CIPHERTEXT ||
-            packet[0] != M0 || packet[1] != M1 || packet[2] != DATA) return false
+            packet[0] != M0 || packet[1] != M1 || packet[2] != DATA) return
         val input = ByteBuffer.wrap(packet).order(ByteOrder.BIG_ENDIAN)
         input.position(3)
         val sequence = input.long
-        val cipher = ByteArray(input.remaining()).also(input::get)
+        val ciphertext = ByteArray(input.remaining()).also(input::get)
         if (sequence == rxSequence) {
-            val plaintext = noise.decrypt(cipher)
-            val ackCipher = noise.encrypt(ackPayload(sequence))
-            val ack = dataPacket(ACK, sequence, ackCipher)
-            socket.send(DatagramPacket(ack, ack.size))
+            val plaintext = noise.decrypt(ciphertext)
+            val ack = synchronized(outboundLock) {
+                val ackCiphertext = noise.encrypt(ackPayload(sequence))
+                val encoded = dataPacket(ACK, sequence, ackCiphertext)
+                socket.send(DatagramPacket(encoded, encoded.size))
+                encoded
+            }
             lastAckSequence = sequence
             lastAck = ack
             rxSequence++
-            queued.addLast(plaintext)
-            return true
+            synchronized(stateLock) {
+                queued.addLast(plaintext)
+                stateLock.notifyAll()
+            }
+        } else if (rxSequence > 0 && sequence == rxSequence - 1 && lastAckSequence == sequence) {
+            lastAck?.let { cached ->
+                synchronized(outboundLock) { socket.send(DatagramPacket(cached, cached.size)) }
+            }
         }
-        if (rxSequence > 0 && sequence == rxSequence - 1 && lastAckSequence == sequence) {
-            lastAck?.let { socket.send(DatagramPacket(it, it.size)) }
-        }
-        return true
     }
 
     private fun receivePacket(): ByteArray? {
@@ -110,12 +175,25 @@ class UdpNoisePeerChannel private constructor(
         return try {
             socket.receive(packet)
             packet.data.copyOf(packet.length)
-        } catch (_: SocketTimeoutException) { null }
+        } catch (_: SocketTimeoutException) {
+            null
+        } catch (error: SocketException) {
+            if (closed.get()) null else throw error
+        }
+    }
+
+    private fun checkOpen() {
+        check(isOpen) { "Encrypted UDP peer channel is closed." }
+        failure?.let { throw IOException("UDP Noise receive loop failed.", it) }
     }
 
     override fun close() {
-        noise.close()
-        socket.close()
+        if (closed.compareAndSet(false, true)) {
+            try { noise.close() } finally {
+                try { socket.close() } catch (_: Exception) { }
+                synchronized(stateLock) { stateLock.notifyAll() }
+            }
+        }
     }
 
     companion object {
@@ -130,10 +208,10 @@ class UdpNoisePeerChannel private constructor(
         private const val MAX_PLAINTEXT = 60_000
         private const val MAX_RETRIES = 8
         private const val RETRY_MS = 400L
+        private const val RECEIVE_TIMEOUT_MS = 30_000L
 
         private data class Received(val bytes: ByteArray, val source: InetSocketAddress)
 
-        /** Run signed simultaneous-open probes, then authenticate Noise on that same UDP path. */
         @Throws(IOException::class)
         fun connectAfterPunch(
             socket: DatagramSocket,
@@ -150,7 +228,6 @@ class UdpNoisePeerChannel private constructor(
             return connect(socket, remote, localIdentity, trustedPeer)
         }
 
-        /** Responder side: validate the peer's signed probe before accepting Noise XX. */
         @Throws(IOException::class)
         fun acceptAfterPunch(
             socket: DatagramSocket,
