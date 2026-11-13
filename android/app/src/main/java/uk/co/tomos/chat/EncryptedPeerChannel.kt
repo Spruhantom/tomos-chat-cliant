@@ -5,6 +5,13 @@ import java.io.DataOutputStream
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** Common encrypted application transport shared by TCP, Bluetooth and UDP. */
+interface EncryptedPeerTransport : AutoCloseable {
+    val isOpen: Boolean
+    fun send(frame: EncryptedAppFrame)
+    fun receive(): EncryptedAppFrame
+}
+
 /**
  * Application channel available only after direct identity authentication and
  * a successful pinned-key Noise handshake. The socket carries ciphertext only
@@ -17,15 +24,15 @@ class EncryptedPeerChannel internal constructor(
     private val noise: NoisePeerSession,
     /** Identity fingerprint authenticated before the Noise session was established. */
     val authenticatedPeerFingerprint: String
-) : AutoCloseable {
+) : EncryptedPeerTransport {
     private val closed = AtomicBoolean(false)
     private val writeLock = Any()
     private val readLock = Any()
 
-    val isOpen: Boolean get() = !closed.get() && !socket.isClosed && socket.isConnected
+    override val isOpen: Boolean get() = !closed.get() && !socket.isClosed && socket.isConnected
 
     @Throws(IOException::class)
-    fun send(frame: EncryptedAppFrame) {
+    override fun send(frame: EncryptedAppFrame) {
         check(isOpen) { "Encrypted peer channel is closed." }
         synchronized(writeLock) {
             check(isOpen) { "Encrypted peer channel is closed." }
@@ -48,7 +55,7 @@ class EncryptedPeerChannel internal constructor(
     }
 
     @Throws(IOException::class)
-    fun receive(): EncryptedAppFrame = synchronized(readLock) {
+    override fun receive(): EncryptedAppFrame = synchronized(readLock) {
         check(isOpen) { "Encrypted peer channel is closed." }
         try {
             val length = input.readInt()
