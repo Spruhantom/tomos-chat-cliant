@@ -181,6 +181,23 @@ impl RendezvousRecord {
         }
         Ok(out)
     }
+    pub fn sign(&mut self, pkcs8_private_key: &[u8]) -> Result<(), DiscoveryError> {
+        use ring::rand::SystemRandom;
+        use ring::signature::{EcdsaKeyPair, ECDSA_P256_SHA256_FIXED_SIGNING};
+        let rng = SystemRandom::new();
+        let key = EcdsaKeyPair::from_pkcs8(
+            &ECDSA_P256_SHA256_FIXED_SIGNING,
+            pkcs8_private_key,
+            &rng,
+        )
+        .map_err(|_| DiscoveryError::InvalidSignature)?;
+        let bytes = self.signing_bytes()?;
+        let signature = key
+            .sign(&rng, &bytes)
+            .map_err(|_| DiscoveryError::InvalidSignature)?;
+        self.signature.copy_from_slice(signature.as_ref());
+        Ok(())
+    }
     pub fn encode(&self) -> Result<Vec<u8>, DiscoveryError> {
         let mut out = self.signing_bytes()?;
         out.extend_from_slice(&self.signature);
