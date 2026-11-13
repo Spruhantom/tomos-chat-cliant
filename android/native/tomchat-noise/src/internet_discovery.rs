@@ -388,10 +388,10 @@ mod tests {
         let mut table=KademliaRoutingTable::new([0u8;32]);
         let endpoint:SocketAddr="8.8.8.8:4000".parse().unwrap();
         for n in 1..=KADEMLIA_K as u8 {
-            let mut id=[0u8;32]; id[0]=n;
+            let mut id=[0u8;32]; id[0]=0x80; id[31]=n;
             assert_eq!(table.observe(DhtPeer { node_id:id, endpoint, last_seen:n as u64 }),RoutingInsert::Inserted);
         }
-        let mut extra=[0u8;32]; extra[0]=99;
+        let mut extra=[0u8;32]; extra[0]=0x80; extra[31]=99;
         assert_eq!(table.observe(DhtPeer { node_id:extra, endpoint, last_seen:99 }),RoutingInsert::BucketFull);
         assert_eq!(table.closest(&[1;32],5).len(),5);
         let mut first=[0u8;32]; first[0]=1;
