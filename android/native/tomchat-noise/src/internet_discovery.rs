@@ -633,6 +633,44 @@ mod tests {
     }
 
     #[test]
+    fn signed_rendezvous_record_verifies_its_endpoint_candidates() {
+        use ring::rand::SystemRandom;
+        use ring::signature::{EcdsaKeyPair, KeyPair, ECDSA_P256_SHA256_FIXED_SIGNING};
+        let rng = SystemRandom::new();
+        let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &rng).unwrap();
+        let key = EcdsaKeyPair::from_pkcs8(
+            &ECDSA_P256_SHA256_FIXED_SIGNING,
+            pkcs8.as_ref(),
+            &rng,
+        )
+        .unwrap();
+        let device_id = [1; 16];
+        let mut candidate = EndpointCandidate {
+            transport: crate::internet_peer::CandidateTransport::Udp,
+            issued_at: 100,
+            expires_at: 200,
+            device_id,
+            nonce: [2; 16],
+            address: IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)),
+            port: 4000,
+            signature: [0; 64],
+        };
+        candidate.sign(pkcs8.as_ref()).unwrap();
+        let mut record = RendezvousRecord {
+            device_id,
+            sequence: 1,
+            issued_at: 100,
+            expires_at: 200,
+            candidates: vec![candidate.encode().unwrap()],
+            signature: [0; 64],
+        };
+        record.sign(pkcs8.as_ref()).unwrap();
+        record.verify(150, key.public_key().as_ref(), &device_id).unwrap();
+        let encoded = record.encode().unwrap();
+        assert_eq!(RendezvousRecord::decode(&encoded).unwrap(), record);
+    }
+
+    #[test]
     fn rendezvous_record_round_trips_and_rejects_trailing_bytes() {
         let candidate = EndpointCandidate {
             transport: crate::internet_peer::CandidateTransport::Udp,
