@@ -194,7 +194,7 @@ class UdpNoisePeerChannel private constructor(
         require(count in 1..MAX_FRAGMENTS && index in 0 until count)
         require(totalLength in 1..MAX_PLAINTEXT)
         require(count == (totalLength + MAX_FRAGMENT_BYTES - 1) / MAX_FRAGMENT_BYTES)
-        require(messageId == sequence - index)
+        require(sequence >= index.toLong() && messageId == sequence - index.toLong())
         val expectedChunk = minOf(MAX_FRAGMENT_BYTES, totalLength - index * MAX_FRAGMENT_BYTES)
         require(chunk.size == expectedChunk)
         if (index == 0) {
