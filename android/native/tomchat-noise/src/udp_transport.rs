@@ -5,6 +5,8 @@
 //! application datagram per direction avoids Noise transport-counter gaps when
 //! packets are lost or reordered. ACKs are themselves Noise-encrypted.
 use crate::{NoiseSession, NoiseSessionError};
+use crate::internet_peer::{CandidateError, CandidateTransport, EndpointCandidate};
+use crate::internet_discovery::{udp_hole_punch, DiscoveryError, HolePunchProbe};
 use std::collections::VecDeque;
 use std::fmt;
 use std::io;
@@ -27,6 +29,9 @@ pub enum UdpNoiseError {
     InvalidPacket,
     Timeout,
     Sequence,
+    Candidate(CandidateError),
+    Discovery(DiscoveryError),
+    UnsupportedCandidateTransport,
 }
 impl fmt::Display for UdpNoiseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -36,12 +41,17 @@ impl fmt::Display for UdpNoiseError {
             Self::InvalidPacket => f.write_str("Invalid UDP Noise packet."),
             Self::Timeout => f.write_str("UDP Noise peer did not acknowledge the packet."),
             Self::Sequence => f.write_str("UDP Noise sequence is out of order."),
+            Self::Candidate(e) => write!(f, "UDP endpoint candidate rejected: {e}"),
+            Self::Discovery(e) => write!(f, "UDP peer discovery failed: {e}"),
+            Self::UnsupportedCandidateTransport => f.write_str("The endpoint candidate is not UDP."),
         }
     }
 }
 impl std::error::Error for UdpNoiseError {}
 impl From<io::Error> for UdpNoiseError { fn from(e: io::Error) -> Self { Self::Io(e) } }
 impl From<NoiseSessionError> for UdpNoiseError { fn from(e: NoiseSessionError) -> Self { Self::Noise(e) } }
+impl From<CandidateError> for UdpNoiseError { fn from(e: CandidateError) -> Self { Self::Candidate(e) } }
+impl From<DiscoveryError> for UdpNoiseError { fn from(e: DiscoveryError) -> Self { Self::Discovery(e) } }
 
 /// Authenticated UDP Noise channel. Methods require exclusive mutable access;
 /// callers should serialize access through one networking task.
@@ -57,6 +67,42 @@ pub struct UdpNoiseChannel {
 }
 
 impl UdpNoiseChannel {
+    /// Verify a signed UDP candidate before performing the pinned Noise XX
+    /// handshake on the already-punched local UDP socket.
+    pub fn connect_candidate(
+        socket: UdpSocket,
+        candidate: &EndpointCandidate,
+        now: u64,
+        trusted_p256_key: &[u8],
+        expected_device_id: &[u8;16],
+        local_private_key: &[u8],
+        expected_peer_static_key: &[u8],
+        timeout: Duration,
+    ) -> Result<Self, UdpNoiseError> {
+        candidate.validate_at(now)?;
+        candidate.verify_signature(trusted_p256_key, expected_device_id)?;
+        if candidate.transport != CandidateTransport::Udp { return Err(UdpNoiseError::UnsupportedCandidateTransport); }
+        Self::connect(socket, SocketAddr::new(candidate.address,candidate.port),
+            local_private_key,expected_peer_static_key,timeout)
+    }
+
+    /// Verify the other device's signed simultaneous-open probe, then accept
+    /// its Noise XX handshake on the same socket and remote endpoint.
+    pub fn accept_after_punch(
+        socket: UdpSocket,
+        remote: SocketAddr,
+        local_probe: &HolePunchProbe,
+        trusted_peer_p256_key: &[u8],
+        expected_peer_device_id: &[u8;16],
+        now: u64,
+        local_private_key: &[u8],
+        expected_peer_static_key: &[u8],
+        timeout: Duration,
+    ) -> Result<Self, UdpNoiseError> {
+        udp_hole_punch(&socket,remote,local_probe,trusted_peer_p256_key,expected_peer_device_id,now,timeout)?;
+        Self::accept(socket,local_private_key,expected_peer_static_key,timeout)
+    }
+
     pub fn connect(
         socket: UdpSocket,
         remote: SocketAddr,
