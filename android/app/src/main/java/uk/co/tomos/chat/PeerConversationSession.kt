@@ -24,7 +24,7 @@ sealed interface PeerConversationEvent {
  */
 class PeerConversationSession(
     private val peerFingerprint: String,
-    private val channel: EncryptedPeerChannel,
+    private val channel: EncryptedPeerTransport,
     private val history: EncryptedMessageStore,
     private val clock: () -> Long = System::currentTimeMillis
 ) : AutoCloseable {
@@ -88,7 +88,7 @@ class PeerConversationSession(
         channel.send(EncryptedAppFrame(EncryptedAppFrame.Type.VOICE_SIGNAL, callId, PeerVoiceCallCodec.encodeSignal(signal)))
     }
 
-    /** Sends one 20 ms PCM frame; EncryptedPeerChannel encrypts it before socket I/O. */
+    /** Sends one 20 ms PCM frame; the encrypted peer transport encrypts it before socket I/O. */
     fun sendVoiceFrame(callId: UUID, pcm: ByteArray) {
         check(status == PeerConnectionStatus.CONNECTED) { "Encrypted peer connection is not active." }
         channel.send(EncryptedAppFrame(EncryptedAppFrame.Type.VOICE_SIGNAL, callId, PeerVoiceCallCodec.encodeMedia(pcm)))
