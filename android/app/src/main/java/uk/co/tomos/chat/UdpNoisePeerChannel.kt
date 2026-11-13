@@ -6,6 +6,7 @@ import java.net.DatagramSocket
 import java.net.InetSocketAddress
 import java.net.SocketException
 import java.net.SocketTimeoutException
+import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.ArrayDeque
@@ -26,6 +27,8 @@ class UdpNoisePeerChannel private constructor(
     private val outboundLock = Any()
     private val stateLock = java.lang.Object()
     private val queued = ArrayDeque<ByteArray>()
+    private data class Reassembly(val messageId: Long, val fragmentCount: Int, val totalLength: Int, var nextIndex: Int, val output: ByteArrayOutputStream)
+    private var reassembly: Reassembly? = null
     @Volatile private var txSequence = 0L
     private var rxSequence = 0L
     private var ackedSequence: Long? = null
@@ -48,24 +51,34 @@ class UdpNoisePeerChannel private constructor(
 
     private fun sendPayload(plaintext: ByteArray) = synchronized(sendLock) {
         checkOpen()
-        require(plaintext.size <= MAX_PLAINTEXT)
+        require(plaintext.isNotEmpty() && plaintext.size <= MAX_PLAINTEXT)
+        val messageId = txSequence
+        val fragmentCount = (plaintext.size + MAX_FRAGMENT_BYTES - 1) / MAX_FRAGMENT_BYTES
+        require(fragmentCount <= MAX_FRAGMENTS)
+        for (index in 0 until fragmentCount) {
+            val start = index * MAX_FRAGMENT_BYTES
+            val end = minOf(start + MAX_FRAGMENT_BYTES, plaintext.size)
+            val fragment = encodeFragment(messageId, index, fragmentCount, plaintext.size, plaintext.copyOfRange(start, end))
+            sendFragment(fragment)
+        }
+    }
+
+    private fun sendFragment(fragment: ByteArray) {
         val sequence = txSequence
         val packet = synchronized(outboundLock) {
-            val bytes = dataPacket(DATA, sequence, noise.encrypt(plaintext))
+            val bytes = dataPacket(DATA, sequence, noise.encrypt(fragment))
             socket.send(DatagramPacket(bytes, bytes.size))
             bytes
         }
         repeat(MAX_RETRIES) {
             if (awaitAck(sequence, RETRY_MS)) {
                 txSequence++
-                return@synchronized
+                return
             }
             checkOpen()
-            synchronized(outboundLock) {
-                socket.send(DatagramPacket(packet, packet.size))
-            }
+            synchronized(outboundLock) { socket.send(DatagramPacket(packet, packet.size)) }
         }
-        throw SocketTimeoutException("The peer did not acknowledge the encrypted UDP message.")
+        throw SocketTimeoutException("The peer did not acknowledge the encrypted UDP fragment.")
     }
 
     private fun awaitAck(sequence: Long, waitMs: Long): Boolean {
@@ -148,6 +161,7 @@ class UdpNoisePeerChannel private constructor(
         val ciphertext = ByteArray(input.remaining()).also(input::get)
         if (sequence == rxSequence) {
             val plaintext = try { noise.decrypt(ciphertext) } catch (_: Exception) { return }
+            val completeMessage = acceptFragment(sequence, plaintext)
             val ack = synchronized(outboundLock) {
                 val ackCiphertext = noise.encrypt(ackPayload(sequence))
                 val encoded = dataPacket(ACK, sequence, ackCiphertext)
@@ -157,8 +171,8 @@ class UdpNoisePeerChannel private constructor(
             lastAckSequence = sequence
             lastAck = ack
             rxSequence++
-            synchronized(stateLock) {
-                queued.addLast(plaintext)
+            if (completeMessage != null) synchronized(stateLock) {
+                queued.addLast(completeMessage)
                 stateLock.notifyAll()
             }
         } else if (rxSequence > 0 && sequence == rxSequence - 1 && lastAckSequence == sequence) {
@@ -166,6 +180,39 @@ class UdpNoisePeerChannel private constructor(
                 synchronized(outboundLock) { socket.send(DatagramPacket(cached, cached.size)) }
             }
         }
+    }
+
+    private fun acceptFragment(sequence: Long, bytes: ByteArray): ByteArray? {
+        require(bytes.size >= FRAGMENT_HEADER_BYTES && bytes[0] == FRAGMENT_M0 && bytes[1] == FRAGMENT_M1)
+        val input = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
+        input.position(2)
+        val messageId = input.long
+        val index = input.short.toInt() and 0xffff
+        val count = input.short.toInt() and 0xffff
+        val totalLength = input.int
+        val chunk = ByteArray(input.remaining()).also(input::get)
+        require(count in 1..MAX_FRAGMENTS && index in 0 until count)
+        require(totalLength in 1..MAX_PLAINTEXT)
+        require(count == (totalLength + MAX_FRAGMENT_BYTES - 1) / MAX_FRAGMENT_BYTES)
+        require(messageId == sequence - index)
+        val expectedChunk = minOf(MAX_FRAGMENT_BYTES, totalLength - index * MAX_FRAGMENT_BYTES)
+        require(chunk.size == expectedChunk)
+        if (index == 0) {
+            require(reassembly == null)
+            reassembly = Reassembly(messageId, count, totalLength, 0, ByteArrayOutputStream(totalLength))
+        }
+        val state = reassembly ?: throw IOException("UDP fragment arrived without its first fragment.")
+        require(state.messageId == messageId && state.fragmentCount == count &&
+            state.totalLength == totalLength && state.nextIndex == index)
+        state.output.write(chunk)
+        state.nextIndex++
+        if (state.nextIndex == state.fragmentCount) {
+            val result = state.output.toByteArray()
+            require(result.size == state.totalLength)
+            reassembly = null
+            return result
+        }
+        return null
     }
 
     private fun receivePacket(): ByteArray? {
@@ -205,7 +252,12 @@ class UdpNoisePeerChannel private constructor(
         private const val HEADER_SIZE = 11
         private const val MIN_CIPHERTEXT = 16
         private const val MAX_PACKET = 65_507
-        private const val MAX_PLAINTEXT = 60_000
+        private const val MAX_PLAINTEXT = AppFrameCodec.MAX_FRAME_BYTES
+        private const val MAX_FRAGMENT_BYTES = 1_000
+        private const val MAX_FRAGMENTS = 32
+        private const val FRAGMENT_HEADER_BYTES = 18
+        private const val FRAGMENT_M0 = 0x54.toByte()
+        private const val FRAGMENT_M1 = 0x46.toByte()
         private const val MAX_RETRIES = 8
         private const val RETRY_MS = 400L
         private const val RECEIVE_TIMEOUT_MS = 30_000L
@@ -356,6 +408,11 @@ class UdpNoisePeerChannel private constructor(
         private fun isHandshake(packet: ByteArray, phase: Int): Boolean =
             packet.size >= 4 && packet[0] == M0 && packet[1] == M1 &&
                 packet[2] == HANDSHAKE && packet[3].toInt() == phase
+
+        private fun encodeFragment(messageId: Long, index: Int, count: Int, totalLength: Int, chunk: ByteArray): ByteArray =
+            ByteBuffer.allocate(FRAGMENT_HEADER_BYTES + chunk.size).order(ByteOrder.BIG_ENDIAN)
+                .put(FRAGMENT_M0).put(FRAGMENT_M1).putLong(messageId)
+                .putShort(index.toShort()).putShort(count.toShort()).putInt(totalLength).put(chunk).array()
 
         private fun handshakePacket(phase: Int, payload: ByteArray): ByteArray =
             byteArrayOf(M0, M1, HANDSHAKE, phase.toByte()) + payload
