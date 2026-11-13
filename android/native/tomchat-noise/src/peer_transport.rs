@@ -4,13 +4,13 @@
 //! Callers must obtain the peer's pinned Noise static key from a separately
 //! authenticated contact identity before opening a channel.
 
-use crate::{NoiseSession, NoiseSessionError};
 use crate::internet_peer::{CandidateError, CandidateTransport, EndpointCandidate};
+use crate::{NoiseSession, NoiseSessionError};
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, SocketAddr, TcpStream};
-use std::time::Duration;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 const MAX_FRAME: usize = 65_535;
 const MIN_CIPHERTEXT: usize = 16;
@@ -33,7 +33,9 @@ impl fmt::Display for PeerTransportError {
             Self::InvalidFrame => f.write_str("Peer sent an invalid or oversized frame."),
             Self::SessionLock => f.write_str("Peer encryption state is unavailable."),
             Self::Candidate(error) => write!(f, "Peer endpoint candidate rejected: {error}"),
-            Self::UnsupportedCandidateTransport => f.write_str("This direct connector currently supports TCP candidates only."),
+            Self::UnsupportedCandidateTransport => {
+                f.write_str("This direct connector currently supports TCP candidates only.")
+            }
         }
     }
 }
@@ -44,7 +46,9 @@ impl From<io::Error> for PeerTransportError {
     }
 }
 impl From<CandidateError> for PeerTransportError {
-    fn from(value: CandidateError) -> Self { Self::Candidate(value) }
+    fn from(value: CandidateError) -> Self {
+        Self::Candidate(value)
+    }
 }
 impl From<NoiseSessionError> for PeerTransportError {
     fn from(value: NoiseSessionError) -> Self {

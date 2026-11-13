@@ -10,12 +10,12 @@
 
 pub mod app_protocol;
 pub mod group_protocol;
-pub mod internet_peer;
-pub mod internet_discovery;
 pub mod identity;
+pub mod internet_discovery;
+pub mod internet_peer;
 pub mod peer_transport;
-pub mod udp_transport;
 pub mod status_protocol;
+pub mod udp_transport;
 
 use jni::objects::{JByteArray, JClass};
 use jni::sys::{jboolean, jbyteArray, jlong};

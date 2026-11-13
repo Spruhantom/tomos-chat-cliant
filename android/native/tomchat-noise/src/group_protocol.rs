@@ -138,8 +138,8 @@ mod tests {
         GroupProtocolFrame {
             kind: GroupMessageKind::Application,
             group_id: [
-                0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
-                0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+                0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd,
+                0xee, 0xff,
             ],
             epoch: 7,
             payload: vec![0xde, 0xad, 0xbe, 0xef],
@@ -149,17 +149,18 @@ mod tests {
     #[test]
     fn round_trips_group_application_frame() {
         let frame = sample();
-        assert_eq!(GroupProtocolFrame::decode(&frame.encode().unwrap()).unwrap(), frame);
+        assert_eq!(
+            GroupProtocolFrame::decode(&frame.encode().unwrap()).unwrap(),
+            frame
+        );
     }
 
     #[test]
     fn matches_android_golden_wire_vector() {
         let encoded = sample().encode().unwrap();
         let expected = [
-            0x54, 0x47, 0x01, 0x04,
-            0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
-            0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07,
+            0x54, 0x47, 0x01, 0x04, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99,
+            0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07,
             0x00, 0x00, 0x00, 0x04, 0xde, 0xad, 0xbe, 0xef,
         ];
         assert_eq!(encoded, expected);
@@ -170,16 +171,28 @@ mod tests {
         let valid = sample().encode().unwrap();
         let mut bad = valid.clone();
         bad[0] = 0;
-        assert_eq!(GroupProtocolFrame::decode(&bad), Err(GroupFrameError::BadMagic));
+        assert_eq!(
+            GroupProtocolFrame::decode(&bad),
+            Err(GroupFrameError::BadMagic)
+        );
         let mut bad = valid.clone();
         bad[2] = 2;
-        assert_eq!(GroupProtocolFrame::decode(&bad), Err(GroupFrameError::UnsupportedVersion));
+        assert_eq!(
+            GroupProtocolFrame::decode(&bad),
+            Err(GroupFrameError::UnsupportedVersion)
+        );
         let mut bad = valid.clone();
         bad[3] = 99;
-        assert_eq!(GroupProtocolFrame::decode(&bad), Err(GroupFrameError::UnknownKind));
+        assert_eq!(
+            GroupProtocolFrame::decode(&bad),
+            Err(GroupFrameError::UnknownKind)
+        );
         let mut bad = valid.clone();
         bad[31] = 9;
-        assert_eq!(GroupProtocolFrame::decode(&bad), Err(GroupFrameError::InvalidLength));
+        assert_eq!(
+            GroupProtocolFrame::decode(&bad),
+            Err(GroupFrameError::InvalidLength)
+        );
     }
 
     #[test]
@@ -187,7 +200,10 @@ mod tests {
         let mut frame = sample();
         frame.payload.clear();
         assert_eq!(frame.encode(), Err(GroupFrameError::EmptyPayload));
-        assert_eq!(GroupProtocolFrame::decode(&[0u8; 8]), Err(GroupFrameError::TooShort));
+        assert_eq!(
+            GroupProtocolFrame::decode(&[0u8; 8]),
+            Err(GroupFrameError::TooShort)
+        );
         assert_eq!(
             GroupProtocolFrame::decode(&vec![0u8; MAX_FRAME_LEN + 1]),
             Err(GroupFrameError::TooLarge)

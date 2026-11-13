@@ -79,7 +79,9 @@ impl fmt::Display for CandidateError {
             Self::EmptyIdentity => "Peer candidate device identity is empty.",
             Self::EmptyNonce => "Peer candidate nonce is empty.",
             Self::InvalidSignature => "Peer candidate signature is invalid.",
-            Self::IdentityMismatch => "Peer candidate device ID does not match the trusted contact.",
+            Self::IdentityMismatch => {
+                "Peer candidate device ID does not match the trusted contact."
+            }
         })
     }
 }
@@ -119,8 +121,14 @@ impl EndpointCandidate {
 
     /// Verify the detached P-256 signature using the SEC1 uncompressed public
     /// point bound to the trusted contact identity. Do not pass the Noise key.
-    pub fn verify_signature(&self, trusted_p256_public_key: &[u8], expected_device_id: &[u8; 16]) -> Result<(), CandidateError> {
-        if &self.device_id != expected_device_id { return Err(CandidateError::IdentityMismatch); }
+    pub fn verify_signature(
+        &self,
+        trusted_p256_public_key: &[u8],
+        expected_device_id: &[u8; 16],
+    ) -> Result<(), CandidateError> {
+        if &self.device_id != expected_device_id {
+            return Err(CandidateError::IdentityMismatch);
+        }
         use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_FIXED};
         UnparsedPublicKey::new(&ECDSA_P256_SHA256_FIXED, trusted_p256_public_key)
             .verify(&self.signing_bytes()?, &self.signature)
@@ -150,9 +158,11 @@ impl EndpointCandidate {
         nonce.copy_from_slice(&bytes[36..52]);
         let family = bytes[52];
         let (address, address_len, port_offset) = match family {
-            4 if bytes.len() == 4 + 8 + 8 + 16 + 16 + 1 + 4 + 2 + SIGNATURE_LEN => {
-                (IpAddr::V4(Ipv4Addr::new(bytes[53], bytes[54], bytes[55], bytes[56])), 4, 57)
-            }
+            4 if bytes.len() == 4 + 8 + 8 + 16 + 16 + 1 + 4 + 2 + SIGNATURE_LEN => (
+                IpAddr::V4(Ipv4Addr::new(bytes[53], bytes[54], bytes[55], bytes[56])),
+                4,
+                57,
+            ),
             6 if bytes.len() == 4 + 8 + 8 + 16 + 16 + 1 + 16 + 2 + SIGNATURE_LEN => {
                 let octets: [u8; 16] = bytes[53..69].try_into().unwrap();
                 (IpAddr::V6(Ipv6Addr::from(octets)), 16, 69)
@@ -164,7 +174,14 @@ impl EndpointCandidate {
         let mut signature = [0; SIGNATURE_LEN];
         signature.copy_from_slice(&bytes[port_offset + 2..]);
         let candidate = Self {
-            transport, issued_at, expires_at, device_id, nonce, address, port, signature,
+            transport,
+            issued_at,
+            expires_at,
+            device_id,
+            nonce,
+            address,
+            port,
+            signature,
         };
         candidate.validate_at(now)?;
         Ok(candidate)
@@ -191,9 +208,7 @@ impl EndpointCandidate {
         if self.port == 0 {
             return Err(CandidateError::InvalidPort);
         }
-        if self.expires_at <= self.issued_at
-            || self.expires_at - self.issued_at > MAX_TTL_SECS
-        {
+        if self.expires_at <= self.issued_at || self.expires_at - self.issued_at > MAX_TTL_SECS {
             return Err(CandidateError::InvalidLifetime);
         }
         if !is_public_address(self.address) {
@@ -273,11 +288,24 @@ mod tests {
 
     #[test]
     fn rejects_private_and_local_addresses() {
-        for address in ["10.0.0.1", "192.168.1.2", "127.0.0.1", "169.254.1.1", "100.64.0.1", "224.0.0.1"] {
-            assert_eq!(sample(address.parse().unwrap()).encode(), Err(CandidateError::InvalidAddress));
+        for address in [
+            "10.0.0.1",
+            "192.168.1.2",
+            "127.0.0.1",
+            "169.254.1.1",
+            "100.64.0.1",
+            "224.0.0.1",
+        ] {
+            assert_eq!(
+                sample(address.parse().unwrap()).encode(),
+                Err(CandidateError::InvalidAddress)
+            );
         }
         for address in ["::1", "fe80::1", "fc00::1", "ff02::1", "2001:db8::1"] {
-            assert_eq!(sample(address.parse().unwrap()).encode(), Err(CandidateError::InvalidAddress));
+            assert_eq!(
+                sample(address.parse().unwrap()).encode(),
+                Err(CandidateError::InvalidAddress)
+            );
         }
     }
 
@@ -290,7 +318,10 @@ mod tests {
         assert_eq!(value.encode(), Err(CandidateError::InvalidLifetime));
         value.issued_at = 2_000;
         value.expires_at = 2_100;
-        assert_eq!(value.validate_at(1_000), Err(CandidateError::IssuedInFuture));
+        assert_eq!(
+            value.validate_at(1_000),
+            Err(CandidateError::IssuedInFuture)
+        );
     }
 
     #[test]
@@ -298,10 +329,16 @@ mod tests {
         let value = sample("1.1.1.1".parse().unwrap());
         let mut bytes = value.encode().unwrap();
         bytes[0] = 0;
-        assert_eq!(EndpointCandidate::decode(&bytes, 1_100), Err(CandidateError::InvalidMagic));
+        assert_eq!(
+            EndpointCandidate::decode(&bytes, 1_100),
+            Err(CandidateError::InvalidMagic)
+        );
         let mut bytes = value.encode().unwrap();
         bytes.push(0);
-        assert_eq!(EndpointCandidate::decode(&bytes, 1_100), Err(CandidateError::InvalidLength));
+        assert_eq!(
+            EndpointCandidate::decode(&bytes, 1_100),
+            Err(CandidateError::InvalidLength)
+        );
     }
 
     #[test]
@@ -310,19 +347,28 @@ mod tests {
         use ring::signature::{EcdsaKeyPair, KeyPair, ECDSA_P256_SHA256_FIXED_SIGNING};
         let rng = SystemRandom::new();
         let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &rng).unwrap();
-        let key = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, pkcs8.as_ref(), &rng).unwrap();
+        let key = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, pkcs8.as_ref(), &rng)
+            .unwrap();
         let mut value = sample("1.1.1.1".parse().unwrap());
         let signing_bytes = value.signing_bytes().unwrap();
         let signature = key.sign(&rng, &signing_bytes).unwrap();
         value.signature.copy_from_slice(signature.as_ref());
-        value.verify_signature(key.public_key().as_ref(), &value.device_id).unwrap();
+        value
+            .verify_signature(key.public_key().as_ref(), &value.device_id)
+            .unwrap();
         value.port += 1;
-        assert_eq!(value.verify_signature(key.public_key().as_ref(), &value.device_id), Err(CandidateError::InvalidSignature));
+        assert_eq!(
+            value.verify_signature(key.public_key().as_ref(), &value.device_id),
+            Err(CandidateError::InvalidSignature)
+        );
     }
 
     #[test]
     fn signing_bytes_exclude_detached_signature() {
         let value = sample("1.1.1.1".parse().unwrap());
-        assert_eq!(value.encode().unwrap().len(), value.signing_bytes().unwrap().len() + 64);
+        assert_eq!(
+            value.encode().unwrap().len(),
+            value.signing_bytes().unwrap().len() + 64
+        );
     }
 }

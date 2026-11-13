@@ -616,12 +616,12 @@ fn build_contacts(app: &adw::Application) {
                             .iter()
                             .map(|byte| format!("{byte:02x}"))
                             .collect::<String>();
-                        poll_status.set_text(&format!(
-                            "Peer confirmed delivery of message {id}."
-                        ));
+                        poll_status.set_text(&format!("Peer confirmed delivery of message {id}."));
                     }
                     Ok(peer_chat::PeerChatEvent::UnsupportedFrame(frame_type)) => {
-                        poll_status.set_text(&format!("Received an unsupported peer frame: {frame_type:?}."));
+                        poll_status.set_text(&format!(
+                            "Received an unsupported peer frame: {frame_type:?}."
+                        ));
                     }
                     Err(error) => {
                         poll_status.set_text(&error);
