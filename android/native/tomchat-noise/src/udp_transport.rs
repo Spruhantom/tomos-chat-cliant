@@ -82,6 +82,7 @@ struct Reassembly {
 impl UdpNoiseChannel {
     /// Complete the signed simultaneous-open probe and immediately run
     /// the pinned Noise XX handshake over the same local UDP socket.
+    #[allow(clippy::too_many_arguments)]
     pub fn connect_after_punch(
         socket: UdpSocket,
         candidate: &EndpointCandidate,
@@ -103,6 +104,7 @@ impl UdpNoiseChannel {
 
     /// Verify a signed UDP candidate before performing the pinned Noise XX
     /// handshake on the already-punched local UDP socket.
+    #[allow(clippy::too_many_arguments)]
     pub fn connect_candidate(
         socket: UdpSocket,
         candidate: &EndpointCandidate,
@@ -122,6 +124,7 @@ impl UdpNoiseChannel {
 
     /// Verify the other device's signed simultaneous-open probe, then accept
     /// its Noise XX handshake on the same socket and remote endpoint.
+    #[allow(clippy::too_many_arguments)]
     pub fn accept_after_punch(
         socket: UdpSocket,
         remote: SocketAddr,
@@ -150,37 +153,32 @@ impl UdpNoiseChannel {
         let mut noise = NoiseSession::initiator(local_private_key, expected_peer_static_key)?;
         let m1 = noise.write_handshake(&[])?;
         let p1 = handshake_packet(1, &m1);
-        let m2 = loop {
-            let mut found = None;
-            for _ in 0..RETRIES {
-                socket.send(&p1)?;
-                match recv_packet(&socket, timeout)? {
-                    Some(packet) if packet.len() >= 4 && packet[..3] == [MAGIC[0], MAGIC[1], HANDSHAKE] && packet[3] == 2 => {
-                        found = Some(packet[4..].to_vec()); break;
-                    }
-                    _ => {}
+        let mut m2 = None;
+        for _ in 0..RETRIES {
+            socket.send(&p1)?;
+            if let Some(packet) = recv_packet(&socket, timeout)? {
+                if packet.len() >= 4 && packet[..3] == [MAGIC[0], MAGIC[1], HANDSHAKE] && packet[3] == 2 {
+                    m2 = Some(packet[4..].to_vec());
+                    break;
                 }
             }
-            if let Some(value) = found { break value; }
-            return Err(UdpNoiseError::Timeout);
-        };
+        }
+        let m2 = m2.ok_or(UdpNoiseError::Timeout)?;
         noise.read_handshake(&m2)?;
         let m3 = noise.write_handshake(&[])?;
         noise.finish_handshake()?;
         let p3 = handshake_packet(3, &m3);
-        let ack = loop {
-            let mut found = false;
-            for _ in 0..RETRIES {
-                socket.send(&p3)?;
-                match recv_packet(&socket, timeout)? {
-                    Some(packet) if packet == handshake_packet(4, &[]) => { found = true; break; }
-                    _ => {}
+        let mut confirmed = false;
+        for _ in 0..RETRIES {
+            socket.send(&p3)?;
+            if let Some(packet) = recv_packet(&socket, timeout)? {
+                if packet == handshake_packet(4, &[]) {
+                    confirmed = true;
+                    break;
                 }
             }
-            if found { break handshake_packet(4, &[]); }
-            return Err(UdpNoiseError::Timeout);
-        };
-        let _ = ack;
+        }
+        if !confirmed { return Err(UdpNoiseError::Timeout); }
         Ok(Self::new(socket, noise, timeout))
     }
 
@@ -381,7 +379,8 @@ fn encode_fragment(message_id:u64,index:usize,count:usize,total_length:usize,chu
     out.extend_from_slice(chunk);
     out
 }
-\nfn handshake_packet(phase: u8, payload: &[u8]) -> Vec<u8> {
+
+fn handshake_packet(phase: u8, payload: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(4 + payload.len());
     out.extend_from_slice(&MAGIC); out.push(HANDSHAKE); out.push(phase); out.extend_from_slice(payload); out
 }
