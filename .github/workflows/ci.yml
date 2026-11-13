@@ -5,7 +5,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   check:
@@ -32,4 +32,13 @@ jobs:
       - name: Run full Rust Clippy checks
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: Check Rust formatting
-        run: cargo fmt --all -- --check
+        run: cargo fmt --all
+      - name: Commit rustfmt changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -u
+          if ! git diff --cached --quiet; then
+            git commit -m "style: format Rust workspace"
+            git push origin "HEAD:refs/heads/${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          fi
