@@ -394,7 +394,7 @@ mod tests {
         let mut extra=[0u8;32]; extra[0]=0x80; extra[31]=99;
         assert_eq!(table.observe(DhtPeer { node_id:extra, endpoint, last_seen:99 }),RoutingInsert::BucketFull);
         assert_eq!(table.closest(&[1;32],5).len(),5);
-        let mut first=[0u8;32]; first[0]=1;
+        let mut first=[0u8;32]; first[0]=0x80; first[31]=1;
         assert!(table.remove(&first));
     }
 
