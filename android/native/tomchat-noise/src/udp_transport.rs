@@ -254,7 +254,7 @@ impl UdpNoiseChannel {
     pub fn send(&mut self, plaintext: &[u8]) -> Result<(), UdpNoiseError> {
         if plaintext.is_empty() || plaintext.len() > MAX_PLAINTEXT { return Err(UdpNoiseError::InvalidPacket); }
         let message_id=self.send_sequence;
-        let count=(plaintext.len()+MAX_FRAGMENT_BYTES-1)/MAX_FRAGMENT_BYTES;
+        let count=plaintext.len().div_ceil(MAX_FRAGMENT_BYTES);
         if count==0 || count>MAX_FRAGMENTS { return Err(UdpNoiseError::InvalidPacket); }
         for index in 0..count {
             let start=index*MAX_FRAGMENT_BYTES;
@@ -313,7 +313,7 @@ impl UdpNoiseChannel {
         let total_length=u32::from_be_bytes(bytes[14..18].try_into().unwrap()) as usize;
         let chunk=&bytes[FRAGMENT_HEADER_BYTES..];
         if count==0 || count>MAX_FRAGMENTS || index>=count || total_length==0 || total_length>MAX_PLAINTEXT
-            || count!=(total_length+MAX_FRAGMENT_BYTES-1)/MAX_FRAGMENT_BYTES
+            || count!=total_length.div_ceil(MAX_FRAGMENT_BYTES)
             || sequence < index as u64 || message_id!=sequence-index as u64 {
             return Err(UdpNoiseError::InvalidPacket);
         }
