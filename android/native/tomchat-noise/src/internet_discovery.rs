@@ -149,7 +149,23 @@ impl RendezvousRecord {
         if out.len() > MAX_RENDEZVOUS_RECORD { return Err(DiscoveryError::InvalidRecord); }
         Ok(out)
     }
-    pub fn decode(bytes: &[u8]) -> Result<Self, DiscoveryError> {\n        if bytes.len() < 110 || bytes.len() > MAX_RENDEZVOUS_RECORD || bytes[..2] != RV_MAGIC || bytes[2] != 1 { return Err(DiscoveryError::InvalidRecord); }\n        let mut p=3usize;\n        let mut device_id=[0;16]; device_id.copy_from_slice(&bytes[p..p+16]); p+=16;\n        let sequence=u64::from_be_bytes(bytes[p..p+8].try_into().unwrap()); p+=8;\n        let issued_at=u64::from_be_bytes(bytes[p..p+8].try_into().unwrap()); p+=8;\n        let expires_at=u64::from_be_bytes(bytes[p..p+8].try_into().unwrap()); p+=8;\n        let count=bytes[p] as usize; p+=1;\n        if count==0 || count>MAX_CANDIDATES { return Err(DiscoveryError::InvalidRecord); }\n        let mut candidates=Vec::with_capacity(count);\n        for _ in 0..count { if p+2>bytes.len()-64 { return Err(DiscoveryError::InvalidRecord); } let n=u16::from_be_bytes(bytes[p..p+2].try_into().unwrap()) as usize; p+=2; if n==0 || p+n>bytes.len()-64 { return Err(DiscoveryError::InvalidRecord); } candidates.push(bytes[p..p+n].to_vec()); p+=n; }\n        if p+64!=bytes.len() { return Err(DiscoveryError::InvalidRecord); }\n        let mut signature=[0;64]; signature.copy_from_slice(&bytes[p..]);\n        let value=Self { device_id, sequence, issued_at, expires_at, candidates, signature };\n        value.signing_bytes()?; Ok(value)\n    }\n    pub fn verify(&self, now: u64, public_key: &[u8], expected_device: &[u8;16]) -> Result<(), DiscoveryError> {
+    pub fn decode(bytes: &[u8]) -> Result<Self, DiscoveryError> {
+        if bytes.len() < 110 || bytes.len() > MAX_RENDEZVOUS_RECORD || bytes[..2] != RV_MAGIC || bytes[2] != 1 { return Err(DiscoveryError::InvalidRecord); }
+        let mut p=3usize;
+        let mut device_id=[0;16]; device_id.copy_from_slice(&bytes[p..p+16]); p+=16;
+        let sequence=u64::from_be_bytes(bytes[p..p+8].try_into().unwrap()); p+=8;
+        let issued_at=u64::from_be_bytes(bytes[p..p+8].try_into().unwrap()); p+=8;
+        let expires_at=u64::from_be_bytes(bytes[p..p+8].try_into().unwrap()); p+=8;
+        let count=bytes[p] as usize; p+=1;
+        if count==0 || count>MAX_CANDIDATES { return Err(DiscoveryError::InvalidRecord); }
+        let mut candidates=Vec::with_capacity(count);
+        for _ in 0..count { if p+2>bytes.len()-64 { return Err(DiscoveryError::InvalidRecord); } let n=u16::from_be_bytes(bytes[p..p+2].try_into().unwrap()) as usize; p+=2; if n==0 || p+n>bytes.len()-64 { return Err(DiscoveryError::InvalidRecord); } candidates.push(bytes[p..p+n].to_vec()); p+=n; }
+        if p+64!=bytes.len() { return Err(DiscoveryError::InvalidRecord); }
+        let mut signature=[0;64]; signature.copy_from_slice(&bytes[p..]);
+        let value=Self { device_id, sequence, issued_at, expires_at, candidates, signature };
+        value.signing_bytes()?; Ok(value)
+    }
+    pub fn verify(&self, now: u64, public_key: &[u8], expected_device: &[u8;16]) -> Result<(), DiscoveryError> {
         if &self.device_id != expected_device { return Err(DiscoveryError::IdentityMismatch); }
         if self.issued_at > now.saturating_add(MAX_PUNCH_CLOCK_SKEW_SECS) { return Err(DiscoveryError::FutureTimestamp); }
         if self.expires_at <= now { return Err(DiscoveryError::Expired); }
@@ -372,7 +388,13 @@ mod tests {
         assert!(table.remove(&first));
     }
 
-    #[test] fn rendezvous_record_round_trips_and_rejects_trailing_bytes() {\n        let candidate=EndpointCandidate { transport:crate::internet_peer::CandidateTransport::Udp, issued_at:100, expires_at:200, device_id:[1;16], nonce:[2;16], address:IpAddr::V4(Ipv4Addr::new(8,8,8,8)), port:4000, signature:[3;64] }.encode().unwrap();\n        let value=RendezvousRecord { device_id:[1;16], sequence:7, issued_at:100, expires_at:200, candidates:vec![candidate], signature:[4;64] };\n        let bytes=value.encode().unwrap(); assert_eq!(RendezvousRecord::decode(&bytes).unwrap(),value);\n        let mut bad=bytes; bad.push(0); assert!(RendezvousRecord::decode(&bad).is_err());\n    }\n    #[test] fn query_is_fixed_and_rejects_zero_ids() {
+    #[test] fn rendezvous_record_round_trips_and_rejects_trailing_bytes() {
+        let candidate=EndpointCandidate { transport:crate::internet_peer::CandidateTransport::Udp, issued_at:100, expires_at:200, device_id:[1;16], nonce:[2;16], address:IpAddr::V4(Ipv4Addr::new(8,8,8,8)), port:4000, signature:[3;64] }.encode().unwrap();
+        let value=RendezvousRecord { device_id:[1;16], sequence:7, issued_at:100, expires_at:200, candidates:vec![candidate], signature:[4;64] };
+        let bytes=value.encode().unwrap(); assert_eq!(RendezvousRecord::decode(&bytes).unwrap(),value);
+        let mut bad=bytes; bad.push(0); assert!(RendezvousRecord::decode(&bad).is_err());
+    }
+    #[test] fn query_is_fixed_and_rejects_zero_ids() {
         let q=RendezvousQuery { target_device_id:[1;16], requester_device_id:[2;16], nonce:[3;16], issued_at:100 };
         let encoded=q.encode().unwrap(); assert_eq!(encoded.len(),59); assert_eq!(RendezvousQuery::decode(&encoded).unwrap(),q);
         let mut bad=q; bad.nonce=[0;16]; assert!(bad.encode().is_err());
