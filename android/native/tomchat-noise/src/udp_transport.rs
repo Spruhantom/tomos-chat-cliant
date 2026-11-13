@@ -67,6 +67,27 @@ pub struct UdpNoiseChannel {
 }
 
 impl UdpNoiseChannel {
+    /// Complete the signed simultaneous-open probe and immediately run
+    /// the pinned Noise XX handshake over the same local UDP socket.
+    pub fn connect_after_punch(
+        socket: UdpSocket,
+        candidate: &EndpointCandidate,
+        local_probe: &HolePunchProbe,
+        now: u64,
+        trusted_p256_key: &[u8],
+        expected_device_id: &[u8;16],
+        local_private_key: &[u8],
+        expected_peer_static_key: &[u8],
+        timeout: Duration,
+    ) -> Result<Self, UdpNoiseError> {
+        candidate.validate_at(now)?;
+        candidate.verify_signature(trusted_p256_key,expected_device_id)?;
+        if candidate.transport != CandidateTransport::Udp { return Err(UdpNoiseError::UnsupportedCandidateTransport); }
+        let remote=SocketAddr::new(candidate.address,candidate.port);
+        udp_hole_punch(&socket,remote,local_probe,trusted_p256_key,expected_device_id,now,timeout)?;
+        Self::connect(socket,remote,local_private_key,expected_peer_static_key,timeout)
+    }
+
     /// Verify a signed UDP candidate before performing the pinned Noise XX
     /// handshake on the already-punched local UDP socket.
     pub fn connect_candidate(
