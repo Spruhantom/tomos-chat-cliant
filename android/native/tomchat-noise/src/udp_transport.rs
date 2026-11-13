@@ -316,7 +316,7 @@ impl UdpNoiseChannel {
         let chunk=&bytes[FRAGMENT_HEADER_BYTES..];
         if count==0 || count>MAX_FRAGMENTS || index>=count || total_length==0 || total_length>MAX_PLAINTEXT
             || count!=(total_length+MAX_FRAGMENT_BYTES-1)/MAX_FRAGMENT_BYTES
-            || message_id!=sequence.saturating_sub(index as u64) {
+            || sequence < index as u64 || message_id!=sequence-index as u64 {
             return Err(UdpNoiseError::InvalidPacket);
         }
         let expected=(MAX_FRAGMENT_BYTES).min(total_length-index*MAX_FRAGMENT_BYTES);
@@ -424,11 +424,14 @@ mod tests {
             let mut channel = UdpNoiseChannel::accept(bob_socket, &bob_sk, &alice_pk, Duration::from_secs(5)).unwrap();
             assert_eq!(channel.receive().unwrap(), b"hello over punched UDP");
             channel.send(b"encrypted UDP reply").unwrap();
+            let large=channel.receive().unwrap();
+            assert_eq!(large,vec![0x42;5_000]);
         });
         let alice_socket = UdpSocket::bind("127.0.0.1:0").unwrap();
         let mut channel = UdpNoiseChannel::connect(alice_socket, bob_addr, &alice_sk, &bob_pk, Duration::from_secs(5)).unwrap();
         channel.send(b"hello over punched UDP").unwrap();
         assert_eq!(channel.receive().unwrap(), b"encrypted UDP reply");
+        channel.send(&vec![0x42;5_000]).unwrap();
         responder.join().unwrap();
     }
     #[test]
