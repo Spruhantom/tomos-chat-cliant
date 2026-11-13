@@ -1,6 +1,6 @@
 # Internet-wide decentralised peer connectivity
 
-Status: this branch adds initial Rust/Kotlin rendezvous and UDP traversal primitives, an Android signed UDP punch attempt, IPv6-first route policy, bounded reconnect backoff and an explicit opt-in NAT-PMP client. A complete multi-hop DHT request/response engine, UPnP IGD/PCP, background reconnection orchestration, desktop conversation/UI integration and real-world internet validation remain outstanding.
+Status: direct UDP Noise XX, reliable encrypted datagrams, MTU-safe fragmentation and Android conversation integration are implemented on this feature branch. Full multi-hop DHT discovery, UPnP/PCP, background reconnection and physical cross-network validation remain outstanding.
 
 ## Product contract
 
