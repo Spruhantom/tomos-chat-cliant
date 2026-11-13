@@ -118,10 +118,16 @@ impl UdpNoiseChannel {
         let mut m3_seen: Option<Vec<u8>> = None;
         let deadline = std::time::Instant::now() + timeout;
         let mut buffer = [0u8; MAX_PACKET];
+        let mut remote: Option<SocketAddr> = None;
         loop {
             if std::time::Instant::now() >= deadline { return Err(UdpNoiseError::Timeout); }
-            match socket.recv(&mut buffer) {
-                Ok(n) if n >= 4 && buffer[..3] == [MAGIC[0], MAGIC[1], HANDSHAKE] && buffer[3] == 1 => {
+            let received = match remote {
+                Some(address) => socket.recv(&mut buffer).map(|n| (n, address)),
+                None => socket.recv_from(&mut buffer),
+            };
+            match received {
+                Ok((n, source)) if n >= 4 && buffer[..3] == [MAGIC[0], MAGIC[1], HANDSHAKE] && buffer[3] == 1 => {
+                    if remote.is_none() { socket.connect(source)?; remote = Some(source); }
                     let packet = buffer[..n].to_vec();
                     if m1_seen.as_ref() == Some(&packet) {
                         if let Some(reply) = &m2_packet { socket.send(reply)?; }
@@ -135,7 +141,7 @@ impl UdpNoiseChannel {
                     m2_packet = Some(reply.clone());
                     socket.send(&reply)?;
                 }
-                Ok(n) if n >= 4 && buffer[..3] == [MAGIC[0], MAGIC[1], HANDSHAKE] && buffer[3] == 3 => {
+                Ok((n, _source)) if n >= 4 && buffer[..3] == [MAGIC[0], MAGIC[1], HANDSHAKE] && buffer[3] == 3 => {
                     let packet = buffer[..n].to_vec();
                     if m3_seen.as_ref() == Some(&packet) {
                         socket.send(&handshake_packet(4, &[]))?;
