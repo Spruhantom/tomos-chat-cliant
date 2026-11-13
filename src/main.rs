@@ -612,8 +612,13 @@ fn build_contacts(app: &adw::Application) {
                         ));
                     }
                     Ok(peer_chat::PeerChatEvent::DeliveryConfirmed(message_id)) => {
-                        let id = message_id.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
-                        poll_status.set_text(&format!("Peer confirmed delivery of message {id}."));
+                        let id = message_id
+                            .iter()
+                            .map(|byte| format!("{byte:02x}"))
+                            .collect::<String>();
+                        poll_status.set_text(&format!(
+                            "Peer confirmed delivery of message {id}."
+                        ));
                     }
                     Ok(peer_chat::PeerChatEvent::UnsupportedFrame(frame_type)) => {
                         poll_status.set_text(&format!("Received an unsupported peer frame: {frame_type:?}."));
