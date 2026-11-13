@@ -126,6 +126,41 @@ class UdpNoisePeerChannel private constructor(
 
         private data class Received(val bytes: ByteArray, val source: InetSocketAddress)
 
+        /** Run signed simultaneous-open probes, then authenticate Noise on that same UDP path. */
+        @Throws(IOException::class)
+        fun connectAfterPunch(
+            socket: DatagramSocket,
+            remote: InetSocketAddress,
+            localProbe: HolePunchProbe,
+            trustedPeerSigningKey: ByteArray,
+            expectedPeerDeviceId: ByteArray,
+            nowSeconds: () -> Long,
+            localIdentity: NoiseIdentity,
+            trustedPeer: TrustedContact
+        ): UdpNoisePeerChannel {
+            UdpHolePuncher.punch(socket, remote, localProbe, trustedPeerSigningKey,
+                expectedPeerDeviceId, nowSeconds)
+            return connect(socket, remote, localIdentity, trustedPeer)
+        }
+
+        /** Responder side: validate the peer's signed probe before accepting Noise XX. */
+        @Throws(IOException::class)
+        fun acceptAfterPunch(
+            socket: DatagramSocket,
+            remote: InetSocketAddress,
+            localProbe: HolePunchProbe,
+            trustedPeerSigningKey: ByteArray,
+            expectedPeerDeviceId: ByteArray,
+            nowSeconds: () -> Long,
+            localIdentity: NoiseIdentity,
+            trustedPeer: TrustedContact,
+            timeoutMs: Int = 30_000
+        ): UdpNoisePeerChannel {
+            UdpHolePuncher.punch(socket, remote, localProbe, trustedPeerSigningKey,
+                expectedPeerDeviceId, nowSeconds, timeoutMs.coerceIn(250, 10_000))
+            return accept(socket, localIdentity, trustedPeer, timeoutMs)
+        }
+
         @Throws(IOException::class)
         fun connect(
             socket: DatagramSocket,
