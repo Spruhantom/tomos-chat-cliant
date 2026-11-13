@@ -27,10 +27,14 @@ The Android and Linux clients have been brought together, but their conversation
 - [x] Shared Rust/Kotlin signed endpoint-candidate codec with expiry and public-address validation.
 - [x] Android direct TCP connector that validates signed candidates before the existing identity/Noise handshake.
 - [x] Linux direct TCP dial helper that verifies the candidate signature/device ID before the pinned Noise handshake.
-- [ ] Direct IPv6 and manually shared internet endpoint connections.
-- [ ] Signed, short-lived peer-assisted rendezvous records with multiple bootstrap peers; no single required operator.
-- [ ] Authenticated UDP hole punching and opt-in UPnP/NAT-PMP/PCP where safe and supported.
-- [ ] Network-change recovery, route diagnostics and clear no-direct-path handling; no TURN relay.
+- [x] Signed, short-lived rendezvous record and lookup codecs; Rust Kademlia XOR routing-table core with bounded buckets and closest-peer selection.
+- [x] Signed simultaneous-open UDP probes and direct Noise XX handshake on the punched socket, with trusted static-key pinning.
+- [x] Reliable ordered Noise-encrypted UDP application frames, retransmission, encrypted acknowledgements and MTU-safe fragmentation.
+- [x] Android conversation adapter and coordinator entry points for signed-candidate UDP connect/accept; Rust UDP transport APIs for Linux.
+- [x] Explicit opt-in NAT-PMP UDP mapping with short leases and deletion; IPv6-first route preference and bounded reconnect backoff.
+- [ ] Multi-hop Kademlia request/response transport, independent bootstrap-peer management and peer liveness/persistence.
+- [ ] IPv6 listener/advertisement, UPnP IGD and PCP, plus mapping lifecycle UX.
+- [ ] Background network-change recovery, route diagnostics and desktop conversation/UI integration; no TURN relay.
 - [x] Shared Rust/Kotlin signed status manifest codec with audience digest and 24-hour expiry validation.
 - [ ] Status payload encryption, recipient key envelopes and contact/group audience distribution.
 - [ ] Encrypted direct status/media distribution, local encrypted storage and expiry cleanup.

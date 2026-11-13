@@ -49,6 +49,7 @@ impl PeerChat {
 
     /// Carries an already MLS-protected group protocol message to one reachable
     /// member. This method does not encrypt group content or verify MLS state.
+    #[allow(dead_code)] // Public adapter retained for the pending MLS group UI integration.
     pub fn send_group_protocol_frame(&self, frame: &GroupProtocolFrame) -> Result<(), String> {
         let payload = frame.encode().map_err(|error| error.to_string())?;
         self.enqueue(AppFrame {

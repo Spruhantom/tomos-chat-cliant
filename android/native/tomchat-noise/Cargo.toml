@@ -11,4 +11,5 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 snow = "=0.10.0"
 jni = "=0.21.1"
-zeroize = "=1.8.1"\nring = "=0.17.14"
+zeroize = "=1.8.1"
+ring = "=0.17.14"

@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothSocket
 import java.io.IOException
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.DatagramSocket
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -65,6 +66,82 @@ class PeerMessagingCoordinator(
             DirectPeerAuthenticator(localSigningIdentity, contact)
         )
         return establish(authenticated, contact, initiator = true)
+    }
+
+    /**
+     * Connect over a signed UDP endpoint after simultaneous-open punching.
+     * Both the signed endpoint candidate and the probe are checked against the
+     * trusted contact before the pinned Noise XX session carries app frames.
+     */
+    @Throws(IOException::class)
+    fun connectUdp(
+        socket: DatagramSocket,
+        candidate: PeerEndpointCandidate,
+        localProbe: HolePunchProbe,
+        nowSeconds: Long,
+        contact: TrustedContact
+    ): PeerConversationSession {
+        validateUdpCandidate(candidate, nowSeconds, contact)
+        val channel = UdpNoisePeerChannel.connectAfterPunch(
+            socket,
+            InetSocketAddress(candidate.address, candidate.port),
+            localProbe,
+            contact.encodedPublicKey,
+            DeviceSignatureCodec.deviceId(contact.encodedPublicKey),
+            { nowSeconds },
+            localNoiseIdentity,
+            contact
+        )
+        return publishSession(contact, channel)
+    }
+
+    /** Responder counterpart for a peer's signed UDP endpoint candidate. */
+    @Throws(IOException::class)
+    fun acceptUdp(
+        socket: DatagramSocket,
+        candidate: PeerEndpointCandidate,
+        localProbe: HolePunchProbe,
+        nowSeconds: Long,
+        contact: TrustedContact,
+        timeoutMs: Int = 30_000
+    ): PeerConversationSession {
+        validateUdpCandidate(candidate, nowSeconds, contact)
+        val channel = UdpNoisePeerChannel.acceptAfterPunch(
+            socket,
+            InetSocketAddress(candidate.address, candidate.port),
+            localProbe,
+            contact.encodedPublicKey,
+            DeviceSignatureCodec.deviceId(contact.encodedPublicKey),
+            { nowSeconds },
+            localNoiseIdentity,
+            contact,
+            timeoutMs
+        )
+        return publishSession(contact, channel)
+    }
+
+    private fun validateUdpCandidate(
+        candidate: PeerEndpointCandidate,
+        nowSeconds: Long,
+        contact: TrustedContact
+    ) {
+        candidate.validateAt(nowSeconds)
+        require(candidate.transport == PeerEndpointCandidate.Transport.UDP) {
+            "The peer candidate is not a UDP endpoint."
+        }
+        require(candidate.verifySignature(
+            contact.encodedPublicKey,
+            DeviceSignatureCodec.deviceId(contact.encodedPublicKey)
+        )) { "The UDP endpoint signature does not match the trusted contact." }
+    }
+
+    private fun publishSession(
+        contact: TrustedContact,
+        channel: EncryptedPeerTransport
+    ): PeerConversationSession {
+        val session = PeerConversationSession(contact.fingerprint, channel, history)
+        sessionRef.getAndSet(session)?.close()
+        return session
     }
 
     /** Accept an RFCOMM connection and run the exact same identity + Noise protocol as TCP. */

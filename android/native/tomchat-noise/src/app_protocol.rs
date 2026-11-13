@@ -105,7 +105,11 @@ impl AppFrame {
         if frame_type == AppFrameType::DeliveryAck && !payload.is_empty() {
             return Err(AppFrameError::InvalidPayload);
         }
-        Ok(Self { frame_type, message_id, payload })
+        Ok(Self {
+            frame_type,
+            message_id,
+            payload,
+        })
     }
 }
 
@@ -117,8 +121,8 @@ mod tests {
         AppFrame {
             frame_type: AppFrameType::Text,
             message_id: [
-                0x9d, 0x5a, 0x4f, 0x2a, 0x0e, 0x54, 0x4f, 0x77,
-                0x8f, 0x5b, 0x8f, 0x39, 0xc0, 0xf5, 0xa0, 0xa1,
+                0x9d, 0x5a, 0x4f, 0x2a, 0x0e, 0x54, 0x4f, 0x77, 0x8f, 0x5b, 0x8f, 0x39, 0xc0, 0xf5,
+                0xa0, 0xa1,
             ],
             payload: b"hello securely".to_vec(),
         }
@@ -133,11 +137,13 @@ mod tests {
     #[test]
     fn matches_android_golden_header_and_payload() {
         let encoded = sample().encode().unwrap();
-        assert_eq!(&encoded[..22], &[
-            1, 1, 0x9d, 0x5a, 0x4f, 0x2a, 0x0e, 0x54, 0x4f, 0x77,
-            0x8f, 0x5b, 0x8f, 0x39, 0xc0, 0xf5, 0xa0, 0xa1,
-            0, 0, 0, 14,
-        ]);
+        assert_eq!(
+            &encoded[..22],
+            &[
+                1, 1, 0x9d, 0x5a, 0x4f, 0x2a, 0x0e, 0x54, 0x4f, 0x77, 0x8f, 0x5b, 0x8f, 0x39, 0xc0,
+                0xf5, 0xa0, 0xa1, 0, 0, 0, 14,
+            ]
+        );
         assert_eq!(&encoded[22..], b"hello securely");
     }
 
@@ -146,7 +152,10 @@ mod tests {
         let encoded = sample().encode().unwrap();
         let mut bad = encoded.clone();
         bad[0] = 2;
-        assert_eq!(AppFrame::decode(&bad), Err(AppFrameError::UnsupportedVersion));
+        assert_eq!(
+            AppFrame::decode(&bad),
+            Err(AppFrameError::UnsupportedVersion)
+        );
         let mut bad = encoded.clone();
         bad[1] = 99;
         assert_eq!(AppFrame::decode(&bad), Err(AppFrameError::UnknownType));
@@ -185,7 +194,10 @@ mod tests {
             payload: vec![],
         };
         assert_eq!(AppFrame::decode(&frame.encode().unwrap()).unwrap(), frame);
-        let invalid = AppFrame { payload: vec![1], ..frame };
+        let invalid = AppFrame {
+            payload: vec![1],
+            ..frame
+        };
         assert_eq!(invalid.encode(), Err(AppFrameError::InvalidPayload));
     }
 }

@@ -1,6 +1,6 @@
 # Internet-wide decentralised peer connectivity
 
-Status: shared candidate codecs and direct TCP dial helpers are implemented on the feature branch for Android and Linux. Peer discovery, NAT traversal and real-world internet validation remain outstanding.
+Status: direct UDP Noise XX, reliable encrypted datagrams, MTU-safe fragmentation and Android conversation integration are implemented on this feature branch. Full multi-hop DHT discovery, UPnP/PCP, background reconnection and physical cross-network validation remain outstanding.
 
 ## Product contract
 
@@ -23,7 +23,15 @@ There is no TURN-style relay fallback. A peer-assisted DHT carries only signed e
 
 ## Implemented protocol foundation
 
-The Rust core now defines a bounded IPv4/IPv6 endpoint-candidate record with a 5-minute maximum lifetime, public-address checks, a nonce and a detached P-256 ECDSA signature in fixed r||s form. The signature covers all endpoint and timing fields and is verified against the trusted contact's P-256 identity key and expected device ID; the Noise X25519 static key is never reused as a signing key. Android has matching Kotlin encoding, decoding, signing and verification, plus a direct TCP connector that validates the candidate before invoking the existing identity/Noise authenticator. Linux Rust can dial a TCP candidate only after signature, device-ID and expiry validation, then completes the existing pinned-key Noise XX handshake. UDP candidates are currently encoded but not connected. These are protocol primitives, not a complete peer-discovery or NAT traversal system.
+The Rust core now defines a bounded IPv4/IPv6 endpoint-candidate record with a 5-minute maximum lifetime, public-address checks, a nonce and a detached P-256 ECDSA signature in fixed r||s form. The signature covers all endpoint and timing fields and is verified against the trusted contact's P-256 identity key and expected device ID; the Noise X25519 static key is never reused as a signing key. Android has matching Kotlin encoding, decoding, signing and verification, plus a direct TCP connector that validates the candidate before invoking the existing identity/Noise authenticator. Linux Rust can dial a TCP candidate only after signature, device-ID and expiry validation, then completes the existing pinned-key Noise XX handshake. UDP candidates can now be signature-checked, punched and connected using the new UDP Noise channel. The transport is a direct peer-to-peer path with no relay fallback. Android now adapts the UDP Noise channel to the shared encrypted conversation interface and exposes coordinator connect/accept entry points, so text, delivery acknowledgements, voice control and group-control frames use the same encrypted app framing over UDP. Linux has the shared Rust UDP channel API; desktop conversation/UI integration and physical-device validation across separate networks remain outstanding.
+
+## New implementation on the NAT-traversal branch
+
+- Rust defines bounded signed rendezvous records (up to eight signed endpoint candidates), authenticated-channel lookup envelopes and a DHT-value format. These records carry endpoint hints only and have a maximum five-minute lifetime.
+- Android has matching lookup and signed UDP probe codecs. The UDP puncher sends bounded simultaneous-open probes and accepts only a peer probe with the expected session ID and trusted device signature. It then hands the same socket to the authenticated Noise XX UDP transport. After a verified probe, Android and Linux now have a Noise XX handshake over the same UDP socket, with the remote static key pinned to the trusted contact. Application datagrams are Noise-encrypted; stop-and-wait sequencing, retransmission and encrypted acknowledgements prevent loss/reordering from desynchronising Noise transport counters. Application frames are split into 1,000-byte encrypted fragments and reassembled after receipt to avoid oversized IP-fragmented UDP datagrams.
+- Rust and Android route policy prefer globally routable IPv6 candidates before IPv4 and expose bounded exponential reconnect delays with jitter.
+- Android and Rust include explicit NAT-PMP UDP mapping support with a maximum ten-minute lease and a deletion operation. It is not enabled automatically; the user must explicitly opt in and choose the gateway.
+- UPnP IGD and PCP are not yet implemented. Rust now includes a bounded 256-bucket Kademlia XOR routing-table core (20 peers per bucket), closest-peer ordering and stable device rendezvous keys. It still needs an actual multi-hop Kademlia request/response engine, liveness probes, persistence and independent bootstrap-peer management.
 
 ## Candidate and rendezvous rules
 
@@ -48,7 +56,7 @@ The Rust core now defines a bounded IPv4/IPv6 endpoint-candidate record with a 5
 
 - Unit and property tests for signatures, expiry, replay, candidate parsing, version negotiation and rate limits.
 - Shared Rust wire vectors consumed by Android and Linux.
-- Integration tests for IPv6 direct, manual endpoint, peer-assisted rendezvous and UDP hole punching.
+- Integration tests for IPv6 direct, manual endpoint, peer-assisted rendezvous and UDP hole punching. Unit tests currently cover wire bounds, signatures, route preference, retry bounds and NAT-PMP lease limits.
 - Network matrix: same LAN, separate public IPv6, home NAT, carrier NAT, symmetric NAT, restrictive firewall, UDP blocked and network switching.
 - Packet review confirms no message payload, status content, media or private key reaches rendezvous peers.
 - Physical Android/Linux devices exchange bidirectional Noise-encrypted messages over different internet connections.

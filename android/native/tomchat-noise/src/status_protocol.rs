@@ -154,8 +154,16 @@ impl StatusManifest {
         let mut signature = [0; SIGNATURE_LEN];
         signature.copy_from_slice(&bytes[121..185]);
         let value = Self {
-            status_id, author_device_id, created_at, expires_at, audience,
-            audience_digest, content_type, ciphertext_len, ciphertext_digest, signature,
+            status_id,
+            author_device_id,
+            created_at,
+            expires_at,
+            audience,
+            audience_digest,
+            content_type,
+            ciphertext_len,
+            ciphertext_digest,
+            signature,
         };
         value.validate_at(now)?;
         Ok(value)
@@ -172,8 +180,14 @@ impl StatusManifest {
         Ok(())
     }
 
-    pub fn verify_signature(&self, trusted_p256_public_key: &[u8], expected_author_device_id: &[u8; 16]) -> Result<(), StatusError> {
-        if &self.author_device_id != expected_author_device_id { return Err(StatusError::IdentityMismatch); }
+    pub fn verify_signature(
+        &self,
+        trusted_p256_public_key: &[u8],
+        expected_author_device_id: &[u8; 16],
+    ) -> Result<(), StatusError> {
+        if &self.author_device_id != expected_author_device_id {
+            return Err(StatusError::IdentityMismatch);
+        }
         use ring::signature::{UnparsedPublicKey, ECDSA_P256_SHA256_FIXED};
         UnparsedPublicKey::new(&ECDSA_P256_SHA256_FIXED, trusted_p256_public_key)
             .verify(&self.signing_bytes()?, &self.signature)
@@ -181,9 +195,7 @@ impl StatusManifest {
     }
 
     fn validate_shape(&self) -> Result<(), StatusError> {
-        if self.status_id.iter().all(|b| *b == 0)
-            || self.author_device_id.iter().all(|b| *b == 0)
-        {
+        if self.status_id.iter().all(|b| *b == 0) || self.author_device_id.iter().all(|b| *b == 0) {
             return Err(StatusError::InvalidIdentity);
         }
         if self.expires_at.checked_sub(self.created_at) != Some(STATUS_TTL_SECS) {
@@ -191,11 +203,16 @@ impl StatusManifest {
         }
         let audience_is_zero = self.audience_digest.iter().all(|b| *b == 0);
         match self.audience {
-            StatusAudience::AllTrustedContacts if !audience_is_zero => return Err(StatusError::InvalidAudienceDigest),
-            StatusAudience::SelectedContacts | StatusAudience::Group if audience_is_zero => return Err(StatusError::InvalidAudienceDigest),
+            StatusAudience::AllTrustedContacts if !audience_is_zero => {
+                return Err(StatusError::InvalidAudienceDigest)
+            }
+            StatusAudience::SelectedContacts | StatusAudience::Group if audience_is_zero => {
+                return Err(StatusError::InvalidAudienceDigest)
+            }
             _ => {}
         }
-        if self.ciphertext_len == 0 || self.ciphertext_len > MAX_CIPHERTEXT_BYTES
+        if self.ciphertext_len == 0
+            || self.ciphertext_len > MAX_CIPHERTEXT_BYTES
             || self.ciphertext_digest.iter().all(|b| *b == 0)
         {
             return Err(StatusError::InvalidCiphertext);
@@ -245,10 +262,19 @@ mod tests {
     fn rejects_expired_tampered_and_oversized_manifests() {
         let value = sample();
         let mut encoded = value.encode().unwrap();
-        assert_eq!(StatusManifest::decode(&encoded, value.expires_at), Err(StatusError::Expired));
+        assert_eq!(
+            StatusManifest::decode(&encoded, value.expires_at),
+            Err(StatusError::Expired)
+        );
         encoded[0] = 0;
-        assert_eq!(StatusManifest::decode(&encoded, 1_100), Err(StatusError::InvalidMagic));
-        assert_eq!(StatusManifest::decode(&encoded[..encoded.len()-1], 1_100), Err(StatusError::InvalidLength));
+        assert_eq!(
+            StatusManifest::decode(&encoded, 1_100),
+            Err(StatusError::InvalidMagic)
+        );
+        assert_eq!(
+            StatusManifest::decode(&encoded[..encoded.len() - 1], 1_100),
+            Err(StatusError::InvalidLength)
+        );
     }
 
     #[test]
@@ -257,11 +283,19 @@ mod tests {
         use ring::signature::{EcdsaKeyPair, KeyPair, ECDSA_P256_SHA256_FIXED_SIGNING};
         let rng = SystemRandom::new();
         let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &rng).unwrap();
-        let key = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, pkcs8.as_ref(), &rng).unwrap();
+        let key = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, pkcs8.as_ref(), &rng)
+            .unwrap();
         let mut value = sample();
-        value.signature.copy_from_slice(key.sign(&rng, &value.signing_bytes().unwrap()).unwrap().as_ref());
-        value.verify_signature(key.public_key().as_ref(), &value.author_device_id).unwrap();
+        let signing_bytes = value.signing_bytes().unwrap();
+        let signature = key.sign(&rng, &signing_bytes).unwrap();
+        value.signature.copy_from_slice(signature.as_ref());
+        value
+            .verify_signature(key.public_key().as_ref(), &value.author_device_id)
+            .unwrap();
         value.ciphertext_len += 1;
-        assert_eq!(value.verify_signature(key.public_key().as_ref(), &value.author_device_id), Err(StatusError::InvalidSignature));
+        assert_eq!(
+            value.verify_signature(key.public_key().as_ref(), &value.author_device_id),
+            Err(StatusError::InvalidSignature)
+        );
     }
 }

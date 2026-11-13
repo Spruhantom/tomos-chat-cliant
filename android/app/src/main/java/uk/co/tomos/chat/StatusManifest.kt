@@ -54,7 +54,8 @@ data class StatusManifest(
     private fun validateShape() {
         require(statusId.size == 16 && statusId.any { it.toInt() != 0 }) { "Invalid status ID." }
         require(authorDeviceId.size == 16 && authorDeviceId.any { it.toInt() != 0 }) { "Invalid author device ID." }
-        require(createdAtSeconds >= 0 && expiresAtSeconds > createdAtSeconds &&\n            expiresAtSeconds - createdAtSeconds == STATUS_TTL_SECONDS) {
+        require(createdAtSeconds >= 0 && expiresAtSeconds > createdAtSeconds &&
+            expiresAtSeconds - createdAtSeconds == STATUS_TTL_SECONDS) {
             "Status must expire exactly 24 hours after creation."
         }
         require(audienceDigest.size == 32) { "Invalid audience digest." }

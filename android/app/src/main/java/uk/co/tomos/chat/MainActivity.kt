@@ -642,7 +642,8 @@ private fun ChatsScreen(profile: AccountProfile) {
                     is PeerConversationEvent.UnmatchedDeliveryAcknowledgement,
                     PeerConversationEvent.DuplicateMessage,
                     is PeerConversationEvent.VoiceSignalReceived,
-                    is PeerConversationEvent.VoiceFrameReceived -> Unit
+                    is PeerConversationEvent.VoiceFrameReceived,
+                    is PeerConversationEvent.GroupProtocolReceived -> Unit
                 }
                 messages = withContext(Dispatchers.IO) { coordinator?.loadHistory(peer.fingerprint).orEmpty() }
             } catch (error: Exception) {
