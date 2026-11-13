@@ -190,6 +190,15 @@ pub struct RendezvousQuery {
     pub issued_at: u64,
 }
 impl RendezvousQuery {
+    pub fn decode(bytes: &[u8]) -> Result<Self, DiscoveryError> {
+        if bytes.len()!=59 || bytes[..2]!=RV_MAGIC || bytes[2]!=2 { return Err(DiscoveryError::InvalidRecord); }
+        let mut target_device_id=[0;16]; target_device_id.copy_from_slice(&bytes[3..19]);
+        let mut requester_device_id=[0;16]; requester_device_id.copy_from_slice(&bytes[19..35]);
+        let mut nonce=[0;16]; nonce.copy_from_slice(&bytes[35..51]);
+        let issued_at=u64::from_be_bytes(bytes[51..59].try_into().unwrap());
+        let value=Self { target_device_id, requester_device_id, nonce, issued_at };
+        value.encode()?; Ok(value)
+    }
     pub fn encode(&self) -> Result<[u8; 59], DiscoveryError> {
         if self.target_device_id.iter().all(|b| *b == 0)
             || self.requester_device_id.iter().all(|b| *b == 0)
@@ -361,12 +370,13 @@ impl NatPmpClient {
         Ok((u16::from_be_bytes([response[10],response[11]]),u32::from_be_bytes(response[12..16].try_into().unwrap())))
     }
     pub fn delete_udp_mapping(&self, private_port:u16, public_port:u16) -> Result<(),DiscoveryError> {
-        let _=self.map_udp(private_port,public_port,0).or_else(|_| {
-            // A zero lifetime is the protocol's explicit delete request.
-            let mut req=[0u8;12]; req[1]=1; req[4..6].copy_from_slice(&private_port.to_be_bytes());
-            req[6..8].copy_from_slice(&public_port.to_be_bytes());
-            let _=self.exchange(&req,1)?; Ok((public_port,0))
-        })?;
+        if private_port==0 || public_port==0 { return Err(DiscoveryError::NatPmp("Invalid UDP mapping port.")); }
+        let mut req=[0u8;12]; req[1]=1;
+        req[4..6].copy_from_slice(&private_port.to_be_bytes());
+        req[6..8].copy_from_slice(&public_port.to_be_bytes());
+        req[8..12].copy_from_slice(&0u32.to_be_bytes());
+        let response=self.exchange(&req,1)?;
+        if response.len()!=16 { return Err(DiscoveryError::NatPmp("Invalid UDP mapping delete response.")); }
         Ok(())
     }
 }
