@@ -259,7 +259,9 @@ mod tests {
         let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &rng).unwrap();
         let key = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, pkcs8.as_ref(), &rng).unwrap();
         let mut value = sample();
-        value.signature.copy_from_slice(key.sign(&rng, &value.signing_bytes().unwrap()).unwrap().as_ref());
+        let signing_bytes = value.signing_bytes().unwrap();
+        let signature = key.sign(&rng, &signing_bytes).unwrap();
+        value.signature.copy_from_slice(signature.as_ref());
         value.verify_signature(key.public_key().as_ref(), &value.author_device_id).unwrap();
         value.ciphertext_len += 1;
         assert_eq!(value.verify_signature(key.public_key().as_ref(), &value.author_device_id), Err(StatusError::InvalidSignature));
