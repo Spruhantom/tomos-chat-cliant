@@ -26,7 +26,14 @@ jobs:
       - name: Lint shared Noise and peer transport core
         run: cargo clippy --manifest-path android/native/tomchat-noise/Cargo.toml --all-targets -- -D warnings
       - name: Check Rust project
-        run: cargo check --locked
+        run: cargo check
+      - name: Upload resolved Cargo lockfile for diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: resolved-cargo-lock
+          path: Cargo.lock
+          if-no-files-found: error
+
       - name: Run Rust test suite
         run: cargo test --locked
       - name: Run full Rust Clippy checks
