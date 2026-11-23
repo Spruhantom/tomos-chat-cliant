@@ -437,7 +437,7 @@ private fun TomChatApp(
                                 }
                                 FoldPosture.TABLETOP -> Column(Modifier.fillMaxSize()) {
                                     Box(Modifier.weight(1.15f).fillMaxWidth()) {
-                                        DestinationScreen(destination, profile, contactCard)
+                                        DestinationScreen(destination, profile, contactCard, pearBackend, pearIdentityStore)
                                     }
                                     Spacer(Modifier.height(hingeGutter))
                                     FoldCompanionPane(
@@ -446,7 +446,7 @@ private fun TomChatApp(
                                         description = "Use this lower panel to switch between chats, contacts, calls and settings while the main view stays above the hinge."
                                     ) { destination = it }
                                 }
-                                else -> DestinationScreen(destination, profile, contactCard)
+                                else -> DestinationScreen(destination, profile, contactCard, pearBackend, pearIdentityStore)
                             }
                         }
                     }
