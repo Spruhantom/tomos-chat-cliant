@@ -159,7 +159,7 @@ impl Drop for PearConversationMaterial {
 }
 
 fn constant_time_eq(first: &[u8; 32], second: &[u8; 32]) -> bool {
-    first.iter().zip(second).fold(0u8, |diff, (a, b)| diff | (a ^ b)) == 0
+    first.iter().zip(second).fold(0u8, |diff, (a, b)| diff | (*a ^ *b)) == 0
 }
 #[cfg(target_os = "linux")]
 fn hex_encode(bytes: &[u8]) -> String {
