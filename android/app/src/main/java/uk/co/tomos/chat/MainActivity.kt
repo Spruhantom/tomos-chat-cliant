@@ -70,6 +70,7 @@ import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.LocalDensity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -459,7 +460,7 @@ private fun TomChatApp(
 @Composable
 private fun DestinationScreen(destination: Destination, profile: AccountProfile, contactCard: String?, pearBackend: PearP2PBackend, pearIdentityStore: PearTransportIdentityStore) {
     when (destination) {
-        Destination.Chats -> ChatsScreen(profile)
+        Destination.Chats -> PearChatsScreen(profile, pearBackend, pearIdentityStore)
         Destination.Contacts -> ContactsScreen(profile, contactCard, pearBackend, pearIdentityStore)
         Destination.Calls -> CallsScreen()
         Destination.Settings -> SettingsScreen(profile)
@@ -539,6 +540,183 @@ private fun ScreenTitle(title: String, subtitle: String) {
         Text(title, fontSize = 27.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
         Spacer(Modifier.height(4.dp))
         Text(subtitle, fontSize = 12.sp, color = Muted)
+    }
+}
+
+@Composable
+private fun PearChatsScreen(
+    profile: AccountProfile,
+    backend: PearP2PBackend,
+    pearIdentityStore: PearTransportIdentityStore
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val contactStore = remember { TrustedContactStore(context.filesDir) }
+    var trusted by remember { mutableStateOf<List<TrustedContact>>(emptyList()) }
+    var localIdentity by remember { mutableStateOf<PearTransportIdentity?>(null) }
+    var localFingerprint by remember { mutableStateOf<String?>(null) }
+    var selectedContact by remember { mutableStateOf<TrustedContact?>(null) }
+    var activeSession by remember { mutableStateOf<PearConversationSession?>(null) }
+    var messages by remember { mutableStateOf<List<StoredChatMessage>>(emptyList()) }
+    var draft by rememberSaveable { mutableStateOf("") }
+    var loading by remember { mutableStateOf(true) }
+    var sending by remember { mutableStateOf(false) }
+    var errorText by remember { mutableStateOf<String?>(null) }
+    var statusText by remember { mutableStateOf("Starting Pear peer discovery…") }
+
+    LaunchedEffect(context.filesDir) {
+        try {
+            val loaded = withContext(Dispatchers.IO) {
+                Triple(
+                    contactStore.load().filter { it.pearTransportPublicKey != null },
+                    pearIdentityStore.getOrCreate(),
+                    ContactCardCodec.fingerprint(DeviceIdentityStore().getOrCreate().public.encoded)
+                )
+            }
+            trusted = loaded.first
+            localIdentity = loaded.second
+            localFingerprint = loaded.third
+            statusText = "Pear P2P active · messages replicate directly between trusted devices"
+        } catch (error: Exception) {
+            errorText = error.message ?: "Could not prepare Pear messaging."
+            statusText = "Pear messaging unavailable"
+        } finally {
+            loading = false
+        }
+    }
+
+    LaunchedEffect(selectedContact, localIdentity, localFingerprint) {
+        val contact = selectedContact
+        val identity = localIdentity
+        val fingerprint = localFingerprint
+        if (contact == null || identity == null || fingerprint == null) {
+            activeSession = null
+            messages = emptyList()
+            return@LaunchedEffect
+        }
+        val conversation = PearConversationSession(backend, identity, fingerprint, contact)
+        activeSession = conversation
+        try {
+            while (true) {
+                messages = conversation.loadMessages()
+                delay(2_000)
+            }
+        } catch (error: Exception) {
+            errorText = error.message ?: "Could not synchronize this Pear conversation."
+        }
+    }
+
+    val mayMessage = AccountSafetyPolicy.allows(
+        profile.safetyState(), TomChatCapability.MESSAGE_APPROVED_CONTACT
+    )
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 20.dp)) {
+        if (BuildConfig.DEBUG) AdultDebugTestBanner()
+        ScreenTitle("Your chats", "Private messages replicated directly through Pear.")
+        if (loading) {
+            EmptyState("⌑", "Starting Pear", "Preparing your secure transport identity and trusted conversations.")
+            return@Column
+        }
+        if (!mayMessage) {
+            EmptyState("⌑", "Messaging is locked", AccountSafetyPolicy.restrictionReason(profile.safetyState()))
+            return@Column
+        }
+        StatusCard(isConnected = false, connectionText = statusText)
+        if (errorText != null) {
+            Text(errorText!!, color = Color(0xFFFF6B83), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 20.dp))
+        }
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+            Text("TRUSTED PEAR CONTACTS", color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+            if (trusted.isEmpty()) {
+                Text("Add a contact using a signed V3 QR card to enable Pear messaging.", color = Muted, fontSize = 12.sp)
+            }
+            trusted.forEach { contact ->
+                Card(
+                    Modifier.fillMaxWidth().padding(top = 8.dp),
+                    colors = CardDefaults.cardColors(containerColor = Panel),
+                    border = BorderStroke(1.dp, if (selectedContact?.fingerprint == contact.fingerprint) Cyan else Raised)
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(contact.displayName, color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                            Text(contact.fingerprint, color = Muted, fontSize = 9.sp)
+                        }
+                        TextButton(onClick = {
+                            selectedContact = contact
+                            errorText = null
+                        }) { Text(if (selectedContact?.fingerprint == contact.fingerprint) "Selected" else "Open") }
+                    }
+                }
+            }
+        }
+        selectedContact?.let { contact ->
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Text("PEAR CONVERSATION WITH " + contact.displayName.uppercase(), color = Cyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("Messages are encrypted on this device before entering the replicated feed. Delivery can complete when the peer reconnects.", color = Muted, fontSize = 11.sp)
+                Spacer(Modifier.height(10.dp))
+                if (messages.isEmpty()) {
+                    EmptyState("▤", "No messages yet", "Send a message. Pear will replicate the encrypted record directly when both devices are online.")
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(messages, key = { it.id }) { message ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (message.direction == StoredMessageDirection.OUTGOING) Raised else Panel
+                                )
+                            ) {
+                                Column(Modifier.padding(10.dp)) {
+                                    Text(if (message.direction == StoredMessageDirection.OUTGOING) "YOU" else contact.displayName.uppercase(), color = Cyan, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                    Text(message.body, color = TextPrimary, fontSize = 13.sp)
+                                    Text(
+                                        if (message.direction == StoredMessageDirection.OUTGOING) "Saved for peer replication" else "Received from peer feed",
+                                        color = Muted,
+                                        fontSize = 9.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = draft,
+                        onValueChange = { draft = it.take(16_000) },
+                        modifier = Modifier.weight(1f),
+                        label = { Text("Encrypted message") },
+                        enabled = activeSession != null && !sending,
+                        maxLines = 4
+                    )
+                    Button(
+                        enabled = activeSession != null && draft.isNotBlank() && !sending,
+                        onClick = {
+                            val text = draft.trim()
+                            val conversation = activeSession ?: return@Button
+                            sending = true
+                            scope.launch {
+                                try {
+                                    conversation.sendText(text)
+                                    draft = ""
+                                    messages = conversation.loadMessages()
+                                    errorText = null
+                                } catch (error: Exception) {
+                                    errorText = error.message ?: "Could not save Pear message."
+                                } finally {
+                                    sending = false
+                                }
+                            }
+                        }
+                    ) { Text(if (sending) "…" else "Send") }
+                }
+            }
+        }
     }
 }
 
