@@ -104,12 +104,16 @@ The Android Pear client will require Android 10 (API 29) or newer with a
 compatible Kotlin/Gradle toolchain. Android 8/9 will not be supported by the
 Pear-only client. The Linux client will embed Bare Kit's C API behind Rust FFI.
 
-The worker foundation is experimental and is not yet connected to either
-native client. The existing Rust Noise code may remain temporarily during
-implementation, but it is not a planned fallback: the completed cutover will
-remove it and route all P2P traffic through Pear. Do not treat the worker as
-production-ready until host integration, signed identity migration,
-replication, reconnect, and real-device cross-platform tests pass.
+The Android app now embeds Bare Kit, starts the shared worker, and uses a
+versioned length-prefixed IPC bridge; worker packaging and native addon linking
+are part of the Android build. Message discovery and delivery are not yet
+routed through Pear, and Linux host integration remains outstanding. The
+existing Noise code is retained only as temporary migration scaffolding while
+native UI call sites and contact identities are moved. It is not a planned
+fallback: the completed cutover will remove it and route all P2P traffic
+through Pear. Do not treat the worker as production-ready until signed identity
+migration, message replication, reconnect, and real-device cross-platform tests
+pass.
 
 See [the Pear P2P migration plan](docs/pear-p2p-migration.md) for architecture,
 compatibility requirements, protocol details and acceptance gates.
