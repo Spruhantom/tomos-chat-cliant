@@ -19,15 +19,19 @@ data class TrustedContact(
     val displayName: String,
     val encodedPublicKey: ByteArray,
     val fingerprint: String,
-    val noiseStaticPublicKey: ByteArray? = null
+    val noiseStaticPublicKey: ByteArray? = null,
+    val pearTransportPublicKey: ByteArray? = null
 ) {
     override fun equals(other: Any?): Boolean = other is TrustedContact &&
         displayName == other.displayName && encodedPublicKey.contentEquals(other.encodedPublicKey) &&
         fingerprint == other.fingerprint &&
-        ((noiseStaticPublicKey == null && other.noiseStaticPublicKey == null) ||
-            (noiseStaticPublicKey != null && other.noiseStaticPublicKey != null &&
-                noiseStaticPublicKey.contentEquals(other.noiseStaticPublicKey)))
+        sameBytes(noiseStaticPublicKey, other.noiseStaticPublicKey) &&
+        sameBytes(pearTransportPublicKey, other.pearTransportPublicKey)
     override fun hashCode(): Int = 31 * displayName.hashCode() + encodedPublicKey.contentHashCode()
+
+    private fun sameBytes(first: ByteArray?, second: ByteArray?): Boolean =
+        if (first == null || second == null) first == null && second == null
+        else first.contentEquals(second)
 }
 
 class TrustedContactStore(filesDir: File) {
@@ -63,7 +67,7 @@ class TrustedContactStore(filesDir: File) {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey())
             cipher.updateAAD(byteArrayOf(VERSION.toByte()))
-            val encrypted = cipher.doFinal(encodeV2(contacts))
+            val encrypted = cipher.doFinal(encodeV3(contacts))
             val output = ByteArrayOutputStream()
             DataOutputStream(output).use {
                 it.writeInt(VERSION); it.writeInt(cipher.iv.size); it.write(cipher.iv); it.write(encrypted)
@@ -80,7 +84,7 @@ class TrustedContactStore(filesDir: File) {
         }
     }
 
-    private fun encodeV2(contacts: List<TrustedContact>): ByteArray {
+    private fun encodeV3(contacts: List<TrustedContact>): ByteArray {
         val bytes = ByteArrayOutputStream()
         DataOutputStream(bytes).use { out ->
             out.writeInt(contacts.size)
@@ -89,12 +93,17 @@ class TrustedContactStore(filesDir: File) {
                 require(it.encodedPublicKey.size in 1..512)
                 require(ContactCardCodec.fingerprint(it.encodedPublicKey) == it.fingerprint)
                 require(it.noiseStaticPublicKey == null || it.noiseStaticPublicKey.size == 32)
+                require(it.pearTransportPublicKey == null || it.pearTransportPublicKey.size == 32)
+                require(it.pearTransportPublicKey == null || it.noiseStaticPublicKey != null)
                 out.writeUTF(it.displayName)
                 out.writeInt(it.encodedPublicKey.size); out.write(it.encodedPublicKey)
                 out.writeUTF(it.fingerprint)
                 val noiseKey = it.noiseStaticPublicKey
                 out.writeInt(noiseKey?.size ?: -1)
                 if (noiseKey != null) out.write(noiseKey)
+                val pearKey = it.pearTransportPublicKey
+                out.writeInt(pearKey?.size ?: -1)
+                if (pearKey != null) out.write(pearKey)
             }
         }
         return bytes.toByteArray()
@@ -112,7 +121,7 @@ class TrustedContactStore(filesDir: File) {
             val key = ByteArray(size).also(input::readFully)
             val fingerprint = input.readUTF()
             require(ContactCardCodec.fingerprint(key) == fingerprint)
-            val noiseKey = if (version >= VERSION) {
+            val noiseKey = if (version >= 2) {
                 val noiseSize = input.readInt()
                 when (noiseSize) {
                     -1 -> null
@@ -120,7 +129,16 @@ class TrustedContactStore(filesDir: File) {
                     else -> throw IllegalArgumentException("Invalid trusted Noise public key length.")
                 }
             } else null
-            TrustedContact(name, key, fingerprint, noiseKey)
+            val pearKey = if (version >= 3) {
+                val pearSize = input.readInt()
+                when (pearSize) {
+                    -1 -> null
+                    32 -> ByteArray(32).also(input::readFully)
+                    else -> throw IllegalArgumentException("Invalid trusted Pear transport public key length.")
+                }
+            } else null
+            require(pearKey == null || noiseKey != null)
+            TrustedContact(name, key, fingerprint, noiseKey, pearKey)
         }
         require(input.available() == 0)
         require(contacts.map { it.fingerprint }.distinct().size == contacts.size)
