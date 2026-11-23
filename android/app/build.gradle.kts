@@ -83,7 +83,7 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.4.1")
     implementation("androidx.camera:camera-view:1.4.1")
 
-    implementation("com.github.holepunchto.bare-kit-kotlin:bare-kit-kotlin:v0.2.2")
+    implementation("com.github.holepunchto.bare-kit-kotlin:bare-kit-kotlin:v0.2.7")
 
     // WebRTC media is independent of the Pear message transport.
     implementation("io.getstream:stream-webrtc-android:1.3.9")
