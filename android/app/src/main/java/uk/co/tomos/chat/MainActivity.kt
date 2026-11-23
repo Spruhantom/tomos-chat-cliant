@@ -180,7 +180,7 @@ class MainActivity : ComponentActivity() {
                 when {
                     loading -> ProfileStatusScreen("Opening your encrypted account…")
                     storageError != null -> ProfileErrorScreen(storageError!!)
-                    profile != null -> TomChatApp(profile!!, contactCard, foldingFeature, pearBackendStatus)
+                    profile != null -> TomChatApp(profile!!, contactCard, foldingFeature, pearBackendStatus, pearBackend, pearIdentityStore)
                     else -> AccountSetupScreen { newProfile ->
                         scope.launch {
                             try {
@@ -356,7 +356,9 @@ private fun TomChatApp(
     profile: AccountProfile,
     contactCard: String?,
     foldingFeature: FoldingFeature?,
-    pearBackendStatus: String
+    pearBackendStatus: String,
+    pearBackend: PearP2PBackend,
+    pearIdentityStore: PearTransportIdentityStore
 ) {
     var destination by rememberSaveable { mutableStateOf(Destination.Chats) }
     val foldPosture = remember(foldingFeature) { FoldPosture.from(foldingFeature) }
@@ -424,7 +426,7 @@ private fun TomChatApp(
                             when (foldPosture) {
                                 FoldPosture.BOOK -> Row(Modifier.fillMaxSize()) {
                                     Box(Modifier.weight(1.15f).fillMaxHeight()) {
-                                        DestinationScreen(destination, profile, contactCard)
+                                        DestinationScreen(destination, profile, contactCard, pearBackend, pearIdentityStore)
                                     }
                                     Spacer(Modifier.width(hingeGutter))
                                     FoldCompanionPane(
@@ -455,10 +457,10 @@ private fun TomChatApp(
 }
 
 @Composable
-private fun DestinationScreen(destination: Destination, profile: AccountProfile, contactCard: String?) {
+private fun DestinationScreen(destination: Destination, profile: AccountProfile, contactCard: String?, pearBackend: PearP2PBackend, pearIdentityStore: PearTransportIdentityStore) {
     when (destination) {
         Destination.Chats -> ChatsScreen(profile)
-        Destination.Contacts -> ContactsScreen(profile, contactCard)
+        Destination.Contacts -> ContactsScreen(profile, contactCard, pearBackend, pearIdentityStore)
         Destination.Calls -> CallsScreen()
         Destination.Settings -> SettingsScreen(profile)
     }
@@ -869,7 +871,7 @@ private fun StatusCard(isConnected: Boolean, connectionText: String) {
 }
 
 @Composable
-private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
+private fun ContactsScreen(profile: AccountProfile, contactCard: String?, pearBackend: PearP2PBackend, pearIdentityStore: PearTransportIdentityStore) {
     val context = LocalContext.current
     val store = remember { TrustedContactStore(context.filesDir) }
     val scope = rememberCoroutineScope()
@@ -986,6 +988,7 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
                                 try {
                                     val updated = trusted.filterNot { it.fingerprint == card.fingerprint } + TrustedContact(card.displayName, card.encodedPublicKey, card.fingerprint, card.noiseStaticPublicKey, card.pearTransportPublicKey)
                                     withContext(Dispatchers.IO) { store.save(updated) }
+                                    pearBackend.trustContact(withContext(Dispatchers.IO) { pearIdentityStore.getOrCreate() }, updated.last())
                                     trusted = updated; scanned = null; scanError = null
                                 } catch (error: Exception) { scanError = error.message ?: "Could not save this contact." }
                                 finally { saving = false }
@@ -1008,8 +1011,11 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
                         TextButton(onClick = {
                             scope.launch {
                                 val updated = trusted.filterNot { it.fingerprint == contact.fingerprint }
-                                try { withContext(Dispatchers.IO) { store.save(updated) }; trusted = updated }
-                                catch (error: Exception) { scanError = error.message ?: "Could not remove this contact." }
+                                try {
+                                    contact.pearTransportPublicKey?.let { pearBackend.untrustContact(it) }
+                                    withContext(Dispatchers.IO) { store.save(updated) }
+                                    trusted = updated
+                                } catch (error: Exception) { scanError = error.message ?: "Could not remove this contact." }
                             }
                         }) { Text("Remove trust") }
                     }
