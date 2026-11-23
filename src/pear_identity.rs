@@ -70,7 +70,7 @@ impl PearTransportIdentity {
         let salt = hkdf::Salt::new(hkdf::HKDF_SHA256, salt_digest.as_ref());
         let prk = salt.extract(&shared);
         shared.zeroize();
-        let okm = prk.expand(&[CONVERSATION_INFO], &hkdf::HKDF_SHA256).map_err(|_| PearIdentityError::Crypto)?;
+        let okm = prk.expand(&[CONVERSATION_INFO], hkdf::HKDF_SHA256).map_err(|_| PearIdentityError::Crypto)?;
         let mut conversation_key = [0u8; 32];
         okm.fill(&mut conversation_key).map_err(|_| PearIdentityError::Crypto)?;
         let mut topic_input = Vec::with_capacity(TOPIC_PREFIX.len() + 32);
@@ -138,7 +138,7 @@ impl PearTransportIdentity {
         private_key.copy_from_slice(&secret[..32]);
         public_key.copy_from_slice(&secret[32..]);
         secret.zeroize();
-        let derived = MontgomeryPoint::mul_base_clamped(&private_key).to_bytes();
+        let derived = MontgomeryPoint::mul_base_clamped(private_key).to_bytes();
         if !constant_time_eq(&derived, &public_key) {
             private_key.zeroize();
             return Err(PearIdentityError::InvalidKey);
