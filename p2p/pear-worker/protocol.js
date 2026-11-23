@@ -27,7 +27,7 @@ function parseMessage (buffer) {
 
 function frame (type, payload = {}) {
   if (typeof type !== 'string' || !type) throw new Error('Worker message type is required')
-  const encoded = Buffer.from(JSON.stringify({ version: PROTOCOL_VERSION, type, ...payload }))
+  const encoded = Buffer.from(JSON.stringify({ ...payload, version: PROTOCOL_VERSION, type }))
   if (encoded.length > MAX_FRAME_BYTES) throw new Error('TomChat worker frame is too large')
   return encoded
 }
