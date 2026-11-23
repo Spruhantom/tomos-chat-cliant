@@ -220,6 +220,36 @@ impl ContactCard {
         })
     }
 
+
+    /// Create a V3 contact card binding both transport keys to the P-256 identity.
+    pub fn create_pear(
+        display_name: &str,
+        identity: &SigningIdentity,
+        noise_static_public_key: [u8; 32],
+        pear_transport_public_key: [u8; 32],
+    ) -> Result<Self, ContactCardError> {
+        validate_name(display_name)?;
+        let public_key = identity.public_key_der().to_vec();
+        let fingerprint = fingerprint(&public_key);
+        let canonical = canonical(
+            V3,
+            display_name,
+            &public_key,
+            &fingerprint,
+            Some(&noise_static_public_key),
+            Some(&pear_transport_public_key),
+        );
+        let signature = identity.sign(&canonical)?;
+        Ok(Self {
+            display_name: display_name.to_owned(),
+            encoded_public_key: public_key,
+            fingerprint,
+            signature,
+            noise_static_public_key: Some(noise_static_public_key),
+            pear_transport_public_key: Some(pear_transport_public_key),
+        })
+    }
+
     pub fn verify(&self) -> Result<(), ContactCardError> {
         validate_name(&self.display_name)?;
         if self.encoded_public_key.len() != SPKI_P256_PREFIX.len() + 65
@@ -352,6 +382,10 @@ impl ContactCard {
     pub fn is_noise_compatible(&self) -> bool {
         self.noise_static_public_key.is_some() && self.verify().is_ok()
     }
+
+    pub fn is_pear_compatible(&self) -> bool {
+        self.pear_transport_public_key.is_some() && self.verify().is_ok()
+    }
 }
 
 fn validate_name(name: &str) -> Result<(), ContactCardError> {
@@ -454,6 +488,27 @@ mod tests {
             ContactCard::decode(&fields.join(".")),
             Err(ContactCardError::InvalidNoiseKey)
         );
+    }
+
+
+    #[test]
+    fn android_v3_wire_format_round_trips_both_transport_keys() {
+        let identity = SigningIdentity::generate().unwrap();
+        let card = ContactCard::create_pear("TomChat Pear Linux", &identity, [0x2a; 32], [0x3b; 32]).unwrap();
+        let encoded = card.encode().unwrap();
+        assert!(encoded.starts_with("TOMCHAT-CONTACT-V3."));
+        let decoded = ContactCard::decode(&encoded).unwrap();
+        assert_eq!(decoded, card);
+        assert!(decoded.is_pear_compatible());
+    }
+
+    #[test]
+    fn pear_key_tampering_invalidates_v3_signature() {
+        let identity = SigningIdentity::generate().unwrap();
+        let card = ContactCard::create_pear("Alice", &identity, [0x11; 32], [0x22; 32]).unwrap();
+        let mut tampered = card.clone();
+        tampered.pear_transport_public_key = Some([0x33; 32]);
+        assert_eq!(tampered.verify(), Err(ContactCardError::InvalidSignature));
     }
 
     #[test]
