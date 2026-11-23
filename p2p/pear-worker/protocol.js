@@ -39,4 +39,30 @@ function parseFrame (buffer) {
   return parseMessage(buffer.subarray(HEADER_BYTES))
 }
 
-module.exports = { HEADER_BYTES, MAX_FRAME_BYTES, PROTOCOL_VERSION, frame, parseFrame, parseMessage }
+class FrameDecoder {
+  constructor () {
+    this.pending = Buffer.alloc(0)
+  }
+
+  push (chunk) {
+    if (!Buffer.isBuffer(chunk)) throw new Error('TomChat IPC chunks must be buffers')
+    if (chunk.length) this.pending = this.pending.length
+      ? Buffer.concat([this.pending, chunk])
+      : Buffer.from(chunk)
+
+    const messages = []
+    while (this.pending.length >= HEADER_BYTES) {
+      const length = this.pending.readUInt32BE(0)
+      if (length === 0 || length > MAX_FRAME_BYTES) {
+        this.pending = Buffer.alloc(0)
+        throw new Error('Invalid TomChat worker frame length')
+      }
+      if (this.pending.length < HEADER_BYTES + length) break
+      messages.push(parseMessage(this.pending.subarray(HEADER_BYTES, HEADER_BYTES + length)))
+      this.pending = this.pending.subarray(HEADER_BYTES + length)
+    }
+    return messages
+  }
+}
+
+module.exports = { FrameDecoder, HEADER_BYTES, MAX_FRAME_BYTES, PROTOCOL_VERSION, frame, parseFrame, parseMessage }
