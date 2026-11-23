@@ -89,6 +89,22 @@ See [Android build and debug releases](docs/android-debug-test-releases.md) and 
 
 These are prototype implementations, not a security audit. See [architecture](docs/architecture.md), [the E2EE threat model](docs/e2ee-threat-model.md), [the Linux identity contract](docs/linux-peer-identity-and-desktop-migration.md), and [real-world testing](docs/real-world-testing.md).
 
+## Experimental Pear P2P backend
+
+A staged migration to Holepunch's Pear/Bare ecosystem is under development.
+The native Android and Linux interfaces are being retained while a shared
+Bare worker introduces Hyperswarm discovery and Corestore/Hyperbee storage.
+The migration plan, IPC protocol and security gates are documented in
+[docs/pear-p2p-migration.md](docs/pear-p2p-migration.md).
+
+This backend is not wired into either native client yet. The worker requires
+the native host to provide the existing local Noise identity keypair and
+trusted contact keys before discovery starts. It rejects transport keys that
+do not exactly match the trusted contact key list. The existing Rust Noise
+transport remains the active compatibility implementation until host bridges,
+replication semantics and cross-platform tests pass. Do not enable the
+experimental worker for normal messaging yet.
+
 ## Project structure
 
 - `android/app` — Android application and tests.
