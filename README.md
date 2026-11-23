@@ -98,9 +98,10 @@ The migration plan, IPC protocol and security gates are documented in
 [docs/pear-p2p-migration.md](docs/pear-p2p-migration.md).
 
 This backend is not wired into either native client yet. The worker requires
-the native host to provide the existing local Noise identity keypair and
-trusted contact keys before discovery starts. It rejects transport keys that
-do not exactly match the trusted contact key list. The existing Rust Noise
+the native host to provide the existing local Noise identity keypair, verified
+contact keys and pairwise conversation keys before discovery starts. It rejects
+transport keys that do not exactly match the trusted contact key list and keeps
+each contact's replicated store separate. The worker stores ciphertext only. The existing Rust Noise
 transport remains the active compatibility implementation until host bridges,
 replication semantics and cross-platform tests pass. Do not enable the
 experimental worker for normal messaging yet.
