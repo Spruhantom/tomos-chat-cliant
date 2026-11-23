@@ -3,6 +3,7 @@ package uk.co.tomos.chat
 import java.security.KeyFactory
 import java.security.PrivateKey
 import java.security.Signature
+import org.bouncycastle.jce.provider.BouncyCastleProvider
 import java.security.spec.X509EncodedKeySpec
 
 /**
@@ -13,13 +14,14 @@ import java.security.spec.X509EncodedKeySpec
  * Signatures use the standard 64-byte Ed25519 wire representation.
  */
 internal object DeviceSignatureCodec {
+    private val provider = BouncyCastleProvider()
     private val rawPublicKeyPrefix = byteArrayOf(
         0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65,
         0x70, 0x03, 0x21, 0x00
     )
 
     fun sign(message: ByteArray, privateKey: PrivateKey): ByteArray {
-        val signer = Signature.getInstance("Ed25519")
+        val signer = Signature.getInstance("Ed25519", provider)
         signer.initSign(privateKey)
         signer.update(message)
         return signer.sign().also {
@@ -35,7 +37,7 @@ internal object DeviceSignatureCodec {
             else -> return false
         }
         return try {
-            val key = KeyFactory.getInstance("Ed25519")
+            val key = KeyFactory.getInstance("Ed25519", provider)
                 .generatePublic(X509EncodedKeySpec(encoded))
             Signature.getInstance("Ed25519").run {
                 initVerify(key)
