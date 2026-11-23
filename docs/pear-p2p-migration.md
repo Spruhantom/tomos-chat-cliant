@@ -67,12 +67,13 @@ provisioning adapter are not yet implemented.
 Until it is, the new backend is experimental and must not be enabled for
 ordinary messaging.
 
-The old Rust Noise transport is not a fallback target. It may remain in the
-repository temporarily while the Pear host bridges are built, but the final
-Pear-only application must route all P2P discovery, sessions and replication
-through the shared Bare worker. Remove the old transport and its JNI/API
-surface as part of the cutover once the Pear path is implemented and its
-acceptance tests pass; do not ship a dual-backend mode.
+The old Rust Noise transport is not a fallback target. It remains temporarily
+for the existing Android/Linux call paths and is being removed as those paths
+are migrated. The Android chat screen now uses Pear message replication, but
+legacy connection and voice-call code still exists. The final Pear-only app
+must route all P2P discovery, sessions and replication through the shared Bare
+worker and remove the old Noise transport and JNI/API surface; do not ship a
+dual-backend mode.
 
 ## Worker IPC v1
 
@@ -118,10 +119,14 @@ is intentionally versioned so Android and Linux can migrate independently.
 ## Current limitations
 
 - Android now has a Bare Kit Kotlin host bridge, a Bare Pack/Bare Link build
-  script, and app-lifecycle worker startup. The IPC uses a shared 4-byte
-  length-prefixed frame format. It does not yet provision a Pear identity or
-  route conversations through the worker, so end-to-end messaging is not switched.
-- Linux host integration is not yet implemented.
+  script, app-lifecycle worker startup, and a 4-byte length-prefixed IPC codec.
+  It creates a Keystore-wrapped Pear X25519 identity, signs it into V3 contact
+  cards, derives per-contact keys with X25519 + HKDF-SHA256, and routes the
+  Android chat screen through AES-256-GCM ciphertext in the replicated feeds.
+- Linux now creates and stores a separate Pear X25519 identity in Secret
+  Service, derives the same pairwise HKDF material, and reads/writes signed V3
+  contact cards. Its Bare Kit C host and chat UI cutover are still outstanding.
+- Voice calls and other real-time media have not yet been migrated to Pear.
 - The worker cannot start discovery until the native host supplies a valid
   local keypair and verified per-contact conversation keys.
 - The worker has per-contact storage and separate device-writer feeds, but
