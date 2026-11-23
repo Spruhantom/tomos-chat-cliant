@@ -12,6 +12,19 @@ Upstream references:
 - Hyperswarm topic discovery and encrypted transport: https://docs.pears.com/p2p/reference/building-blocks/hyperswarm/
 - Shared worker pattern: https://github.com/holepunchto/hello-pear-worker
 
+## Platform compatibility decision
+
+The current Android app uses Kotlin 2.0.21 and minSdk 26. The current
+Bare Kit 3 Kotlin binding documentation specifies Kotlin 2.3.0 or newer and
+minSdk 29. Integrating that supported binding therefore requires a toolchain
+upgrade and would stop supporting Android 8/9 devices (API 26–28). Do not
+change minSdk or the Android toolchain silently; confirm the support policy
+before wiring the Android host.
+
+For Linux, the existing GTK4/Rust UI should remain native. The Bare Kit C API
+can be embedded behind a small Rust FFI boundary, but native library packaging,
+ABI builds, lifecycle and IPC framing must be validated before enabling it.
+
 ## Target architecture
 
 - Native UI: Android Kotlin/Compose and Linux Rust/GTK4 remain in place.
