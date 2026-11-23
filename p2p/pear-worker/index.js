@@ -206,11 +206,16 @@ async function handle (message) {
       if (!trustedPeers.has(transportKey)) throw new Error('Cannot read an untrusted conversation')
       const conversation = await ensureConversation(transportKey)
       const byId = new Map()
-      for (const bee of [conversation.localBee, conversation.remoteBee]) {
-        for await (const entry of bee.createReadStream({ reverse: true, limit: 500 })) byId.set(entry.key, entry.value)
+      for (const [bee, writerTransportKey] of [
+        [conversation.localBee, localPublicKey.toString('hex')],
+        [conversation.remoteBee, transportKey]
+      ]) {
+        for await (const entry of bee.createReadStream({ reverse: true, limit: 500 })) {
+          byId.set(entry.key, { ...entry.value, writerTransportKey })
+        }
       }
       const result = [...byId.values()].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)).slice(-500)
-      emit('message:list-result', { transportKey, messages: result })
+      emit('message:list-result', { transportKey, requestId: message.requestId, messages: result })
       return
     }
 
