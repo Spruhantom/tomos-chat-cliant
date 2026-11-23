@@ -23,9 +23,14 @@ jobs:
           cache: npm
           cache-dependency-path: p2p/pear-worker/package.json
       - uses: android-actions/setup-android@v3
-      - name: Install Android NDK
+        with:
+          packages: |
+            platform-tools
+            platforms;android-35
+            build-tools;35.0.0
+            ndk;27.2.12479018
+      - name: Configure Android NDK environment
         run: |
-          sdkmanager "ndk;27.2.12479018"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
       - name: Install Rust and Android linker
