@@ -31,9 +31,10 @@ tasks.register<org.gradle.api.tasks.Exec>("buildTomChatNoise") {
 
 val pearWorkerScript = rootProject.file("p2p/pear-worker/build-android.sh")
 val pearWorkerAssets = rootProject.file("android/app/src/main/assets")
-val pearWorkerAddons = rootProject.file("android/app/src/main/jniLibs")
+val pearWorkerAddons = rootProject.file("android/app/build/pear-addons/jniLibs")
 
 tasks.register<org.gradle.api.tasks.Exec>("buildTomChatPear") {
+    dependsOn("buildTomChatNoise")
     group = "build"
     description = "Bundle the shared Pear worker and link its Android native addons."
     inputs.file(pearWorkerScript)
@@ -46,7 +47,6 @@ tasks.register<org.gradle.api.tasks.Exec>("buildTomChatPear") {
 
 tasks.named("preBuild").configure {
     dependsOn("buildTomChatPear")
-    dependsOn("buildTomChatNoise")
 }
 
 android {
