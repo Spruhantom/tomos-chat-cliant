@@ -101,7 +101,7 @@ fn build_contacts(app: &adw::Application) {
     qr_actions.append(&webcam_qr);
 
     let create_confirm = gtk::CheckButton::with_label(
-        "This is a new device. I understand creating a new identity will not recover an existing one."
+        Some("This is a new device. I understand creating a new identity will not recover an existing one.")
     );
     let create_identity = gtk::Button::with_label("Create new device identity");
     let pear_upgrade_available = signing_identity.borrow().is_some()
@@ -113,7 +113,7 @@ fn build_contacts(app: &adw::Application) {
         "Create new device identity"
     });
     create_confirm.set_label(if pear_upgrade_available {
-        "I understand this updates my signed contact QR; contacts must scan it again."
+        Some("I understand this updates my signed contact QR; contacts must scan it again.")
     } else {
         "This is a new device. I understand creating a new identity will not recover an existing one."
     });
