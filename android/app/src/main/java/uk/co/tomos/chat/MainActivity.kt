@@ -127,6 +127,7 @@ class MainActivity : ComponentActivity() {
                 val scope = rememberCoroutineScope()
                 val store = remember { AccountProfileStore(applicationContext.filesDir) }
                 val identityStore = remember { DeviceIdentityStore() }
+                val pearIdentityStore = remember { PearTransportIdentityStore(applicationContext.filesDir) }
                 val pearBackend = remember { PearP2PBackend(applicationContext) }
 
                 LaunchedEffect(pearBackend) {
@@ -156,7 +157,8 @@ class MainActivity : ComponentActivity() {
                             val saved = store.load()
                             val identity = identityStore.getOrCreate()
                             val noiseIdentity = noiseIdentityStore.getOrCreate()
-                            val card = saved?.let { ContactCardCodec.encode(ContactCardCodec.create(it.displayName, identity, noiseIdentity.publicKey)) }
+                            val pearIdentity = pearIdentityStore.getOrCreate()
+                            val card = saved?.let { ContactCardCodec.encode(ContactCardCodec.createPear(it.displayName, identity, noiseIdentity.publicKey, pearIdentity.publicKey)) }
                             saved to card
                         }
                         profile = loaded.first
@@ -178,9 +180,9 @@ class MainActivity : ComponentActivity() {
                                 withContext(Dispatchers.IO) { store.save(newProfile) }
                                 profile = newProfile
                                 val identities = withContext(Dispatchers.IO) {
-                                    identityStore.getOrCreate() to noiseIdentityStore.getOrCreate()
+                                    Triple(identityStore.getOrCreate(), noiseIdentityStore.getOrCreate(), pearIdentityStore.getOrCreate())
                                 }
-                                contactCard = ContactCardCodec.encode(ContactCardCodec.create(newProfile.displayName, identities.first, identities.second.publicKey))
+                                contactCard = ContactCardCodec.encode(ContactCardCodec.createPear(newProfile.displayName, identities.first, identities.second.publicKey, identities.third.publicKey))
                                 storageError = null
                             } catch (error: IOException) {
                                 storageError = error.message ?: "The encrypted account could not be saved."
@@ -700,7 +702,7 @@ private fun ChatsScreen(profile: AccountProfile) {
                     Column(Modifier.padding(12.dp)) {
                         Text(contact.displayName, color = TextPrimary, fontWeight = FontWeight.SemiBold)
                         Text(contact.fingerprint, color = Muted, fontSize = 9.sp)
-                        Text(if (contact.noiseStaticPublicKey != null) "Signed Noise key available" else "Legacy card — encrypted connection unavailable", color = if (contact.noiseStaticPublicKey != null) Green else Color(0xFFFFE14D), fontSize = 10.sp)
+                        Text(if (contact.pearTransportPublicKey != null) "Pear transport key available" else "Update contact card for Pear", color = if (contact.pearTransportPublicKey != null) Green else Color(0xFFFFE14D), fontSize = 10.sp)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = {
                                 session?.close(); session = null
@@ -922,22 +924,37 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
                 if (savedKey == null || presentedKey == null) savedKey == null && presentedKey == null
                 else savedKey.contentEquals(presentedKey)
             } == true
-            val alreadyTrusted = trustedMatch != null && sameNoiseKey
+            val samePearKey = trustedMatch?.let { existing ->
+                val savedKey = existing.pearTransportPublicKey
+                val presentedKey = card.pearTransportPublicKey
+                if (savedKey == null || presentedKey == null) savedKey == null && presentedKey == null
+                else savedKey.contentEquals(presentedKey)
+            } == true
+            val alreadyTrusted = trustedMatch != null && sameNoiseKey && samePearKey && card.pearTransportPublicKey != null
             val noiseKeyChanged = trustedMatch?.noiseStaticPublicKey != null &&
                 card.noiseStaticPublicKey != null && !sameNoiseKey
             val noiseKeyDowngrade = trustedMatch?.noiseStaticPublicKey != null && card.noiseStaticPublicKey == null
+            val pearKeyChanged = trustedMatch?.pearTransportPublicKey != null &&
+                card.pearTransportPublicKey != null && !samePearKey
+            val pearKeyDowngrade = trustedMatch?.pearTransportPublicKey != null && card.pearTransportPublicKey == null
             val hasNoiseBinding = card.noiseStaticPublicKey != null
+            val hasPearBinding = card.pearTransportPublicKey != null
             Card(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), colors = CardDefaults.cardColors(containerColor = Panel), border = BorderStroke(1.dp, Cyan)) {
                 Column(Modifier.padding(16.dp)) {
                     Text("VERIFY CONTACT", color = Cyan, fontWeight = FontWeight.Bold)
                     Text(card.displayName, color = TextPrimary, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                     Text("Fingerprint", color = Muted, fontSize = 11.sp)
                     Text(card.fingerprint, color = TextPrimary, fontSize = 12.sp)
-                    Text("The P-256 identity signature covers the Noise X25519 key. Compare the identity fingerprint with the other person through a separate trusted channel. A valid signature does not prove the person's real-world identity.", color = Muted, fontSize = 12.sp)
+                    Text("The P-256 identity signature covers the Noise and Pear X25519 transport keys. Compare the identity fingerprint with the other person through a separate trusted channel. A valid signature does not prove the person's real-world identity.", color = Muted, fontSize = 12.sp)
                     if (!hasNoiseBinding) {
                         Text("This is a legacy contact card without a signed Noise key. It cannot be trusted for encrypted sessions; ask the contact to update TomChat and share a new QR code.", color = Color(0xFFFFE14D), fontSize = 12.sp)
                     } else {
                         Text("Noise static key is cryptographically bound to this identity.", color = Green, fontSize = 10.sp)
+                    }
+                    if (!hasPearBinding) {
+                        Text("This card has no Pear transport key. Ask the contact to update TomChat and share a new V3 QR code before using Pear messaging.", color = Color(0xFFFFE14D), fontSize = 12.sp)
+                    } else {
+                        Text("Pear transport key is cryptographically bound to this identity.", color = Green, fontSize = 10.sp)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = fingerprintCompared, onCheckedChange = { fingerprintCompared = it })
@@ -951,17 +968,22 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
                         } else if (noiseKeyDowngrade) {
                             Text("WARNING: this card omits the Noise key previously bound to this identity. It cannot replace the trusted card.", color = Color(0xFFFFE14D), fontSize = 12.sp)
                         }
-                        Button(enabled = fingerprintCompared && hasNoiseBinding && !saving, onClick = {
+                        if (pearKeyChanged) {
+                            Text("WARNING: this contact has presented a different Pear transport key. Re-verify the identity fingerprint independently before approving it.", color = Color(0xFFFFC857), fontSize = 12.sp)
+                        } else if (pearKeyDowngrade) {
+                            Text("WARNING: this card omits the Pear key previously bound to this identity. It cannot replace the trusted card.", color = Color(0xFFFFC857), fontSize = 12.sp)
+                        }
+                        Button(enabled = fingerprintCompared && hasNoiseBinding && hasPearBinding && !saving, onClick = {
                             saving = true
                             scope.launch {
                                 try {
-                                    val updated = trusted.filterNot { it.fingerprint == card.fingerprint } + TrustedContact(card.displayName, card.encodedPublicKey, card.fingerprint, card.noiseStaticPublicKey)
+                                    val updated = trusted.filterNot { it.fingerprint == card.fingerprint } + TrustedContact(card.displayName, card.encodedPublicKey, card.fingerprint, card.noiseStaticPublicKey, card.pearTransportPublicKey)
                                     withContext(Dispatchers.IO) { store.save(updated) }
                                     trusted = updated; scanned = null; scanError = null
                                 } catch (error: Exception) { scanError = error.message ?: "Could not save this contact." }
                                 finally { saving = false }
                             }
-                        }, modifier = Modifier.fillMaxWidth()) { Text(if (saving) "Saving…" else if (noiseKeyChanged) "Approve changed Noise key" else "Trust and save contact") }
+                        }, modifier = Modifier.fillMaxWidth()) { Text(if (saving) "Saving…" else if (pearKeyChanged) "Approve changed Pear key" else if (noiseKeyChanged) "Approve changed Noise key" else "Trust and save contact") }
                     }
                     TextButton(onClick = { scanned = null; fingerprintCompared = false }) { Text("Reject contact") }
                 }
@@ -975,7 +997,7 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?) {
                     Column(Modifier.padding(12.dp)) {
                         Text(contact.displayName, color = TextPrimary, fontWeight = FontWeight.SemiBold)
                         Text(contact.fingerprint, color = Muted, fontSize = 10.sp)
-                        Text(if (contact.noiseStaticPublicKey != null) "Noise identity bound" else "Legacy identity — no Noise binding", color = if (contact.noiseStaticPublicKey != null) Green else Color(0xFFFFE14D), fontSize = 10.sp)
+                        Text(if (contact.pearTransportPublicKey != null) "Pear identity bound" else "Pear identity update required", color = if (contact.pearTransportPublicKey != null) Green else Color(0xFFFFE14D), fontSize = 10.sp)
                         TextButton(onClick = {
                             scope.launch {
                                 val updated = trusted.filterNot { it.fingerprint == contact.fingerprint }
@@ -1037,7 +1059,7 @@ private fun SettingsScreen(profile: AccountProfile) {
                 SettingCard("Connection preference", "TomChat automatically tries trusted-device discovery over Wi-Fi, then nearby Bluetooth. Wi-Fi Direct and reachable global IPv6 are still being developed. No relay is used.", "AUTOMATIC")
             }
             item {
-                SettingCard("Identity and security", "P-256 signing identity is bound to a persistent X25519 Noise key. Both private identities are protected by Android Keystore-backed storage; contact cards sign the binding.", "PROTOTYPE")
+                SettingCard("Identity and security", "P-256 signing identity is bound to separate X25519 Noise and Pear transport keys. Private key material is protected by Android Keystore-backed storage; V3 contact cards sign both transport bindings.", "PROTOTYPE")
             }
             item {
                 SettingCard("Backups", "Encrypted local export and encrypted replication to trusted personal devices.", "PLANNED")
