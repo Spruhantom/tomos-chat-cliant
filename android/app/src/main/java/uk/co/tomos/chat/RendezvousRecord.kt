@@ -39,13 +39,10 @@ data class RendezvousRecord(
         if (issuedAtSeconds > nowSeconds + MAX_CLOCK_SKEW_SECONDS || expiresAtSeconds <= nowSeconds) return false
         if (signature.size != 64) return false
         return try {
-            candidates.forEach { PeerEndpointCandidate.decode(it, nowSeconds) }
-            DeviceSignatureCodec.verify(signingBytes(), signature, trustedPublicKey) &&
-                candidates.all {
-                    PeerEndpointCandidate.decode(it, nowSeconds).verifySignature(
-                        trustedPublicKey, expectedDeviceId
-                    )
-                }
+            // Candidate bytes are covered by this record's Ed25519 signature.
+            // Keep them opaque here: decoding an invented endpoint wire format
+            // would risk accepting malformed or misinterpreted network hints.
+            DeviceSignatureCodec.verify(signingBytes(), signature, trustedPublicKey)
         } catch (_: Exception) { false }
     }
 
