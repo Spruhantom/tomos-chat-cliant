@@ -131,6 +131,49 @@ class PearP2PBackend(
         send("swarm:join", JSONObject().put("topic", material.discoveryTopic.toHex()))
     }
 
+    suspend fun appendMessage(
+        transportPublicKey: ByteArray,
+        messageId: String,
+        ciphertext: String,
+        senderFingerprint: String,
+        createdAt: Long
+    ) {
+        require(transportPublicKey.size == 32)
+        send("message:append", JSONObject()
+            .put("transportKey", transportPublicKey.toHex())
+            .put("id", messageId)
+            .put("ciphertext", ciphertext)
+            .put("senderFingerprint", senderFingerprint)
+            .put("createdAt", createdAt))
+        withTimeout(15_000) {
+            events.first {
+                it.optString("type") == "message:stored" && it.optString("id") == messageId ||
+                    it.optString("type") == "backend:error"
+            }.also { event ->
+                check(event.optString("type") == "message:stored") {
+                    event.optString("message", "Pear message could not be stored.")
+                }
+            }
+        }
+    }
+
+    suspend fun listMessages(transportPublicKey: ByteArray): JSONArray {
+        require(transportPublicKey.size == 32)
+        val key = transportPublicKey.toHex()
+        send("message:list", JSONObject().put("transportKey", key))
+        return withTimeout(15_000) {
+            events.first {
+                it.optString("type") == "message:list-result" && it.optString("transportKey") == key ||
+                    it.optString("type") == "backend:error"
+            }.let { event ->
+                check(event.optString("type") == "message:list-result") {
+                    event.optString("message", "Pear message history could not be loaded.")
+                }
+                event.optJSONArray("messages") ?: JSONArray()
+            }
+        }
+    }
+
     suspend fun untrustContact(transportPublicKey: ByteArray) {
         require(transportPublicKey.size == 32)
         withTimeout(15_000) { identityReady.await() }
