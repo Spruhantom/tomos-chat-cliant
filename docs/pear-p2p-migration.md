@@ -34,9 +34,12 @@ fingerprint, and identity-to-transport-key binding. Unknown, legacy, changed,
 or downgraded identities must be rejected. The worker must never authorize a
 peer merely because it knows a swarm topic.
 
-The first worker foundation emits peer:offer; it requires an explicit
-peer:authorize from the native host before attaching Corestore replication.
-The host-to-worker identity verification adapter is not yet implemented.
+The worker receives the local X25519 keypair and trusted remote Noise public
+keys from the native host. It configures Hyperswarm with the local keypair and
+only attaches Corestore replication when the remote Hyperswarm Noise public key
+exactly matches a trusted contact card's signed Noise key. This is a useful
+identity-binding seam, but the native host provisioning and verification
+adapter is not yet implemented.
 Until it is, the new backend is experimental and must not be enabled for
 ordinary messaging.
 
@@ -56,8 +59,8 @@ accepts:
 - message:list — return the local indexed message history.
 - backend:close — clean shutdown.
 
-Worker events include backend:ready, peer:offer, peer:authorized,
-peer:rejected, message:stored, message:list-result, and backend:error.
+Worker events include backend:ready, identity:configured, peer:authorized,
+peer:rejected, peer:closed, message:stored, message:list-result, and backend:error.
 
 Frames are capped at 64 KiB; message bodies are capped at 16 KiB. The protocol
 is intentionally versioned so Android and Linux can migrate independently.
