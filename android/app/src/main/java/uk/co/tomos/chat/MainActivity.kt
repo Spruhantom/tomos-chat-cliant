@@ -988,8 +988,15 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?, pearBa
                                 try {
                                     val updated = trusted.filterNot { it.fingerprint == card.fingerprint } + TrustedContact(card.displayName, card.encodedPublicKey, card.fingerprint, card.noiseStaticPublicKey, card.pearTransportPublicKey)
                                     withContext(Dispatchers.IO) { store.save(updated) }
-                                    pearBackend.trustContact(withContext(Dispatchers.IO) { pearIdentityStore.getOrCreate() }, updated.last())
-                                    trusted = updated; scanned = null; scanError = null
+                                    trusted = updated
+                                    scanned = null
+                                    scanError = null
+                                    try {
+                                        val pearIdentity = withContext(Dispatchers.IO) { pearIdentityStore.getOrCreate() }
+                                        pearBackend.trustContact(pearIdentity, updated.last())
+                                    } catch (error: Exception) {
+                                        scanError = "Contact saved locally. Pear discovery will retry next time TomChat starts: ${error.message ?: "worker not ready"}"
+                                    }
                                 } catch (error: Exception) { scanError = error.message ?: "Could not save this contact." }
                                 finally { saving = false }
                             }
@@ -1012,9 +1019,11 @@ private fun ContactsScreen(profile: AccountProfile, contactCard: String?, pearBa
                             scope.launch {
                                 val updated = trusted.filterNot { it.fingerprint == contact.fingerprint }
                                 try {
-                                    contact.pearTransportPublicKey?.let { pearBackend.untrustContact(it) }
                                     withContext(Dispatchers.IO) { store.save(updated) }
                                     trusted = updated
+                                    contact.pearTransportPublicKey?.let {
+                                        runCatching { pearBackend.untrustContact(it) }
+                                    }
                                 } catch (error: Exception) { scanError = error.message ?: "Could not remove this contact." }
                             }
                         }) { Text("Remove trust") }
