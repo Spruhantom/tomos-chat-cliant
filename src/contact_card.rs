@@ -1,7 +1,7 @@
 //! Android-compatible signed TomChat contact cards.
 //!
-//! V2 signs the Noise X25519 public key together with the P-256 identity.
-//! V1 remains importable for migration but cannot authenticate a Noise peer.
+//! V3 signs both Noise and Pear X25519 transport keys with the P-256 identity.
+//! V1/V2 remain importable for migration but cannot authorize Pear peers.
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use ring::rand::SystemRandom;
@@ -14,6 +14,7 @@ use zeroize::Zeroize;
 
 const V1: &str = "TOMCHAT-CONTACT-V1";
 const V2: &str = "TOMCHAT-CONTACT-V2";
+const V3: &str = "TOMCHAT-CONTACT-V3";
 const SPKI_P256_PREFIX: &[u8] = &[
     0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08, 0x2a,
     0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00,
@@ -26,6 +27,7 @@ pub enum ContactCardError {
     InvalidPublicKey,
     InvalidFingerprint,
     InvalidNoiseKey,
+    InvalidPearKey,
     InvalidSignature,
     KeyStore(String),
     Crypto,
@@ -40,6 +42,7 @@ impl fmt::Display for ContactCardError {
                 f.write_str("Contact fingerprint does not match its public key.")
             }
             Self::InvalidNoiseKey => f.write_str("Contact Noise key must be exactly 32 bytes."),
+            Self::InvalidPearKey => f.write_str("Contact Pear transport key must be exactly 32 bytes."),
             Self::InvalidSignature => f.write_str("Contact card signature verification failed."),
             Self::KeyStore(message) => write!(f, "Secure identity storage failed: {message}"),
             Self::Crypto => f.write_str("Contact identity cryptographic operation failed."),
@@ -186,6 +189,8 @@ pub struct ContactCard {
     pub signature: Vec<u8>,
     /// None means a legacy V1 card; V1 must never be trusted for Noise sessions.
     pub noise_static_public_key: Option<[u8; 32]>,
+    /// V3 Pear/Hyperswarm transport identity, signed by the P-256 identity.
+    pub pear_transport_public_key: Option<[u8; 32]>,
 }
 impl ContactCard {
     pub fn create(
@@ -202,6 +207,7 @@ impl ContactCard {
             &public_key,
             &fingerprint,
             Some(&noise_static_public_key),
+            None,
         );
         let signature = identity.sign(&canonical)?;
         Ok(Self {
@@ -210,6 +216,7 @@ impl ContactCard {
             fingerprint,
             signature,
             noise_static_public_key: Some(noise_static_public_key),
+            pear_transport_public_key: None,
         })
     }
 
@@ -224,9 +231,14 @@ impl ContactCard {
         if fingerprint(&self.encoded_public_key) != self.fingerprint {
             return Err(ContactCardError::InvalidFingerprint);
         }
-        let (prefix, noise_key) = match self.noise_static_public_key.as_ref() {
-            Some(key) => (V2, Some(key)),
-            None => (V1, None),
+        let (prefix, noise_key, pear_key) = match (
+            self.noise_static_public_key.as_ref(),
+            self.pear_transport_public_key.as_ref(),
+        ) {
+            (Some(noise), Some(pear)) => (V3, Some(noise), Some(pear)),
+            (Some(noise), None) => (V2, Some(noise), None),
+            (None, None) => (V1, None, None),
+            (None, Some(_)) => return Err(ContactCardError::InvalidFormat),
         };
         let message = canonical(
             prefix,
@@ -234,6 +246,7 @@ impl ContactCard {
             &self.encoded_public_key,
             &self.fingerprint,
             noise_key,
+            pear_key,
         );
         let sec1 = &self.encoded_public_key[SPKI_P256_PREFIX.len()..];
         UnparsedPublicKey::new(&ECDSA_P256_SHA256_ASN1, sec1)
@@ -245,7 +258,9 @@ impl ContactCard {
     pub fn encode(&self) -> Result<String, ContactCardError> {
         self.verify()?;
         let mut fields = vec![
-            if self.noise_static_public_key.is_some() {
+            if self.pear_transport_public_key.is_some() {
+                V3
+            } else if self.noise_static_public_key.is_some() {
                 V2
             } else {
                 V1
@@ -257,6 +272,9 @@ impl ContactCard {
         ];
         if let Some(noise) = self.noise_static_public_key.as_ref() {
             fields.push(b64(noise));
+        }
+        if let Some(pear) = self.pear_transport_public_key.as_ref() {
+            fields.push(b64(pear));
         }
         fields.push(b64(&self.signature));
         Ok(fields.join("."))
@@ -278,6 +296,7 @@ impl ContactCard {
                         fingerprint: fields[3].to_owned(),
                         signature: unb64(fields[4])?,
                         noise_static_public_key: None,
+                        pear_transport_public_key: None,
                     },
                     5,
                 )
@@ -295,8 +314,30 @@ impl ContactCard {
                         fingerprint: fields[3].to_owned(),
                         signature: unb64(fields[5])?,
                         noise_static_public_key: Some(noise),
+                        pear_transport_public_key: None,
                     },
                     6,
+                )
+            }
+            Some(V3) if fields.len() == 7 => {
+                let name = String::from_utf8(unb64(fields[1])?)
+                    .map_err(|_| ContactCardError::InvalidName)?;
+                let noise: [u8; 32] = unb64(fields[4])?
+                    .try_into()
+                    .map_err(|_| ContactCardError::InvalidNoiseKey)?;
+                let pear: [u8; 32] = unb64(fields[5])?
+                    .try_into()
+                    .map_err(|_| ContactCardError::InvalidPearKey)?;
+                (
+                    Self {
+                        display_name: name,
+                        encoded_public_key: unb64(fields[2])?,
+                        fingerprint: fields[3].to_owned(),
+                        signature: unb64(fields[6])?,
+                        noise_static_public_key: Some(noise),
+                        pear_transport_public_key: Some(pear),
+                    },
+                    7,
                 )
             }
             _ => return Err(ContactCardError::InvalidFormat),
@@ -329,6 +370,7 @@ fn canonical(
     public: &[u8],
     fingerprint: &str,
     noise: Option<&[u8; 32]>,
+    pear: Option<&[u8; 32]>,
 ) -> Vec<u8> {
     let mut fields = vec![
         prefix.to_owned(),
@@ -337,6 +379,9 @@ fn canonical(
         fingerprint.to_owned(),
     ];
     if let Some(key) = noise {
+        fields.push(b64(key));
+    }
+    if let Some(key) = pear {
         fields.push(b64(key));
     }
     fields.join(".").into_bytes()
