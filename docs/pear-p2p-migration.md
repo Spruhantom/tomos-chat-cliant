@@ -4,7 +4,10 @@
 
 TomChat will adopt a shared Bare worker with Holepunch P2P building blocks while
 keeping its native Android (Kotlin/Compose) and Linux (Rust/GTK4) interfaces.
-This is a staged migration, not a Pear desktop-shell rewrite.
+This is a backend replacement, not a Pear desktop-shell rewrite. Pear's current
+desktop platform API is not the mobile embedding API: TomChat will embed the
+Bare runtime and run the shared Pear-end/P2P worker inside each native client.
+The native Android and Linux user interfaces remain.
 
 Upstream references:
 
@@ -14,16 +17,19 @@ Upstream references:
 
 ## Platform compatibility decision
 
-The current Android app uses Kotlin 2.0.21 and minSdk 26. The current
-Bare Kit 3 Kotlin binding documentation specifies Kotlin 2.3.0 or newer and
-minSdk 29. Integrating that supported binding therefore requires a toolchain
-upgrade and would stop supporting Android 8/9 devices (API 26–28). Do not
-change minSdk or the Android toolchain silently; confirm the support policy
-before wiring the Android host.
+TomChat is moving to Pear/Bare as its only P2P backend. There will be no
+permanent Rust Noise fallback or split backend by Android version.
 
-For Linux, the existing GTK4/Rust UI should remain native. The Bare Kit C API
-can be embedded behind a small Rust FFI boundary, but native library packaging,
-ABI builds, lifecycle and IPC framing must be validated before enabling it.
+The current Android app uses Kotlin 2.0.21 and minSdk 26. The current
+Bare Kit 3 Kotlin binding requires Kotlin 2.3.0 or newer and minSdk 29.
+Therefore the Pear-backed Android client will target API 29 (Android 10) or
+newer and its Gradle/Kotlin toolchain must be upgraded to a compatible
+combination before adding the binding. Android 8/9 (API 26–28) will no longer
+be supported by the Pear-only Android client.
+
+For Linux, the existing GTK4/Rust UI remains native. Embed the Bare Kit C API
+behind a small Rust FFI boundary. Native library packaging, ABI builds,
+lifecycle and IPC framing must be validated as part of the host integration.
 
 ## Target architecture
 
@@ -47,10 +53,14 @@ and identity-to-transport-key binding. Unknown, legacy, changed, or downgraded
 identities are rejected and banned from reconnecting until explicitly trusted.
 The worker never authorizes a peer merely because it knows a swarm topic.
 
-The worker receives the local X25519 keypair and a per-contact conversation
-key from the native host. It configures Hyperswarm with the local keypair and
-only attaches replication when the remote Hyperswarm Noise public key exactly
-matches a trusted contact card's signed Noise key. Each contact has an isolated
+The worker receives a dedicated local Pear/Hyperswarm transport identity and
+a per-contact conversation key from the native host. It configures Hyperswarm
+with that identity and only attaches replication when the remote Hyperswarm
+public key exactly matches the transport identity bound to a trusted contact
+card. Existing X25519 contact identity material must be bound to the new
+transport identity through a reviewed, signed migration/update to the contact
+trust record; do not assume an existing Noise static key is automatically a
+Hyperswarm identity. Each contact has an isolated
 Corestore directory and a pair of deterministically derived device-writer
 Hypercores, preventing one contact's replication stream from receiving another
 contact's conversation. The conversation key must be derived by the native host
@@ -59,10 +69,12 @@ provisioning adapter are not yet implemented.
 Until it is, the new backend is experimental and must not be enabled for
 ordinary messaging.
 
-The existing Noise transport remains available as a compatibility path during
-migration. Do not remove it until Android-to-Android and Android-to-Linux
-interoperability, key-mismatch rejection, message durability, reconnect, and
-network-transition tests pass.
+The old Rust Noise transport is not a fallback target. It may remain in the
+repository temporarily while the Pear host bridges are built, but the final
+Pear-only application must route all P2P discovery, sessions and replication
+through the shared Bare worker. Remove the old transport and its JNI/API
+surface as part of the cutover once the Pear path is implemented and its
+acceptance tests pass; do not ship a dual-backend mode.
 
 ## Worker IPC v1
 
@@ -85,30 +97,34 @@ is intentionally versioned so Android and Linux can migrate independently.
 
 ## Implementation phases
 
-1. Foundation (this change): add the Bare worker package, IPC framing,
-   Hyperswarm identity binding, per-contact Corestore isolation, device-writer
-   Hypercore feeds, Hyperbee message indexes, and protocol tests.
-2. Android host: derive per-contact conversation keys from the existing
-   X25519 identities with domain-separated HKDF, bundle the worker with Bare
-   Pack, embed/start it with BareKit, and bridge framed IPC from Kotlin.
-3. Linux host: bundle/run the same worker with Bare and bridge the same IPC
-   protocol from Rust.
-4. Identity binding: implement a reviewed host adapter that validates
-   transport keys against signed TomChat contacts and derives per-contact
-   conversation keys before authorizing replication.
-5. Replication semantics: test the two device-writer feeds, message ordering,
-   deletion/tombstone rules, duplicate handling, and bounded storage.
-6. Migration and retirement: dual-run in debug builds, run cross-platform
-   integration tests, then remove the old direct TCP/UDP transport only after
-   parity and security gates pass.
+1. Foundation (this change): add the shared Bare worker, IPC framing,
+   Hyperswarm discovery/transport, per-contact Corestore isolation,
+   device-writer Hypercore feeds, Hyperbee indexes and protocol tests.
+2. Android host: upgrade the Android toolchain, set minSdk 29, bundle the
+   worker and its linked native addons with Bare Pack, embed/start it with
+   Bare Kit Kotlin, and bridge framed IPC from Kotlin.
+3. Linux host: bundle/run the same worker with Bare Kit's C API and bridge
+   the same IPC protocol from Rust.
+4. Identity migration: define and implement signed binding of each trusted
+   TomChat contact to its new Pear/Hyperswarm transport identity. Derive
+   per-contact encryption keys with domain-separated HKDF and fail closed
+   on unknown, changed or downgraded identities.
+5. Replication semantics: test device-writer feeds, message ordering,
+   deletion/tombstone rules, duplicate handling, reconnect and bounded storage.
+6. Cutover: route both native clients exclusively through Pear, remove the old
+   Noise transport and JNI/API surface, and pass Android-to-Android and
+   Android-to-Linux acceptance tests before release.
 
 ## Current limitations
 
-- This foundation is not yet wired into either native app.
+- This foundation is not yet wired into either native app; Pear is the target
+  sole backend, not an enabled production fallback today.
 - The worker cannot start discovery until the native host supplies a valid
   local keypair and verified per-contact conversation keys.
 - The worker has per-contact storage and separate device-writer feeds, but
   end-to-end replication, conflict handling, and history reconciliation have
   not yet been integration-tested.
+- The Android host must move to minSdk 29 or newer for the current Bare Kit
+  Kotlin binding.
 - No production readiness, real-device compatibility, or security audit is
   claimed.
