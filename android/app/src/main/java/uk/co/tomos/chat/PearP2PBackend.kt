@@ -94,6 +94,8 @@ class PearP2PBackend(
      * Configure the worker with the device's Keystore-backed transport identity
      * and only contacts whose signed cards contain a Pear transport key.
      */
+    suspend fun awaitIdentityReady() = withTimeout(15_000) { identityReady.await() }
+
     suspend fun configureIdentity(identity: PearTransportIdentity, contacts: List<TrustedContact>) {
         check(started.get()) { "Start the Pear worker before configuring its identity." }
         val trustedPeers = JSONArray()
