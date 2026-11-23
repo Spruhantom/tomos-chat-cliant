@@ -36,7 +36,7 @@ impl PearTransportIdentity {
     pub fn generate() -> Result<Self, PearIdentityError> {
         let mut private_key = [0u8; 32];
         SystemRandom::new().fill(&mut private_key).map_err(|_| PearIdentityError::Crypto)?;
-        let public_key = MontgomeryPoint::mul_base_clamped(&private_key).to_bytes();
+        let public_key = MontgomeryPoint::mul_base_clamped(private_key).to_bytes();
         Ok(Self { private_key, public_key })
     }
 
@@ -47,11 +47,11 @@ impl PearTransportIdentity {
     }
 
     pub fn derive(&self, remote_public_key: &[u8; 32]) -> Result<PearConversationMaterial, PearIdentityError> {
-        let derived_public = MontgomeryPoint::mul_base_clamped(&self.private_key).to_bytes();
+        let derived_public = MontgomeryPoint::mul_base_clamped(self.private_key).to_bytes();
         if !constant_time_eq(&derived_public, &self.public_key) || self.public_key == *remote_public_key {
             return Err(PearIdentityError::InvalidKey);
         }
-        let mut shared = MontgomeryPoint(*remote_public_key).mul_clamped(&self.private_key).to_bytes();
+        let mut shared = MontgomeryPoint(*remote_public_key).mul_clamped(self.private_key).to_bytes();
         if shared.iter().all(|byte| *byte == 0) {
             shared.zeroize();
             return Err(PearIdentityError::InvalidKey);
