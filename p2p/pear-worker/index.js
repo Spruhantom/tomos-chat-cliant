@@ -1,8 +1,8 @@
 'use strict'
 
-// Bare worker shared by the Android and Linux native hosts. The host remains
-// responsible for binding a discovered transport key to TomChat's signed
-// contact identity before it sends peer:authorize.
+// Shared Bare worker. The native host supplies the local X25519 keypair and
+// the set of already-verified TomChat contact keys at startup. Hyperswarm's
+// Noise key is therefore the same key pinned in signed TomChat contact cards.
 
 const Corestore = require('corestore')
 const Hyperbee = require('hyperbee')
@@ -18,18 +18,20 @@ const argv = (index) => Bare.argv[index + (isBareKit ? 0 : 2)]
 const storageDir = argv(0) || storage.persistent()
 const pipe = new FramedStream(Bare.IPC)
 const store = new Corestore(path.join(storageDir, 'tomchat', 'pear-corestore'))
-const swarm = new Hyperswarm()
-const pendingPeers = new Map()
-const authorizedPeers = new Set()
-let messages
+const trustedPeers = new Set()
+let swarm = null
+let messages = null
 let closed = false
 
 function emit (type, payload = {}) {
   if (!closed) pipe.write(frame(type, payload))
 }
 
-function validTopic (value) {
-  return typeof value === 'string' && /^[a-f0-9]{64}$/i.test(value)
+function decodeKey (value, label) {
+  if (typeof value !== 'string' || !/^[a-f0-9]{64}$/i.test(value)) {
+    throw new Error(label + ' must be a 32-byte hexadecimal key')
+  }
+  return Buffer.from(value, 'hex')
 }
 
 async function boot () {
@@ -39,70 +41,89 @@ async function boot () {
     valueEncoding: 'json'
   })
   await messages.ready()
+  emit('backend:ready', {
+    protocolVersion: 1,
+    storage: 'corestore-hyperbee',
+    identityConfigurationRequired: true
+  })
+}
 
+function configureIdentity (message) {
+  if (swarm) throw new Error('TomChat Pear identity is already configured')
+  const publicKey = decodeKey(message.publicKey, 'Local public key')
+  const secretKey = decodeKey(message.secretKey, 'Local secret key')
+  if (!Array.isArray(message.trustedPeers) || message.trustedPeers.length > 10000) {
+    throw new Error('Trusted peer key list is invalid')
+  }
+
+  for (const key of message.trustedPeers) {
+    decodeKey(key, 'Trusted peer key')
+    trustedPeers.add(key.toLowerCase())
+  }
+
+  // The local secret key is passed from platform-secure storage for this
+  // process only; it is never written to Corestore or emitted over IPC.
+  swarm = new Hyperswarm({ keyPair: { publicKey, secretKey } })
   swarm.on('connection', (connection, info) => {
-    const id = Buffer.from(info.publicKey || []).toString('hex')
-    if (!id || id.length !== 64) {
-      connection.destroy(new Error('Peer did not provide a valid transport public key'))
+    const transportKey = Buffer.from(info.publicKey || []).toString('hex')
+    if (!trustedPeers.has(transportKey)) {
+      connection.destroy(new Error('Peer key is not bound to a trusted TomChat contact'))
+      emit('peer:rejected', { transportKey })
       return
     }
 
-    // An encrypted Hyperswarm transport is not TomChat identity verification.
-    // Quarantine the stream until the native host verifies the signed contact
-    // card and Noise identity binding already used by TomChat.
-    pendingPeers.set(id, connection)
-    emit('peer:offer', { transportKey: id })
+    connection.on('error', (error) => emit('peer:error', {
+      transportKey,
+      message: error.message
+    }))
+    connection.on('close', () => emit('peer:closed', { transportKey }))
+    store.replicate(connection)
+    emit('peer:authorized', { transportKey })
   })
-
   swarm.on('error', (error) => emit('backend:error', { message: error.message }))
-  emit('backend:ready', { protocolVersion: 1, storage: 'corestore-hyperbee' })
+  emit('identity:configured', { trustedPeerCount: trustedPeers.size })
 }
 
 async function handle (message) {
   switch (message.type) {
+    case 'identity:configure':
+      configureIdentity(message)
+      return
+
     case 'swarm:join': {
-      if (!validTopic(message.topic)) throw new Error('Topic must be a 32-byte hex value')
-      const discovery = swarm.join(Buffer.from(message.topic, 'hex'), {
-        client: true,
-        server: true
-      })
+      if (!swarm) throw new Error('Configure the TomChat identity before joining a swarm')
+      const topic = decodeKey(message.topic, 'Swarm topic')
+      const discovery = swarm.join(topic, { client: true, server: true })
       await discovery.flushed()
       emit('swarm:joined', { topic: message.topic })
       return
     }
 
-    case 'peer:authorize': {
-      if (typeof message.transportKey !== 'string' || !/^[a-f0-9]{64}$/i.test(message.transportKey)) {
-        throw new Error('Invalid transport key')
-      }
-      const connection = pendingPeers.get(message.transportKey)
-      if (!connection) throw new Error('Peer offer is no longer pending')
-      pendingPeers.delete(message.transportKey)
-      authorizedPeers.add(message.transportKey)
-      connection.on('error', (error) => emit('peer:error', {
-        transportKey: message.transportKey,
-        message: error.message
-      }))
-      store.replicate(connection)
-      emit('peer:authorized', { transportKey: message.transportKey })
+    case 'peer:trust': {
+      decodeKey(message.transportKey, 'Trusted peer key')
+      trustedPeers.add(message.transportKey.toLowerCase())
+      emit('peer:trust-added', { transportKey: message.transportKey.toLowerCase() })
       return
     }
 
-    case 'peer:reject': {
-      const connection = pendingPeers.get(message.transportKey)
-      if (connection) connection.destroy()
-      pendingPeers.delete(message.transportKey)
-      emit('peer:rejected', { transportKey: message.transportKey })
+    case 'peer:untrust': {
+      decodeKey(message.transportKey, 'Peer key')
+      trustedPeers.delete(message.transportKey.toLowerCase())
+      const peer = swarm && swarm.peers.get(message.transportKey.toLowerCase())
+      if (peer) peer.ban(true)
+      emit('peer:trust-removed', { transportKey: message.transportKey.toLowerCase() })
       return
     }
 
     case 'message:append': {
-      if (!authorizedPeers.has(message.transportKey)) {
-        throw new Error('Cannot append a network message before peer identity authorization')
+      if (!swarm || !trustedPeers.has(String(message.transportKey).toLowerCase())) {
+        throw new Error('Cannot append a network message for an untrusted peer')
       }
       if (typeof message.id !== 'string' || message.id.length > 160 ||
           typeof message.body !== 'string' || !message.body.trim() ||
-          Buffer.byteLength(message.body, 'utf8') > 16 * 1024) {
+          Buffer.byteLength(message.body, 'utf8') > 16 * 1024 ||
+          typeof message.senderFingerprint !== 'string' ||
+          typeof message.createdAt !== 'number' || !Number.isFinite(message.createdAt)) {
         throw new Error('Invalid message record')
       }
       const record = {
@@ -146,9 +167,7 @@ pipe.on('data', async (data) => {
 async function shutdown () {
   if (closed) return
   closed = true
-  for (const connection of pendingPeers.values()) connection.destroy()
-  pendingPeers.clear()
-  await swarm.destroy()
+  if (swarm) await swarm.destroy()
   await store.close()
   pipe.end()
 }
