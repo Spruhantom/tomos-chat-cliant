@@ -4,7 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
@@ -31,6 +31,7 @@ class PearP2PBackend(
     private var worklet: Worklet? = null
     private var ipc: Ipc? = null
     private val mutableEvents = MutableSharedFlow<JSONObject>(extraBufferCapacity = 64)
+    private var readerJob: Job? = null
     val events: SharedFlow<JSONObject> = mutableEvents
 
     suspend fun start() = withContext(Dispatchers.IO) {
@@ -42,7 +43,7 @@ class PearP2PBackend(
             ipc = channel
             runtime.start(WORKER_BUNDLE)
 
-            scope.launch {
+            readerJob = scope.launch {
                 channel.data.collect { bytes ->
                     val event = try {
                         JSONObject(bytes.decodeToString())
@@ -78,12 +79,12 @@ class PearP2PBackend(
 
     override fun close() {
         if (!started.compareAndSet(true, false)) return
-        scope.launch {
-            runCatching { ipc?.close() }
-            runCatching { worklet?.close() }
-            ipc = null
-            worklet = null
-        }
+        readerJob?.cancel()
+        readerJob = null
+        runCatching { ipc?.close() }
+        runCatching { worklet?.close() }
+        ipc = null
+        worklet = null
     }
 
     companion object {
