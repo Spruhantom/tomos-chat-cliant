@@ -1,9 +1,9 @@
 'use strict'
 
-// Shared Bare worker. Native hosts supply a local Noise keypair and per-contact
-// conversation keys derived from the existing X25519 identities. The same
-// conversation key on both devices deterministically derives the same pair
-// of device-writer Hypercores, while each device writes only its own feed.
+// Shared Bare worker. Native hosts supply a dedicated Pear/Hyperswarm X25519
+// keypair and per-contact conversation keys derived from signed Pear identities.
+// Both devices derive the same pair of device-writer Hypercores; each device
+// writes only its own feed, and only end-to-end ciphertext enters Hyperbee.
 
 const Corestore = require('corestore')
 const Hyperbee = require('hyperbee')
@@ -186,7 +186,8 @@ async function handle (message) {
           Buffer.byteLength(message.ciphertext, 'utf8') > 24 * 1024 ||
           !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(message.ciphertext) ||
           typeof message.senderFingerprint !== 'string' ||
-          typeof message.createdAt !== 'number' || !Number.isFinite(message.createdAt)) {
+          !/^(?:[A-F0-9]{4} ){15}[A-F0-9]{4}$/.test(message.senderFingerprint) ||
+          typeof message.createdAt !== 'number' || !Number.isSafeInteger(message.createdAt) || message.createdAt < 0) {
         throw new Error('Invalid encrypted message record')
       }
       const conversation = await ensureConversation(transportKey)
@@ -204,6 +205,9 @@ async function handle (message) {
     case 'message:list': {
       const transportKey = decodeKey(message.transportKey, 'Peer key').toString('hex')
       if (!trustedPeers.has(transportKey)) throw new Error('Cannot read an untrusted conversation')
+      if (typeof message.requestId !== 'string' || !/^[0-9a-f-]{36}$/i.test(message.requestId)) {
+        throw new Error('Invalid message history request ID')
+      }
       const conversation = await ensureConversation(transportKey)
       const byId = new Map()
       for (const [bee, writerTransportKey] of [
@@ -211,7 +215,7 @@ async function handle (message) {
         [conversation.remoteBee, transportKey]
       ]) {
         for await (const entry of bee.createReadStream({ reverse: true, limit: 500 })) {
-          byId.set(entry.key, { ...entry.value, writerTransportKey })
+          if (!byId.has(entry.key)) byId.set(entry.key, { ...entry.value, writerTransportKey })
         }
       }
       const result = [...byId.values()].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)).slice(-500)
