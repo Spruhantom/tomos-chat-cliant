@@ -7,6 +7,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -107,6 +109,12 @@ class PearP2PBackend(
             .put("publicKey", identity.publicKey.toHex())
             .put("secretKey", identity.privateKey.toHex())
             .put("trustedPeers", trustedPeers))
+        val acknowledgement = withTimeout(10_000) {
+            events.first { it.optString("type") == "identity:configured" || it.optString("type") == "backend:error" }
+        }
+        check(acknowledgement.optString("type") == "identity:configured") {
+            acknowledgement.optString("message", "Pear identity configuration failed.")
+        }
         identityConfigured = true
         topics.forEach { topic -> send("swarm:join", JSONObject().put("topic", topic)) }
     }
