@@ -112,6 +112,7 @@ class MainActivity : ComponentActivity() {
                 var contactCard by remember { mutableStateOf<String?>(null) }
                 var loading by remember { mutableStateOf(true) }
                 var storageError by remember { mutableStateOf<String?>(null) }
+                var pearBackendStatus by remember { mutableStateOf("Starting Pear P2P runtime…") }
                 var foldingFeature by remember { mutableStateOf<FoldingFeature?>(null) }
                 val windowInfoTracker = remember { WindowInfoTracker.getOrCreate(this@MainActivity) }
 
@@ -126,6 +127,27 @@ class MainActivity : ComponentActivity() {
                 val scope = rememberCoroutineScope()
                 val store = remember { AccountProfileStore(applicationContext.filesDir) }
                 val identityStore = remember { DeviceIdentityStore() }
+                val pearBackend = remember { PearP2PBackend(applicationContext) }
+
+                LaunchedEffect(pearBackend) {
+                    val eventCollector = launch {
+                        pearBackend.events.collect { event ->
+                            when (event.optString("type")) {
+                                "backend:ready" -> pearBackendStatus = "Pear runtime ready · secure identity migration pending"
+                                "backend:error", "backend:fatal" -> pearBackendStatus = "Pear runtime error · ${event.optString("message", "unknown error")}".take(180)
+                            }
+                        }
+                    }
+                    try {
+                        pearBackend.start()
+                    } catch (error: Exception) {
+                        pearBackendStatus = "Pear runtime unavailable · ${error.message ?: "startup failed"}".take(180)
+                    }
+                    eventCollector.join()
+                }
+                DisposableEffect(pearBackend) {
+                    onDispose { pearBackend.close() }
+                }
                 val noiseIdentityStore = remember { NoiseIdentityStore(applicationContext.filesDir) }
 
                 LaunchedEffect(store) {
@@ -149,7 +171,7 @@ class MainActivity : ComponentActivity() {
                 when {
                     loading -> ProfileStatusScreen("Opening your encrypted account…")
                     storageError != null -> ProfileErrorScreen(storageError!!)
-                    profile != null -> TomChatApp(profile!!, contactCard, foldingFeature)
+                    profile != null -> TomChatApp(profile!!, contactCard, foldingFeature, pearBackendStatus)
                     else -> AccountSetupScreen { newProfile ->
                         scope.launch {
                             try {
