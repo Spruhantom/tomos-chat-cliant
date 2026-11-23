@@ -3,6 +3,7 @@ package uk.co.tomos.chat
 import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -36,7 +37,7 @@ class PearP2PBackend(
     private val mutableEvents = MutableSharedFlow<JSONObject>(replay = 1, extraBufferCapacity = 64)
     private val frameDecoder = PearIpcFrameDecoder()
     private var readerJob: Job? = null
-    private var identityConfigured = false
+    private val identityReady = CompletableDeferred<Unit>()
     val events: SharedFlow<JSONObject> = mutableEvents
 
     suspend fun start() = withContext(Dispatchers.IO) {
@@ -115,12 +116,12 @@ class PearP2PBackend(
         check(acknowledgement.optString("type") == "identity:configured") {
             acknowledgement.optString("message", "Pear identity configuration failed.")
         }
-        identityConfigured = true
+        identityReady.complete(Unit)
         topics.forEach { topic -> send("swarm:join", JSONObject().put("topic", topic)) }
     }
 
     suspend fun trustContact(identity: PearTransportIdentity, contact: TrustedContact) {
-        check(identityConfigured) { "Configure the Pear identity before trusting contacts." }
+        withTimeout(15_000) { identityReady.await() }
         val remoteKey = contact.pearTransportPublicKey
             ?: throw IllegalArgumentException("Contact has no signed Pear transport identity; request a V3 contact card.")
         val material = PearKeyDerivation.derive(identity.privateKey, identity.publicKey, remoteKey)
@@ -132,6 +133,7 @@ class PearP2PBackend(
 
     suspend fun untrustContact(transportPublicKey: ByteArray) {
         require(transportPublicKey.size == 32)
+        withTimeout(15_000) { identityReady.await() }
         send("peer:untrust", JSONObject().put("transportKey", transportPublicKey.toHex()))
     }
 
