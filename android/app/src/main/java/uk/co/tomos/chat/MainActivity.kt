@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -576,7 +577,8 @@ private fun PearChatsScreen(
             trusted = loaded.first
             localIdentity = loaded.second
             localFingerprint = loaded.third
-            statusText = "Pear P2P active · messages replicate directly between trusted devices"
+            backend.awaitIdentityReady()
+            statusText = "Pear P2P ready · messages replicate directly between trusted devices"
         } catch (error: Exception) {
             errorText = error.message ?: "Could not prepare Pear messaging."
             statusText = "Pear messaging unavailable"
