@@ -28,13 +28,13 @@ jobs:
         uses: android-actions/setup-android@v3
         with:
           cmdline-tools-version: 12266719
-          packages: 'platform-tools platforms;android-35 build-tools;35.0.0 ndk;27.2.12479018'
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.2.12479018'
           accept-android-sdk-licenses: true
 
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+          targets: aarch64-linux-android,x86_64-linux-android
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
@@ -80,7 +80,7 @@ jobs:
           TMP="$(mktemp -d)"
           trap 'rm -rf "$TMP"' EXIT
           unzip -q "$APK" 'lib/*/libtomchat_noise.so' -d "$TMP"
-          for ABI in arm64-v8a armeabi-v7a x86_64; do
+          for ABI in arm64-v8a x86_64; do
             LIB="$TMP/lib/$ABI/libtomchat_noise.so"
             test -s "$LIB" || { echo "Missing native library for $ABI"; exit 1; }
             SYMBOLS="$("$NDK_NM" -D --defined-only "$LIB")"
