@@ -25,6 +25,8 @@ jobs:
         run: cargo test --manifest-path android/native/tomchat-noise/Cargo.toml
       - name: Lint shared Noise and peer transport core
         run: cargo clippy --manifest-path android/native/tomchat-noise/Cargo.toml --all-targets -- -D warnings
+      - name: Regenerate lockfile and verify dependency graph
+        run: cargo check
       - name: Check Rust project
         run: cargo check --locked
       - name: Run Rust test suite
