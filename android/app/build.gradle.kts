@@ -51,6 +51,12 @@ tasks.named("preBuild").configure {
     dependsOn("buildTomChatPear")
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
+}
+
 android {
     namespace = "uk.co.tomos.chat"
     compileSdk = 36
@@ -77,11 +83,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlin {
-        compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_17)
-        }
     }
     buildFeatures {
         compose = true
