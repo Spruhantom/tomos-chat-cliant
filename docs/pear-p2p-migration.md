@@ -20,11 +20,9 @@ Upstream references:
 TomChat is moving to Pear/Bare as its only P2P backend. There will be no
 permanent Rust Noise fallback or split backend by Android version.
 
-The current Android app uses Kotlin 2.0.21 and minSdk 26. The current
-Bare Kit 3 Kotlin binding requires Kotlin 2.3.0 or newer and minSdk 29.
-Therefore the Pear-backed Android client will target API 29 (Android 10) or
-newer and its Gradle/Kotlin toolchain must be upgraded to a compatible
-combination before adding the binding. Android 8/9 (API 26–28) will no longer
+The Pear-backed Android client now targets API 29 (Android 10) or newer.
+The Android Gradle plugin and Kotlin toolchain have been upgraded for the
+Bare Kit Kotlin binding, and the app now declares the Bare Kit runtime. Android 8/9 (API 26–28) will no longer
 be supported by the Pear-only Android client.
 
 For Linux, the existing GTK4/Rust UI remains native. Embed the Bare Kit C API
@@ -100,9 +98,10 @@ is intentionally versioned so Android and Linux can migrate independently.
 1. Foundation (this change): add the shared Bare worker, IPC framing,
    Hyperswarm discovery/transport, per-contact Corestore isolation,
    device-writer Hypercore feeds, Hyperbee indexes and protocol tests.
-2. Android host: upgrade the Android toolchain, set minSdk 29, bundle the
-   worker and its linked native addons with Bare Pack, embed/start it with
-   Bare Kit Kotlin, and bridge framed IPC from Kotlin.
+2. Android host (in progress): upgrade the Android toolchain, set minSdk 29,
+   add the Bare Kit Kotlin runtime, add a Kotlin IPC host, and package the
+   worker plus linked native addons with Bare Pack/Bare Link. Complete secure
+   Pear identity provisioning and route native chat actions through this host.
 3. Linux host: bundle/run the same worker with Bare Kit's C API and bridge
    the same IPC protocol from Rust.
 4. Identity migration: define and implement signed binding of each trusted
@@ -117,14 +116,16 @@ is intentionally versioned so Android and Linux can migrate independently.
 
 ## Current limitations
 
-- This foundation is not yet wired into either native app; Pear is the target
-  sole backend, not an enabled production fallback today.
+- Android now has a Bare Kit Kotlin host bridge and starts the packaged worker
+  from the app lifecycle. It does not yet provision a Pear identity or route
+  conversations through the worker, so end-to-end messaging is not switched.
+- Linux host integration is not yet implemented.
 - The worker cannot start discovery until the native host supplies a valid
   local keypair and verified per-contact conversation keys.
 - The worker has per-contact storage and separate device-writer feeds, but
   end-to-end replication, conflict handling, and history reconciliation have
   not yet been integration-tested.
-- The Android host must move to minSdk 29 or newer for the current Bare Kit
-  Kotlin binding.
+- Android minimum SDK is now 29 (Android 10) for the current Bare Kit Kotlin
+  binding.
 - No production readiness, real-device compatibility, or security audit is
   claimed.
