@@ -71,6 +71,7 @@ impl TrustedContactStore {
         {
             if existing.encoded_public_key != card.encoded_public_key
                 || existing.noise_static_public_key != card.noise_static_public_key
+                || existing.pear_transport_public_key != card.pear_transport_public_key
             {
                 return Err(ContactStoreError::KeyStore(
                     "An existing fingerprint has a conflicting identity binding.".into(),
