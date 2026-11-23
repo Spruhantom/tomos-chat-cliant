@@ -160,10 +160,11 @@ class PearP2PBackend(
     suspend fun listMessages(transportPublicKey: ByteArray): JSONArray {
         require(transportPublicKey.size == 32)
         val key = transportPublicKey.toHex()
-        send("message:list", JSONObject().put("transportKey", key))
+        val requestId = java.util.UUID.randomUUID().toString()
+        send("message:list", JSONObject().put("transportKey", key).put("requestId", requestId))
         return withTimeout(15_000) {
             events.first {
-                it.optString("type") == "message:list-result" && it.optString("transportKey") == key ||
+                it.optString("type") == "message:list-result" && it.optString("requestId") == requestId ||
                     it.optString("type") == "backend:error"
             }.let { event ->
                 check(event.optString("type") == "message:list-result") {
