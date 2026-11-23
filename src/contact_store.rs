@@ -65,17 +65,36 @@ impl TrustedContactStore {
     pub fn import(&self, encoded: &str) -> Result<Vec<ContactCard>, ContactStoreError> {
         let card = ContactCard::decode(encoded)?;
         let mut contacts = self.load()?;
-        if let Some(existing) = contacts
+        if let Some(index) = contacts
             .iter()
-            .find(|existing| existing.fingerprint == card.fingerprint)
+            .position(|existing| existing.fingerprint == card.fingerprint)
         {
+            let existing = &contacts[index];
             if existing.encoded_public_key != card.encoded_public_key
                 || existing.noise_static_public_key != card.noise_static_public_key
-                || existing.pear_transport_public_key != card.pear_transport_public_key
             {
                 return Err(ContactStoreError::KeyStore(
-                    "An existing fingerprint has a conflicting identity binding.".into(),
+                    "An existing fingerprint has a conflicting identity or Noise binding.".into(),
                 ));
+            }
+            match (existing.pear_transport_public_key, card.pear_transport_public_key) {
+                (Some(old), Some(new_key)) if old != new_key => {
+                    return Err(ContactStoreError::KeyStore(
+                        "An existing fingerprint has a conflicting Pear transport identity.".into(),
+                    ));
+                }
+                (Some(_), None) => {
+                    return Err(ContactStoreError::KeyStore(
+                        "The imported card removes a previously trusted Pear transport key.".into(),
+                    ));
+                }
+                (None, Some(_)) => {
+                    // The caller only invokes import after the user has
+                    // independently compared the unchanged identity fingerprint.
+                    contacts[index] = card;
+                    self.save(&contacts)?;
+                }
+                _ => {}
             }
             return Ok(contacts);
         }
