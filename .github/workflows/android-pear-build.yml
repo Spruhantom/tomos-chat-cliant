@@ -24,11 +24,7 @@ jobs:
           cache-dependency-path: p2p/pear-worker/package.json
       - uses: android-actions/setup-android@v3
         with:
-          packages: |
-            platform-tools
-            platforms;android-35
-            build-tools;35.0.0
-            ndk;27.2.12479018
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0 ndk;27.2.12479018"
       - name: Configure Android NDK environment
         run: |
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
