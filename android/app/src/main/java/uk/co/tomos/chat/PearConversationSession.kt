@@ -19,6 +19,7 @@ class PearConversationSession(
     private val transportKey = requireNotNull(contact.pearTransportPublicKey) {
         "Contact needs a signed Pear V3 transport key."
     }
+    private val localTransportKey = localIdentity.publicKey
     private val conversationKey = PearKeyDerivation.derive(
         localIdentity.privateKey,
         localIdentity.publicKey,
@@ -61,9 +62,15 @@ class PearConversationSession(
             val record = records.optJSONObject(index) ?: continue
             val idText = record.optString("id")
             val sender = record.optString("senderFingerprint")
+            val writerTransportKey = record.optString("writerTransportKey")
             val createdAt = record.optLong("createdAt", -1)
             val ciphertext = record.optString("ciphertext")
-            if (createdAt < 0 || sender != localFingerprint && sender != contact.fingerprint) continue
+            val expectedWriter = when (sender) {
+                localFingerprint -> localTransportKey.toHex()
+                contact.fingerprint -> transportKey.toHex()
+                else -> continue
+            }
+            if (createdAt < 0 || writerTransportKey != expectedWriter) continue
             val id = try { UUID.fromString(idText) } catch (_: Exception) { continue }
             val body = try {
                 PearMessageCipher.decrypt(conversationKey, idText, sender, createdAt, ciphertext)
@@ -81,6 +88,8 @@ class PearConversationSession(
         }
         return messages.distinctBy { it.id }.sortedWith(compareBy<StoredChatMessage> { it.createdAtEpochMillis }.thenBy { it.id })
     }
+
+    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
     companion object {
         private const val MAX_MESSAGE_BYTES = 16 * 1024
