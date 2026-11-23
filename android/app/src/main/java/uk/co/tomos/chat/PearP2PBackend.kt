@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import org.json.JSONArray
 import to.holepunch.bare.kit.Ipc
 import to.holepunch.bare.kit.Worklet
 import java.io.Closeable
@@ -33,6 +34,7 @@ class PearP2PBackend(
     private val mutableEvents = MutableSharedFlow<JSONObject>(replay = 1, extraBufferCapacity = 64)
     private val frameDecoder = PearIpcFrameDecoder()
     private var readerJob: Job? = null
+    private var identityConfigured = false
     val events: SharedFlow<JSONObject> = mutableEvents
 
     suspend fun start() = withContext(Dispatchers.IO) {
@@ -84,6 +86,48 @@ class PearP2PBackend(
             mutableEvents.emit(event)
         }
     }
+
+    /**
+     * Configure the worker with the device's Keystore-backed transport identity
+     * and only contacts whose signed cards contain a Pear transport key.
+     */
+    suspend fun configureIdentity(identity: PearTransportIdentity, contacts: List<TrustedContact>) {
+        check(started.get()) { "Start the Pear worker before configuring its identity." }
+        val trustedPeers = JSONArray()
+        val topics = linkedSetOf<String>()
+        contacts.forEach { contact ->
+            val remoteKey = contact.pearTransportPublicKey ?: return@forEach
+            val material = PearKeyDerivation.derive(identity.privateKey, identity.publicKey, remoteKey)
+            trustedPeers.put(JSONObject()
+                .put("transportKey", remoteKey.toHex())
+                .put("conversationKey", material.conversationKey.toHex()))
+            topics += material.discoveryTopic.toHex()
+        }
+        send("identity:configure", JSONObject()
+            .put("publicKey", identity.publicKey.toHex())
+            .put("secretKey", identity.privateKey.toHex())
+            .put("trustedPeers", trustedPeers))
+        identityConfigured = true
+        topics.forEach { topic -> send("swarm:join", JSONObject().put("topic", topic)) }
+    }
+
+    suspend fun trustContact(identity: PearTransportIdentity, contact: TrustedContact) {
+        check(identityConfigured) { "Configure the Pear identity before trusting contacts." }
+        val remoteKey = contact.pearTransportPublicKey
+            ?: throw IllegalArgumentException("Contact has no signed Pear transport identity; request a V3 contact card.")
+        val material = PearKeyDerivation.derive(identity.privateKey, identity.publicKey, remoteKey)
+        send("peer:trust", JSONObject()
+            .put("transportKey", remoteKey.toHex())
+            .put("conversationKey", material.conversationKey.toHex()))
+        send("swarm:join", JSONObject().put("topic", material.discoveryTopic.toHex()))
+    }
+
+    suspend fun untrustContact(transportPublicKey: ByteArray) {
+        require(transportPublicKey.size == 32)
+        send("peer:untrust", JSONObject().put("transportKey", transportPublicKey.toHex()))
+    }
+
+    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
     suspend fun send(type: String, payload: JSONObject = JSONObject()) = withContext(Dispatchers.IO) {
         check(started.get()) { "Pear backend is not running." }
