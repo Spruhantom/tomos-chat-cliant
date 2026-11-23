@@ -18,5 +18,9 @@
     "hyperbee": "^2.20.0",
     "hyperswarm": "^4.17.0",
     "which-runtime": "^1.4.0"
+  },
+  "devDependencies": {
+    "bare-link": "^4.0.1",
+    "bare-pack": "^2.2.1"
   }
 }
