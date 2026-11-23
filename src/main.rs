@@ -104,8 +104,20 @@ fn build_contacts(app: &adw::Application) {
         "This is a new device. I understand creating a new identity will not recover an existing one."
     );
     let create_identity = gtk::Button::with_label("Create new device identity");
-    create_identity
-        .set_sensitive(signing_identity.borrow().is_none() && noise_identity.borrow().is_none() && pear_identity.borrow().is_none());
+    let pear_upgrade_available = signing_identity.borrow().is_some()
+        && noise_identity.borrow().is_some()
+        && pear_identity.borrow().is_none();
+    create_identity.set_label(if pear_upgrade_available {
+        "Add Pear transport identity"
+    } else {
+        "Create new device identity"
+    });
+    create_confirm.set_label(if pear_upgrade_available {
+        "I understand this updates my signed contact QR; contacts must scan it again."
+    } else {
+        "This is a new device. I understand creating a new identity will not recover an existing one."
+    });
+    create_identity.set_sensitive(false);
     let create_for_toggle = create_identity.clone();
     create_confirm.connect_toggled(move |check| create_for_toggle.set_sensitive(check.is_active()));
 
@@ -406,8 +418,38 @@ fn build_contacts(app: &adw::Application) {
             create_status.set_text("Confirm that this is a new device before creating an identity.");
             return;
         }
-        if signing_for_create.borrow().is_some() || noise_for_create.borrow().is_some() || pear_for_create.borrow().is_some() {
-            create_status.set_text("A partial or existing identity was found. Refusing to replace it; recovery is required.");
+        if signing_for_create.borrow().is_some()
+            && noise_for_create.borrow().is_some()
+            && pear_for_create.borrow().is_none()
+        {
+            let pear = match PearTransportIdentity::generate() {
+                Ok(identity) => identity,
+                Err(error) => {
+                    create_status.set_text(&format!("Could not create Pear transport identity: {error}"));
+                    return;
+                }
+            };
+            match pear.save_to_secret_service() {
+                Ok(()) => {
+                    *pear_for_create.borrow_mut() = Some(pear);
+                    refresh_own_card(
+                        &own_card_for_create,
+                        &signing_for_create.borrow(),
+                        &noise_for_create.borrow(),
+                        &pear_for_create.borrow(),
+                    );
+                    create_status.set_text("Pear transport identity added. Share the updated V3 QR card with trusted contacts.");
+                    confirm_for_create.set_active(false);
+                }
+                Err(error) => create_status.set_text(&format!("Could not securely save Pear transport identity: {error}")),
+            }
+            return;
+        }
+        if signing_for_create.borrow().is_some()
+            || noise_for_create.borrow().is_some()
+            || pear_for_create.borrow().is_some()
+        {
+            create_status.set_text("A partial or existing identity was found. Refusing to replace keys; recover the missing identity instead.");
             return;
         }
         create_button_for_create.set_sensitive(false);
