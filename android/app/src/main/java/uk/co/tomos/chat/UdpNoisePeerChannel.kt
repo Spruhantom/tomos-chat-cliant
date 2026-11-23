@@ -73,7 +73,7 @@ class UdpNoisePeerChannel private constructor(
 
     private fun handleIncoming(packet: ByteArray): Boolean {
         if (packet.size >= 4 && packet[0] == MAGIC_0 && packet[1] == MAGIC_1 &&
-            packet[2] == HANDSHAKE && packet[3] == 3) {
+            packet[2] == HANDSHAKE && packet[3] == 3.toByte()) {
             if (duplicateHandshake?.contentEquals(packet) == true) {
                 val ack = handshakePacket(4, byteArrayOf())
                 socket.send(DatagramPacket(ack, ack.size))
