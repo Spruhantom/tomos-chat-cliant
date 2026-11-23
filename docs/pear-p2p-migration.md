@@ -28,11 +28,11 @@ Upstream references:
 ## Security boundary — do not bypass
 
 Hyperswarm's encrypted connection is not, by itself, proof that a transport
-public key belongs to a TomChat contact. A peer offer is quarantined until the
-native host verifies the existing signed contact card, independently verified
-fingerprint, and identity-to-transport-key binding. Unknown, legacy, changed,
-or downgraded identities must be rejected. The worker must never authorize a
-peer merely because it knows a swarm topic.
+public key belongs to a TomChat contact. The worker only accepts a remote key that the native host has already verified
+against the existing signed contact card, independently checked fingerprint,
+and identity-to-transport-key binding. Unknown, legacy, changed, or downgraded
+identities are rejected and banned from reconnecting until explicitly trusted.
+The worker never authorizes a peer merely because it knows a swarm topic.
 
 The worker receives the local X25519 keypair and a per-contact conversation
 key from the native host. It configures Hyperswarm with the local keypair and
@@ -67,7 +67,7 @@ accepts:
 Worker events include backend:ready, identity:configured, peer:authorized,
 peer:rejected, peer:closed, message:stored, message:list-result, and backend:error.
 
-Frames are capped at 64 KiB; message bodies are capped at 16 KiB. The protocol
+Frames are capped at 64 KiB; encrypted message payloads are capped at 24 KiB. The protocol
 is intentionally versioned so Android and Linux can migrate independently.
 
 ## Implementation phases
@@ -75,12 +75,14 @@ is intentionally versioned so Android and Linux can migrate independently.
 1. Foundation (this change): add the Bare worker package, IPC framing,
    Hyperswarm identity binding, per-contact Corestore isolation, device-writer
    Hypercore feeds, Hyperbee message indexes, and protocol tests.
-2. Android host: bundle the worker with Bare Pack, embed/start it with BareKit /
-   the supported mobile runtime, and bridge framed IPC from Kotlin.
+2. Android host: derive per-contact conversation keys from the existing
+   X25519 identities with domain-separated HKDF, bundle the worker with Bare
+   Pack, embed/start it with BareKit, and bridge framed IPC from Kotlin.
 3. Linux host: bundle/run the same worker with Bare and bridge the same IPC
    protocol from Rust.
 4. Identity binding: implement a reviewed host adapter that validates
-   transport keys against signed TomChat contacts before authorizing replication.
+   transport keys against signed TomChat contacts and derives per-contact
+   conversation keys before authorizing replication.
 5. Replication semantics: test the two device-writer feeds, message ordering,
    deletion/tombstone rules, duplicate handling, and bounded storage.
 6. Migration and retirement: dual-run in debug builds, run cross-platform
