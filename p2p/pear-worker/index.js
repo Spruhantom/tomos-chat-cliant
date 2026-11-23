@@ -142,6 +142,10 @@ async function handle (message) {
       const transportKey = decodeKey(message.transportKey, 'Trusted peer key')
       const conversationKey = decodeKey(message.conversationKey, 'Conversation key')
       trustedPeers.set(transportKey.toString('hex'), conversationKey)
+      if (swarm) {
+        const peer = swarm.peers.get(transportKey.toString('hex'))
+        if (peer) peer.ban(false)
+      }
       emit('peer:trust-added', { transportKey: transportKey.toString('hex') })
       return
     }
