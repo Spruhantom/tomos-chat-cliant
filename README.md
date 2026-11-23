@@ -89,23 +89,30 @@ See [Android build and debug releases](docs/android-debug-test-releases.md) and 
 
 These are prototype implementations, not a security audit. See [architecture](docs/architecture.md), [the E2EE threat model](docs/e2ee-threat-model.md), [the Linux identity contract](docs/linux-peer-identity-and-desktop-migration.md), and [real-world testing](docs/real-world-testing.md).
 
-## Experimental Pear P2P backend
+## Pear P2P backend migration
 
-A staged migration to Holepunch's Pear/Bare ecosystem is under development.
-The native Android and Linux interfaces are being retained while a shared
-Bare worker introduces Hyperswarm discovery and Corestore/Hyperbee storage.
-The migration plan, IPC protocol and security gates are documented in
-[docs/pear-p2p-migration.md](docs/pear-p2p-migration.md).
+TomChat is moving to Holepunch's Pear/Bare P2P stack as its **only** networking
+backend. The Android Kotlin/Compose and Linux Rust/GTK4 interfaces remain
+native; a shared Bare worker will handle peer discovery, encrypted transport
+and replicated storage through Hyperswarm, Hypercore/Corestore and Hyperbee.
 
-This backend is not wired into either native client yet. The worker requires
-the native host to provide the existing local Noise identity keypair, verified
-contact keys and pairwise conversation keys before discovery starts. It rejects
-transport keys that do not exactly match the trusted contact key list and keeps
-each contact's replicated store separate. The worker stores ciphertext only. The existing Rust Noise
-transport remains the active compatibility implementation until host bridges,
-replication semantics and cross-platform tests pass. Do not enable the
-experimental worker for normal messaging yet.
+The Pear desktop shell is not being embedded in the mobile app. The native
+clients will embed Bare and run the shared Pear-end worker through the
+platform's Bare Kit binding.
 
+The Android Pear client will require Android 10 (API 29) or newer with a
+compatible Kotlin/Gradle toolchain. Android 8/9 will not be supported by the
+Pear-only client. The Linux client will embed Bare Kit's C API behind Rust FFI.
+
+The worker foundation is experimental and is not yet connected to either
+native client. The existing Rust Noise code may remain temporarily during
+implementation, but it is not a planned fallback: the completed cutover will
+remove it and route all P2P traffic through Pear. Do not treat the worker as
+production-ready until host integration, signed identity migration,
+replication, reconnect, and real-device cross-platform tests pass.
+
+See [the Pear P2P migration plan](docs/pear-p2p-migration.md) for architecture,
+compatibility requirements, protocol details and acceptance gates.
 ## Project structure
 
 - `android/app` — Android application and tests.
