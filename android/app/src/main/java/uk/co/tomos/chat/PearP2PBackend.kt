@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.nio.ByteBuffer
 import to.holepunch.bare.kit.Ipc
 import to.holepunch.bare.kit.Worklet
 import java.io.Closeable
@@ -32,7 +31,7 @@ class PearP2PBackend(
     private var worklet: Worklet? = null
     private var ipc: Ipc? = null
     private val mutableEvents = MutableSharedFlow<JSONObject>(replay = 1, extraBufferCapacity = 64)
-    private var pendingBytes = ByteArray(0)
+    private val frameDecoder = PearIpcFrameDecoder()
     private var readerJob: Job? = null
     val events: SharedFlow<JSONObject> = mutableEvents
 
@@ -61,20 +60,16 @@ class PearP2PBackend(
     }
 
     private suspend fun decodeFrames(chunk: ByteArray) {
-        pendingBytes += chunk
-        while (pendingBytes.size >= 4) {
-            val length = ByteBuffer.wrap(pendingBytes, 0, 4).int
-            if (length <= 0 || length > MAX_FRAME_BYTES) {
-                pendingBytes = ByteArray(0)
-                mutableEvents.emit(JSONObject()
-                    .put("version", PROTOCOL_VERSION)
-                    .put("type", "backend:protocol-error")
-                    .put("message", "Invalid worker frame length"))
-                return
-            }
-            if (pendingBytes.size < 4 + length) return
-            val body = pendingBytes.copyOfRange(4, 4 + length)
-            pendingBytes = pendingBytes.copyOfRange(4 + length, pendingBytes.size)
+        val bodies = try {
+            frameDecoder.push(chunk)
+        } catch (error: Exception) {
+            mutableEvents.emit(JSONObject()
+                .put("version", PROTOCOL_VERSION)
+                .put("type", "backend:protocol-error")
+                .put("message", error.message ?: "Invalid worker frame"))
+            return
+        }
+        for (body in bodies) {
             val event = try {
                 JSONObject(body.decodeToString()).also {
                     require(it.optInt("version") == PROTOCOL_VERSION)
@@ -98,8 +93,7 @@ class PearP2PBackend(
             .put("type", type)
         val encoded = message.toString().encodeToByteArray()
         require(encoded.size <= MAX_FRAME_BYTES) { "Worker command exceeds the IPC frame limit." }
-        val frame = ByteBuffer.allocate(4 + encoded.size).putInt(encoded.size).put(encoded).array()
-        ipc?.write(frame) ?: error("Pear worker IPC is unavailable.")
+        ipc?.write(PearIpcFrameCodec.encode(encoded)) ?: error("Pear worker IPC is unavailable.")
     }
 
     override fun close() {
@@ -115,7 +109,7 @@ class PearP2PBackend(
     companion object {
         private const val WORKER_BUNDLE = "pear-worker.bundle.mjs"
         private const val PROTOCOL_VERSION = 1
-        private const val MAX_FRAME_BYTES = 64 * 1024
+        private const val MAX_FRAME_BYTES = PearIpcFrameCodec.MAX_FRAME_BYTES
         private const val DEFAULT_MEMORY_LIMIT = 64L * 1024 * 1024
     }
 }
