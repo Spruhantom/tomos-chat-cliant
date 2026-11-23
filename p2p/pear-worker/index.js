@@ -181,7 +181,7 @@ async function handle (message) {
       if (!swarm || !trustedPeers.has(transportKey)) {
         throw new Error('Cannot append a message for an untrusted peer')
       }
-      if (typeof message.id !== 'string' || message.id.length > 160 ||
+      if (typeof message.id !== 'string' || !/^[0-9a-f-]{36}$/i.test(message.id) ||
           typeof message.ciphertext !== 'string' || !message.ciphertext ||
           Buffer.byteLength(message.ciphertext, 'utf8') > 24 * 1024 ||
           !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(message.ciphertext) ||
