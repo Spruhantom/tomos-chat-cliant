@@ -8,7 +8,6 @@
 const Corestore = require('corestore')
 const Hyperbee = require('hyperbee')
 const Hyperswarm = require('hyperswarm')
-const FramedStream = require('framed-stream')
 const goodbye = require('graceful-goodbye')
 const path = require('bare-path')
 const storage = require('bare-storage')
@@ -17,7 +16,7 @@ const { frame, parseMessage } = require('./protocol')
 
 const argv = (index) => Bare.argv[index + (isBareKit ? 0 : 2)]
 const storageDir = argv(0) || storage.persistent()
-const pipe = new FramedStream(Bare.IPC)
+let incoming = Buffer.alloc(0)
 const conversations = new Map()
 const openingConversations = new Map()
 const trustedPeers = new Map()
@@ -27,7 +26,7 @@ let localPublicKey = null
 let closed = false
 
 function emit (type, payload = {}) {
-  if (!closed) pipe.write(frame(type, payload))
+  if (!closed) Bare.IPC.write(frame(type, payload))
 }
 
 function decodeKey (value, label) {
@@ -231,12 +230,26 @@ async function handle (message) {
   }
 }
 
-pipe.on('data', async (data) => {
-  try {
-    await handle(parseMessage(data))
-  } catch (error) {
-    emit('backend:error', { message: error.message })
+Bare.IPC.on('data', (chunk) => {
+  incoming = incoming.length === 0 ? Buffer.from(chunk) : Buffer.concat([incoming, chunk])
+  while (incoming.length >= 4) {
+    const length = incoming.readUInt32BE(0)
+    if (length === 0 || length > 64 * 1024) {
+      emit('backend:error', { message: 'Invalid TomChat IPC frame length' })
+      incoming = Buffer.alloc(0)
+      return
+    }
+    if (incoming.length < 4 + length) return
+    const body = incoming.subarray(4, 4 + length)
+    incoming = incoming.subarray(4 + length)
+    Promise.resolve().then(() => handle(parseMessage(body))).catch((error) => {
+      emit('backend:error', { message: error.message })
+    })
   }
+})
+
+Bare.IPC.on('end', () => {
+  shutdown().catch(() => {})
 })
 
 async function shutdown () {
@@ -246,7 +259,7 @@ async function shutdown () {
   await Promise.all([...conversations.values()].map(({ store }) => store.close()))
   conversations.clear()
   openingConversations.clear()
-  pipe.end()
+  Bare.IPC.end()
 }
 
 goodbye(shutdown)
