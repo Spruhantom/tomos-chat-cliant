@@ -5,6 +5,30 @@ plugins {
 }
 
 
+// Transitional only: the existing UI still references the old transport until
+// the Pear identity and conversation screens are migrated. Remove this task
+// together with android/native/tomchat-noise at the final Pear-only cutover.
+val nativeNoiseManifest = rootProject.file("android/native/tomchat-noise/Cargo.toml")
+val nativeNoiseOutput = rootProject.file("android/app/src/main/jniLibs")
+
+tasks.register<org.gradle.api.tasks.Exec>("buildTomChatNoise") {
+    group = "build"
+    description = "Temporarily build the old transport while the Pear-only UI cutover is in progress."
+    inputs.file(nativeNoiseManifest)
+    inputs.dir(rootProject.file("android/native/tomchat-noise/src"))
+    outputs.dir(nativeNoiseOutput)
+    workingDir = rootProject.projectDir
+    commandLine(
+        "cargo", "ndk",
+        "--platform", "26",
+        "-t", "arm64-v8a",
+        "-t", "x86_64",
+        "-o", nativeNoiseOutput.absolutePath,
+        "build", "--release",
+        "--manifest-path", nativeNoiseManifest.absolutePath
+    )
+}
+
 val pearWorkerScript = rootProject.file("p2p/pear-worker/build-android.sh")
 val pearWorkerAssets = rootProject.file("android/app/src/main/assets")
 val pearWorkerAddons = rootProject.file("android/app/src/main/jniLibs")
@@ -22,6 +46,7 @@ tasks.register<org.gradle.api.tasks.Exec>("buildTomChatPear") {
 
 tasks.named("preBuild").configure {
     dependsOn("buildTomChatPear")
+    dependsOn("buildTomChatNoise")
 }
 
 android {
