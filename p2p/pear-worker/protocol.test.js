@@ -23,3 +23,9 @@ test('rejects malformed JSON and oversized frames', () => {
 test('does not permit empty message types', () => {
   assert.throws(() => frame(''))
 })
+
+test('payload cannot override the protocol envelope', () => {
+  const decoded = parseMessage(frame('backend:ready', { version: 99, type: 'spoofed' }))
+  assert.equal(decoded.version, 1)
+  assert.equal(decoded.type, 'backend:ready')
+})
