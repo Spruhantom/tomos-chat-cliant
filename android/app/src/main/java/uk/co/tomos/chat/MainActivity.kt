@@ -346,7 +346,8 @@ private fun AccountSetupScreen(onAssigned: (AccountProfile) -> Unit) {
 private fun TomChatApp(
     profile: AccountProfile,
     contactCard: String?,
-    foldingFeature: FoldingFeature?
+    foldingFeature: FoldingFeature?,
+    pearBackendStatus: String
 ) {
     var destination by rememberSaveable { mutableStateOf(Destination.Chats) }
     val foldPosture = remember(foldingFeature) { FoldPosture.from(foldingFeature) }
@@ -385,6 +386,7 @@ private fun TomChatApp(
                     topBar = {
                         Column {
                             AppHeader()
+                            Text(pearBackendStatus, color = if (pearBackendStatus.startsWith("Pear runtime ready")) Green else Color(0xFFFFC857), fontSize = 9.sp, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 3.dp))
                             if (foldPosture == FoldPosture.BOOK || foldPosture == FoldPosture.TABLETOP) {
                                 FoldPostureBanner(foldPosture)
                             }
