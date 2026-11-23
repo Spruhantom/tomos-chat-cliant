@@ -1,6 +1,7 @@
 mod contact_card;
 mod contact_store;
 mod peer;
+mod pear_identity;
 mod peer_chat;
 mod qr;
 
