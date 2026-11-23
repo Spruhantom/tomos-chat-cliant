@@ -51,7 +51,7 @@ tasks.named("preBuild").configure {
 
 android {
     namespace = "uk.co.tomos.chat"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "uk.co.tomos.chat"
