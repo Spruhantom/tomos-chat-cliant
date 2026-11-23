@@ -162,7 +162,7 @@ class TrustedContactStore(filesDir: File) {
 
     private companion object {
         const val LEGACY_VERSION = 1
-        const val VERSION = 2
+        const val VERSION = 3
         const val TRANSFORMATION = "AES/GCM/NoPadding"
     }
 }
