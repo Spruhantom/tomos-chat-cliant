@@ -12,6 +12,7 @@ use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::Duration;
 use tomchat_noise::identity::NoiseIdentity;
+use pear_identity::PearTransportIdentity;
 use zeroize::Zeroize;
 
 fn main() {
@@ -62,6 +63,7 @@ fn build_contacts(app: &adw::Application) {
         contact_card::SigningIdentity::load_from_secret_service().ok(),
     ));
     let noise_identity = Rc::new(RefCell::new(NoiseIdentity::load_from_secret_service().ok()));
+    let pear_identity = Rc::new(RefCell::new(PearTransportIdentity::load_from_secret_service().ok()));
     let store = Rc::new(contact_store::TrustedContactStore);
     let (initial_contacts, store_status) = match store.load() {
         Ok(loaded) => (
@@ -86,6 +88,7 @@ fn build_contacts(app: &adw::Application) {
         &own_card,
         &signing_identity.borrow(),
         &noise_identity.borrow(),
+        &pear_identity.borrow(),
     );
 
     let qr_actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
@@ -102,7 +105,7 @@ fn build_contacts(app: &adw::Application) {
     );
     let create_identity = gtk::Button::with_label("Create new device identity");
     create_identity
-        .set_sensitive(signing_identity.borrow().is_none() && noise_identity.borrow().is_none());
+        .set_sensitive(signing_identity.borrow().is_none() && noise_identity.borrow().is_none() && pear_identity.borrow().is_none());
     let create_for_toggle = create_identity.clone();
     create_confirm.connect_toggled(move |check| create_for_toggle.set_sensitive(check.is_active()));
 
@@ -394,6 +397,7 @@ fn build_contacts(app: &adw::Application) {
     let create_status = status.clone();
     let signing_for_create = signing_identity.clone();
     let noise_for_create = noise_identity.clone();
+    let pear_for_create = pear_identity.clone();
     let own_card_for_create = own_card.clone();
     let confirm_for_create = create_confirm.clone();
     let create_button_for_create = create_identity.clone();
@@ -402,7 +406,7 @@ fn build_contacts(app: &adw::Application) {
             create_status.set_text("Confirm that this is a new device before creating an identity.");
             return;
         }
-        if signing_for_create.borrow().is_some() || noise_for_create.borrow().is_some() {
+        if signing_for_create.borrow().is_some() || noise_for_create.borrow().is_some() || pear_for_create.borrow().is_some() {
             create_status.set_text("A partial or existing identity was found. Refusing to replace it; recovery is required.");
             return;
         }
@@ -421,6 +425,13 @@ fn build_contacts(app: &adw::Application) {
                 return;
             }
         };
+        let pear = match PearTransportIdentity::generate() {
+            Ok(identity) => identity,
+            Err(error) => {
+                create_status.set_text(&format!("Could not create Pear transport identity: {error}"));
+                return;
+            }
+        };
         match signing.save_to_secret_service() {
             Ok(()) => {}
             Err(error) => {
@@ -429,17 +440,24 @@ fn build_contacts(app: &adw::Application) {
             }
         }
         match noise.save_to_secret_service() {
-            Ok(()) => {
-                *signing_for_create.borrow_mut() = Some(signing);
-                *noise_for_create.borrow_mut() = Some(noise);
-                refresh_own_card(
-                    &own_card_for_create,
-                    &signing_for_create.borrow(),
-                    &noise_for_create.borrow(),
-                );
-                create_status.set_text("New device identity created and saved in your desktop keyring.");
-                confirm_for_create.set_active(false);
-            }
+            Ok(()) => match pear.save_to_secret_service() {
+                Ok(()) => {
+                    *signing_for_create.borrow_mut() = Some(signing);
+                    *noise_for_create.borrow_mut() = Some(noise);
+                    *pear_for_create.borrow_mut() = Some(pear);
+                    refresh_own_card(
+                        &own_card_for_create,
+                        &signing_for_create.borrow(),
+                        &noise_for_create.borrow(),
+                        &pear_for_create.borrow(),
+                    );
+                    create_status.set_text("New P-256, Noise and Pear identities created and saved in your desktop keyring.");
+                    confirm_for_create.set_active(false);
+                }
+                Err(error) => {
+                    create_status.set_text(&format!("The signing and Noise keys were saved, but the Pear key could not be saved: {error}. Identity setup is incomplete; do not create another identity."));
+                }
+            },
             Err(error) => {
                 create_status.set_text(&format!("The signing key was saved, but the Noise key could not be saved: {error}. Identity setup is incomplete; do not create another identity."));
             }
@@ -471,7 +489,7 @@ fn build_contacts(app: &adw::Application) {
                 populate_contact_picker(&picker_for_import, &import_contacts.borrow());
                 buffer.set_text("");
                 confirm_for_import.set_active(false);
-                status_for_import.set_text("Contact signature verified and contact saved. Encrypted connections require a V2 card and a matching Noise handshake.");
+                status_for_import.set_text("Contact signature verified and saved. Pear messaging requires a V3 card with a signed Pear transport key.");
             }
             Err(error) => status_for_import.set_text(&format!("Contact was not imported: {error}")),
         }
@@ -657,9 +675,9 @@ fn build_contacts(app: &adw::Application) {
         }
     });
 
-    if signing_identity.borrow().is_some() && noise_identity.borrow().is_some() {
+    if signing_identity.borrow().is_some() && noise_identity.borrow().is_some() && pear_identity.borrow().is_some() {
         status.set_text(&store_status);
-    } else if signing_identity.borrow().is_some() || noise_identity.borrow().is_some() {
+    } else if signing_identity.borrow().is_some() || noise_identity.borrow().is_some() || pear_identity.borrow().is_some() {
         status.set_text("Only part of this device identity could be loaded. TomChat will not replace keys; recover the missing key before connecting.");
     } else {
         status.set_text(&format!(
@@ -681,11 +699,12 @@ fn refresh_own_card(
     view: &gtk::TextView,
     signing: &Option<contact_card::SigningIdentity>,
     noise: &Option<NoiseIdentity>,
+    pear: &Option<PearTransportIdentity>,
 ) {
     let buffer = view.buffer();
-    match (signing.as_ref(), noise.as_ref()) {
-        (Some(signing), Some(noise)) => {
-            match contact_card::ContactCard::create("TomChat desktop", signing, *noise.public_key())
+    match (signing.as_ref(), noise.as_ref(), pear.as_ref()) {
+        (Some(signing), Some(noise), Some(pear)) => {
+            match contact_card::ContactCard::create_pear("TomChat desktop", signing, *noise.public_key(), *pear.public_key())
                 .and_then(|card| card.encode())
             {
                 Ok(encoded) => buffer.set_text(&encoded),
@@ -693,7 +712,7 @@ fn refresh_own_card(
             }
         }
         _ => buffer.set_text(
-            "Create or recover your device identity to generate a signed V2 contact card.",
+            "Create or recover your device identity to generate a signed V3 Pear contact card.",
         ),
     }
 }
