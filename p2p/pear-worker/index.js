@@ -19,6 +19,7 @@ const argv = (index) => Bare.argv[index + (isBareKit ? 0 : 2)]
 const storageDir = argv(0) || storage.persistent()
 const pipe = new FramedStream(Bare.IPC)
 const conversations = new Map()
+const openingConversations = new Map()
 const trustedPeers = new Map()
 const activeConnections = new Map()
 let swarm = null
@@ -39,30 +40,44 @@ function decodeKey (value, label) {
 async function ensureConversation (transportKey) {
   const existing = conversations.get(transportKey)
   if (existing) return existing
+  const opening = openingConversations.get(transportKey)
+  if (opening) return opening
 
   const conversationKey = trustedPeers.get(transportKey)
   if (!conversationKey) throw new Error('Conversation key is not available for this trusted contact')
 
-  const directory = path.join(storageDir, 'tomchat', 'conversations', transportKey)
-  const store = new Corestore(directory, { primaryKey: conversationKey })
-  await store.ready()
+  const pending = (async () => {
+    const directory = path.join(storageDir, 'tomchat', 'conversations', transportKey)
+    const store = new Corestore(directory, { primaryKey: conversationKey })
+    try {
+      await store.ready()
 
-  // Each device writes to its own deterministically named Hypercore. Both
-  // sides open both feeds, so Corestore can replicate them without a shared
-  // multi-writer signing key or a single-writer fork race.
-  const localBee = new Hyperbee(store.get({ name: 'tomchat-messages-' + localPublicKey.toString('hex') }), {
-    keyEncoding: 'utf-8',
-    valueEncoding: 'json'
-  })
-  const remoteBee = new Hyperbee(store.get({ name: 'tomchat-messages-' + transportKey }), {
-    keyEncoding: 'utf-8',
-    valueEncoding: 'json'
-  })
-  await Promise.all([localBee.ready(), remoteBee.ready()])
+      // Both devices derive the same two feed keys from their shared
+      // conversation key. Each device writes only to its own feed.
+      const localBee = new Hyperbee(store.get({ name: 'tomchat-messages-' + localPublicKey.toString('hex') }), {
+        keyEncoding: 'utf-8',
+        valueEncoding: 'json'
+      })
+      const remoteBee = new Hyperbee(store.get({ name: 'tomchat-messages-' + transportKey }), {
+        keyEncoding: 'utf-8',
+        valueEncoding: 'json'
+      })
+      await Promise.all([localBee.ready(), remoteBee.ready()])
+      const conversation = { store, localBee, remoteBee }
+      conversations.set(transportKey, conversation)
+      return conversation
+    } catch (error) {
+      await store.close()
+      throw error
+    }
+  })()
 
-  const conversation = { store, localBee, remoteBee }
-  conversations.set(transportKey, conversation)
-  return conversation
+  openingConversations.set(transportKey, pending)
+  try {
+    return await pending
+  } finally {
+    openingConversations.delete(transportKey)
+  }
 }
 
 async function boot () {
@@ -101,17 +116,22 @@ function configureIdentity (message) {
       return
     }
 
+    connection.on('close', () => {
+      if (activeConnections.get(transportKey) === connection) activeConnections.delete(transportKey)
+      emit('peer:closed', { transportKey })
+    })
+
     try {
       const conversation = await ensureConversation(transportKey)
+      if (!trustedPeers.has(transportKey)) {
+        connection.destroy(new Error('TomChat contact trust was revoked during connection setup'))
+        return
+      }
       activeConnections.set(transportKey, connection)
       connection.on('error', (error) => emit('peer:error', {
         transportKey,
         message: error.message
       }))
-      connection.on('close', () => {
-        if (activeConnections.get(transportKey) === connection) activeConnections.delete(transportKey)
-        emit('peer:closed', { transportKey })
-      })
       conversation.store.replicate(connection)
       emit('peer:authorized', { transportKey })
     } catch (error) {
@@ -195,9 +215,9 @@ async function handle (message) {
       const conversation = await ensureConversation(transportKey)
       const byId = new Map()
       for (const bee of [conversation.localBee, conversation.remoteBee]) {
-        for await (const entry of bee.createReadStream()) byId.set(entry.key, entry.value)
+        for await (const entry of bee.createReadStream({ reverse: true, limit: 500 })) byId.set(entry.key, entry.value)
       }
-      const result = [...byId.values()].sort((a, b) => a.createdAt - b.createdAt).slice(-500)
+      const result = [...byId.values()].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)).slice(-500)
       emit('message:list-result', { transportKey, messages: result })
       return
     }
@@ -225,6 +245,7 @@ async function shutdown () {
   if (swarm) await swarm.destroy()
   await Promise.all([...conversations.values()].map(({ store }) => store.close()))
   conversations.clear()
+  openingConversations.clear()
   pipe.end()
 }
 
