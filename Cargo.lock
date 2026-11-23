@@ -1872,6 +1872,7 @@ dependencies = [
  "tomchat-noise",
  "url",
  "zeroize",
+ "curve25519-dalek",
 ]
 
 [[package]]
