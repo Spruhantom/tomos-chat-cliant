@@ -128,6 +128,7 @@ class MainActivity : ComponentActivity() {
                 val store = remember { AccountProfileStore(applicationContext.filesDir) }
                 val identityStore = remember { DeviceIdentityStore() }
                 val pearIdentityStore = remember { PearTransportIdentityStore(applicationContext.filesDir) }
+                val trustedContactStore = remember { TrustedContactStore(applicationContext.filesDir) }
                 val pearBackend = remember { PearP2PBackend(applicationContext) }
 
                 LaunchedEffect(pearBackend) {
@@ -141,6 +142,12 @@ class MainActivity : ComponentActivity() {
                     }
                     try {
                         pearBackend.start()
+                        val setup = withContext(Dispatchers.IO) {
+                            pearIdentityStore.getOrCreate() to trustedContactStore.load()
+                        }
+                        pearBackend.configureIdentity(setup.first, setup.second)
+                        val peerCount = setup.second.count { it.pearTransportPublicKey != null }
+                        pearBackendStatus = "Pear identity configured · $peerCount trusted Pear contacts"
                     } catch (error: Exception) {
                         pearBackendStatus = "Pear runtime unavailable · ${error.message ?: "startup failed"}".take(180)
                     }
