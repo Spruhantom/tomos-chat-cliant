@@ -76,8 +76,9 @@ acceptance tests pass; do not ship a dual-backend mode.
 
 ## Worker IPC v1
 
-Every frame is a JSON object with version: 1 and a type string. The worker
-accepts:
+Every IPC frame is a 4-byte big-endian unsigned length followed by one UTF-8
+JSON object with version: 1 and a type string. The Kotlin host and Bare worker
+both enforce the 64 KiB frame limit and buffer partial reads. The worker accepts:
 
 - swarm:join — join a 32-byte shared topic (hex).
 - peer:trust / peer:untrust — add or remove a verified contact key and its
@@ -116,9 +117,10 @@ is intentionally versioned so Android and Linux can migrate independently.
 
 ## Current limitations
 
-- Android now has a Bare Kit Kotlin host bridge and starts the packaged worker
-  from the app lifecycle. It does not yet provision a Pear identity or route
-  conversations through the worker, so end-to-end messaging is not switched.
+- Android now has a Bare Kit Kotlin host bridge, a Bare Pack/Bare Link build
+  script, and app-lifecycle worker startup. The IPC uses a shared 4-byte
+  length-prefixed frame format. It does not yet provision a Pear identity or
+  route conversations through the worker, so end-to-end messaging is not switched.
 - Linux host integration is not yet implemented.
 - The worker cannot start discovery until the native host supplies a valid
   local keypair and verified per-contact conversation keys.
