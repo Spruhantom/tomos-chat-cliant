@@ -525,6 +525,26 @@ fn build_contacts(app: &adw::Application) {
             status_for_import.set_text("Paste a signed contact card first.");
             return;
         }
+        // A V3 Pear key must be usable with this device's own transport identity
+        // before it is accepted into the trusted-contact store.
+        let parsed_card = match contact_card::ContactCard::decode(encoded.trim()) {
+            Ok(card) => card,
+            Err(error) => {
+                status_for_import.set_text(&format!("Contact card is invalid: {error}"));
+                return;
+            }
+        };
+        if let Some(remote_key) = parsed_card.pear_transport_public_key.as_ref() {
+            let local = pear_identity.borrow();
+            let Some(local) = local.as_ref() else {
+                status_for_import.set_text("Create or recover this device's Pear identity before trusting a Pear contact.");
+                return;
+            };
+            if let Err(error) = local.derive(remote_key) {
+                status_for_import.set_text(&format!("Pear transport key validation failed: {error}"));
+                return;
+            }
+        }
         match import_store.import(encoded.trim()) {
             Ok(updated) => {
                 *import_contacts.borrow_mut() = updated;
@@ -765,12 +785,12 @@ fn contact_label(contact: &contact_card::ContactCard) -> String {
 
 fn populate_contact_picker(picker: &gtk::ComboBoxText, contacts: &[contact_card::ContactCard]) {
     picker.remove_all();
-    for contact in contacts.iter().filter(|card| card.is_noise_compatible()) {
+    for contact in contacts.iter().filter(|card| card.is_noise_compatible() && card.is_pear_compatible()) {
         picker.append_text(&contact_label(contact));
     }
     if !contacts
         .iter()
-        .filter(|card| card.is_noise_compatible())
+        .filter(|card| card.is_noise_compatible() && card.is_pear_compatible())
         .collect::<Vec<_>>()
         .is_empty()
     {
