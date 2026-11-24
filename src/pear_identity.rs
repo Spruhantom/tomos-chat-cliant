@@ -148,10 +148,12 @@ impl Drop for PearTransportIdentity {
 
 pub struct PearConversationMaterial {
     pub conversation_key: [u8; 32],
+    #[allow(dead_code)] // Used when the Linux Hyperswarm worker is connected.
     discovery_topic: [u8; 32],
 }
 impl PearConversationMaterial {
     /// Returns the deterministic Hyperswarm topic for this contact pair.
+    #[allow(dead_code)] // Kept as the stable interface for the upcoming Linux worker.
     pub fn discovery_topic(&self) -> &[u8; 32] { &self.discovery_topic }
 }
 impl Drop for PearConversationMaterial {
