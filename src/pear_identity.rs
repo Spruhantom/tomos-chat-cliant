@@ -42,10 +42,6 @@ impl PearTransportIdentity {
 
     pub fn public_key(&self) -> &[u8; 32] { &self.public_key }
 
-    pub fn with_private_key<T>(&self, operation: impl FnOnce(&[u8; 32]) -> T) -> T {
-        operation(&self.private_key)
-    }
-
     pub fn derive(&self, remote_public_key: &[u8; 32]) -> Result<PearConversationMaterial, PearIdentityError> {
         let derived_public = MontgomeryPoint::mul_base_clamped(self.private_key).to_bytes();
         if !constant_time_eq(&derived_public, &self.public_key) || self.public_key == *remote_public_key {
@@ -176,7 +172,7 @@ fn hex_decode(value: &str) -> Result<Vec<u8>, PearIdentityError> {
     if !value.len().is_multiple_of(2) || value.len() > 256 {
         return Err(PearIdentityError::InvalidKey);
     }
-    value.as_bytes().chunks_exact(2).map(|pair| {
+    value.as_bytes().as_chunks::<2>().0.iter().map(|pair| {
         let high = (pair[0] as char).to_digit(16).ok_or(PearIdentityError::InvalidKey)?;
         let low = (pair[1] as char).to_digit(16).ok_or(PearIdentityError::InvalidKey)?;
         Ok(((high << 4) | low) as u8)
