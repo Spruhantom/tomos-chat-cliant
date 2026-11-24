@@ -193,6 +193,7 @@ pub struct ContactCard {
     pub pear_transport_public_key: Option<[u8; 32]>,
 }
 impl ContactCard {
+    #[cfg(test)]
     pub fn create(
         display_name: &str,
         identity: &SigningIdentity,
