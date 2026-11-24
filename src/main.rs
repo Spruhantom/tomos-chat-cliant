@@ -806,7 +806,7 @@ fn selected_contact(
     let selected = picker.active_text()?.to_string();
     contacts
         .iter()
-        .find(|card| card.is_noise_compatible() && contact_label(card) == selected)
+        .find(|card| card.is_noise_compatible() && card.is_pear_compatible() && contact_label(card) == selected)
         .cloned()
 }
 
