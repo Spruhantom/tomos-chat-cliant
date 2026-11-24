@@ -193,34 +193,6 @@ pub struct ContactCard {
     pub pear_transport_public_key: Option<[u8; 32]>,
 }
 impl ContactCard {
-    #[cfg(test)]
-    pub fn create(
-        display_name: &str,
-        identity: &SigningIdentity,
-        noise_static_public_key: [u8; 32],
-    ) -> Result<Self, ContactCardError> {
-        validate_name(display_name)?;
-        let public_key = identity.public_key_der().to_vec();
-        let fingerprint = fingerprint(&public_key);
-        let canonical = canonical(
-            V2,
-            display_name,
-            &public_key,
-            &fingerprint,
-            Some(&noise_static_public_key),
-            None,
-        );
-        let signature = identity.sign(&canonical)?;
-        Ok(Self {
-            display_name: display_name.to_owned(),
-            encoded_public_key: public_key,
-            fingerprint,
-            signature,
-            noise_static_public_key: Some(noise_static_public_key),
-            pear_transport_public_key: None,
-        })
-    }
-
 
     /// Create a V3 contact card binding both transport keys to the P-256 identity.
     pub fn create_pear(
