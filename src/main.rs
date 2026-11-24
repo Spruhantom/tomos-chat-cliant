@@ -512,6 +512,7 @@ fn build_contacts(app: &adw::Application) {
     let input_for_import = import_input.clone();
     let status_for_import = status.clone();
     let confirm_for_import = fingerprint_confirm.clone();
+    let pear_for_import = pear_identity.clone();
     import_contact.connect_clicked(move |_| {
         if !confirm_for_import.is_active() {
             status_for_import.set_text("Check the contact fingerprint with the person before trusting this identity.");
@@ -535,7 +536,7 @@ fn build_contacts(app: &adw::Application) {
             }
         };
         if let Some(remote_key) = parsed_card.pear_transport_public_key.as_ref() {
-            let local = pear_identity.borrow();
+            let local = pear_for_import.borrow();
             let Some(local) = local.as_ref() else {
                 status_for_import.set_text("Create or recover this device's Pear identity before trusting a Pear contact.");
                 return;
