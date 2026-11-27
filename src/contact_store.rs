@@ -77,7 +77,7 @@ impl TrustedContactStore {
                     "An existing fingerprint has a conflicting identity or Noise binding.".into(),
                 ));
             }
-            match (existing.pear_transport_public_key, card.pear_transport_public_key) {
+            match (\n                existing.pear_transport_public_key,\n                card.pear_transport_public_key,\n            ) {
                 (Some(old), Some(new_key)) if old != new_key => {
                     return Err(ContactStoreError::KeyStore(
                         "An existing fingerprint has a conflicting Pear transport identity.".into(),
