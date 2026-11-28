@@ -1,18 +1,18 @@
 mod contact_card;
 mod contact_store;
-mod peer;
 mod pear_identity;
+mod peer;
 mod peer_chat;
 mod qr;
 
 use adw::prelude::*;
 use gtk::glib;
+use pear_identity::PearTransportIdentity;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::Duration;
 use tomchat_noise::identity::NoiseIdentity;
-use pear_identity::PearTransportIdentity;
 use zeroize::Zeroize;
 
 fn main() {
@@ -775,8 +775,13 @@ fn refresh_own_card(
     let buffer = view.buffer();
     match (signing.as_ref(), noise.as_ref(), pear.as_ref()) {
         (Some(signing), Some(noise), Some(pear)) => {
-            match contact_card::ContactCard::create_pear("TomChat desktop", signing, *noise.public_key(), *pear.public_key())
-                .and_then(|card| card.encode())
+            match contact_card::ContactCard::create_pear(
+                "TomChat desktop",
+                signing,
+                *noise.public_key(),
+                *pear.public_key(),
+            )
+            .and_then(|card| card.encode())
             {
                 Ok(encoded) => buffer.set_text(&encoded),
                 Err(error) => buffer.set_text(&format!("Could not create contact card: {error}")),
