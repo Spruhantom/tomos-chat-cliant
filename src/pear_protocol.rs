@@ -22,29 +22,54 @@ pub struct EncryptedMessage {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WorkerCommand {
-    ConfigureIdentity { public_key: String, secret_key: String, trusted_peers: Vec<TrustedPeer> },
-    JoinSwarm { topic: String },
+    ConfigureIdentity {
+        public_key: String,
+        secret_key: String,
+        trusted_peers: Vec<TrustedPeer>,
+    },
+    JoinSwarm {
+        topic: String,
+    },
     TrustPeer(TrustedPeer),
-    UntrustPeer { transport_key: String },
-    AppendMessage { transport_key: String, message: EncryptedMessage },
-    ListMessages { transport_key: String, request_id: String },
+    UntrustPeer {
+        transport_key: String,
+    },
+    AppendMessage {
+        transport_key: String,
+        message: EncryptedMessage,
+    },
+    ListMessages {
+        transport_key: String,
+        request_id: String,
+    },
     Close,
 }
 
 impl WorkerCommand {
     pub fn encode(&self) -> Result<Vec<u8>, String> {
         let (kind, payload) = match self {
-            Self::ConfigureIdentity { public_key, secret_key, trusted_peers } => {
+            Self::ConfigureIdentity {
+                public_key,
+                secret_key,
+                trusted_peers,
+            } => {
                 validate_key(public_key, "Local public key")?;
                 validate_key(secret_key, "Local secret key")?;
-                if trusted_peers.len() > 10_000 { return Err("Trusted peer list exceeds the worker limit".into()); }
-                for peer in trusted_peers { validate_peer(peer)?; }
-                ("identity:configure", json!({
-                    "publicKey": public_key, "secretKey": secret_key,
-                    "trustedPeers": trusted_peers.iter().map(|peer| json!({
-                        "transportKey": peer.transport_key, "conversationKey": peer.conversation_key
-                    })).collect::<Vec<_>>()
-                }))
+                if trusted_peers.len() > 10_000 {
+                    return Err("Trusted peer list exceeds the worker limit".into());
+                }
+                for peer in trusted_peers {
+                    validate_peer(peer)?;
+                }
+                (
+                    "identity:configure",
+                    json!({
+                        "publicKey": public_key, "secretKey": secret_key,
+                        "trustedPeers": trusted_peers.iter().map(|peer| json!({
+                            "transportKey": peer.transport_key, "conversationKey": peer.conversation_key
+                        })).collect::<Vec<_>>()
+                    }),
+                )
             }
             Self::JoinSwarm { topic } => {
                 validate_key(topic, "Swarm topic")?;
@@ -52,37 +77,61 @@ impl WorkerCommand {
             }
             Self::TrustPeer(peer) => {
                 validate_peer(peer)?;
-                ("peer:trust", json!({ "transportKey": peer.transport_key, "conversationKey": peer.conversation_key }))
+                (
+                    "peer:trust",
+                    json!({ "transportKey": peer.transport_key, "conversationKey": peer.conversation_key }),
+                )
             }
             Self::UntrustPeer { transport_key } => {
                 validate_key(transport_key, "Peer key")?;
                 ("peer:untrust", json!({ "transportKey": transport_key }))
             }
-            Self::AppendMessage { transport_key, message } => {
+            Self::AppendMessage {
+                transport_key,
+                message,
+            } => {
                 validate_key(transport_key, "Peer key")?;
                 validate_uuid(&message.id, "Message ID")?;
                 validate_fingerprint(&message.sender_fingerprint)?;
-                if message.created_at > 9_007_199_254_740_991 { return Err("Message timestamp exceeds JavaScript's safe integer range".into()); }
-                if message.ciphertext.len() > 24 * 1024 {
-                    return Err("Base64 ciphertext exceeds the worker's 24 KiB frame-field limit".into());
+                if message.created_at > 9_007_199_254_740_991 {
+                    return Err("Message timestamp exceeds JavaScript's safe integer range".into());
                 }
-                let decoded = BASE64.decode(&message.ciphertext).map_err(|_| "Message ciphertext must be valid base64".to_string())?;
+                if message.ciphertext.len() > 24 * 1024 {
+                    return Err(
+                        "Base64 ciphertext exceeds the worker's 24 KiB frame-field limit".into(),
+                    );
+                }
+                let decoded = BASE64
+                    .decode(&message.ciphertext)
+                    .map_err(|_| "Message ciphertext must be valid base64".to_string())?;
                 if decoded.is_empty() || decoded.len() > 24 * 1024 {
                     return Err("Encrypted message must be between 1 byte and 24 KiB".into());
                 }
-                ("message:append", json!({
-                    "transportKey": transport_key, "id": message.id, "ciphertext": message.ciphertext,
-                    "senderFingerprint": message.sender_fingerprint, "createdAt": message.created_at
-                }))
+                (
+                    "message:append",
+                    json!({
+                        "transportKey": transport_key, "id": message.id, "ciphertext": message.ciphertext,
+                        "senderFingerprint": message.sender_fingerprint, "createdAt": message.created_at
+                    }),
+                )
             }
-            Self::ListMessages { transport_key, request_id } => {
+            Self::ListMessages {
+                transport_key,
+                request_id,
+            } => {
                 validate_key(transport_key, "Peer key")?;
                 validate_uuid(request_id, "History request ID")?;
-                ("message:list", json!({ "transportKey": transport_key, "requestId": request_id }))
+                (
+                    "message:list",
+                    json!({ "transportKey": transport_key, "requestId": request_id }),
+                )
             }
             Self::Close => ("backend:close", json!({})),
         };
-        let object = payload.as_object().cloned().ok_or_else(|| "Worker command payload must be a JSON object".to_string())?;
+        let object = payload
+            .as_object()
+            .cloned()
+            .ok_or_else(|| "Worker command payload must be a JSON object".to_string())?;
         encode_frame(kind, object)
     }
 }
@@ -91,27 +140,65 @@ impl WorkerCommand {
 #[serde(tag = "type")]
 pub enum WorkerEvent {
     #[serde(rename = "backend:ready")]
-    BackendReady { #[serde(rename = "protocolVersion")] protocol_version: u64, storage: String, #[serde(rename = "identityConfigurationRequired")] identity_configuration_required: bool },
+    BackendReady {
+        #[serde(rename = "protocolVersion")]
+        protocol_version: u64,
+        storage: String,
+        #[serde(rename = "identityConfigurationRequired")]
+        identity_configuration_required: bool,
+    },
     #[serde(rename = "identity:configured")]
-    IdentityConfigured { #[serde(rename = "trustedPeerCount")] trusted_peer_count: usize },
+    IdentityConfigured {
+        #[serde(rename = "trustedPeerCount")]
+        trusted_peer_count: usize,
+    },
     #[serde(rename = "swarm:joined")]
     SwarmJoined { topic: String },
     #[serde(rename = "peer:trust-added")]
-    PeerTrustAdded { #[serde(rename = "transportKey")] transport_key: String },
+    PeerTrustAdded {
+        #[serde(rename = "transportKey")]
+        transport_key: String,
+    },
     #[serde(rename = "peer:trust-removed")]
-    PeerTrustRemoved { #[serde(rename = "transportKey")] transport_key: String },
+    PeerTrustRemoved {
+        #[serde(rename = "transportKey")]
+        transport_key: String,
+    },
     #[serde(rename = "peer:authorized")]
-    PeerAuthorized { #[serde(rename = "transportKey")] transport_key: String },
+    PeerAuthorized {
+        #[serde(rename = "transportKey")]
+        transport_key: String,
+    },
     #[serde(rename = "peer:rejected")]
-    PeerRejected { #[serde(rename = "transportKey")] transport_key: String },
+    PeerRejected {
+        #[serde(rename = "transportKey")]
+        transport_key: String,
+    },
     #[serde(rename = "peer:closed")]
-    PeerClosed { #[serde(rename = "transportKey")] transport_key: String },
+    PeerClosed {
+        #[serde(rename = "transportKey")]
+        transport_key: String,
+    },
     #[serde(rename = "peer:error")]
-    PeerError { #[serde(rename = "transportKey")] transport_key: String, message: String },
+    PeerError {
+        #[serde(rename = "transportKey")]
+        transport_key: String,
+        message: String,
+    },
     #[serde(rename = "message:stored")]
-    MessageStored { #[serde(rename = "transportKey")] transport_key: String, id: String },
+    MessageStored {
+        #[serde(rename = "transportKey")]
+        transport_key: String,
+        id: String,
+    },
     #[serde(rename = "message:list-result")]
-    MessageListResult { #[serde(rename = "transportKey")] transport_key: String, #[serde(rename = "requestId")] request_id: String, messages: Vec<StoredMessage> },
+    MessageListResult {
+        #[serde(rename = "transportKey")]
+        transport_key: String,
+        #[serde(rename = "requestId")]
+        request_id: String,
+        messages: Vec<StoredMessage>,
+    },
     #[serde(rename = "backend:error")]
     BackendError { message: String },
     #[serde(rename = "backend:fatal")]
@@ -128,18 +215,24 @@ pub struct StoredMessage {
     pub writer_transport_key: String,
 }
 
-pub fn decode_events(decoder: &mut FrameDecoder, chunk: &[u8]) -> Result<Vec<WorkerEvent>, String> {
+pub fn decode_events(
+    decoder: &mut FrameDecoder,
+    chunk: &[u8],
+) -> Result<Vec<WorkerEvent>, String> {
     decoder.push(chunk)?.into_iter().map(decode_event).collect()
 }
 
 pub fn decode_event(value: Value) -> Result<WorkerEvent, String> {
-    let kind = value.get("type").and_then(Value::as_str)
+    let kind = value
+        .get("type")
+        .and_then(Value::as_str)
         .ok_or_else(|| "Pear worker event is missing its type".to_string())?
         .to_owned();
     if value.get("version").and_then(Value::as_u64) != Some(crate::pear_ipc::PROTOCOL_VERSION) {
         return Err("Pear worker event has an unsupported protocol version".into());
     }
-    serde_json::from_value(value).map_err(|error| format!("Invalid Pear worker event {kind}: {error}"))
+    serde_json::from_value(value)
+        .map_err(|error| format!("Invalid Pear worker event {kind}: {error}"))
 }
 
 fn validate_peer(peer: &TrustedPeer) -> Result<(), String> {
@@ -156,8 +249,13 @@ fn validate_key(value: &str, label: &str) -> Result<(), String> {
 
 fn validate_uuid(value: &str, label: &str) -> Result<(), String> {
     let bytes = value.as_bytes();
-    if bytes.len() != 36 || ![8, 13, 18, 23].iter().all(|index| bytes[*index] == b'-')
-        || !bytes.iter().enumerate().all(|(index, byte)| [8, 13, 18, 23].contains(&index) || byte.is_ascii_hexdigit()) {
+    if bytes.len() != 36
+        || ![8, 13, 18, 23].iter().all(|index| bytes[*index] == b'-')
+        || !bytes
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| [8, 13, 18, 23].contains(&index) || byte.is_ascii_hexdigit())
+    {
         return Err(format!("{label} must be a UUID"));
     }
     Ok(())
@@ -165,7 +263,14 @@ fn validate_uuid(value: &str, label: &str) -> Result<(), String> {
 
 fn validate_fingerprint(value: &str) -> Result<(), String> {
     let groups: Vec<&str> = value.split(' ').collect();
-    if groups.len() != 16 || groups.iter().any(|group| group.len() != 4 || !group.bytes().all(|byte| byte.is_ascii_digit() || (b'A'..=b'F').contains(&byte))) {
+    if groups.len() != 16
+        || groups.iter().any(|group| {
+            group.len() != 4
+                || !group
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'A'..=b'F').contains(&byte))
+        })
+    {
         return Err("Sender fingerprint must contain 16 groups of four hexadecimal digits".into());
     }
     Ok(())
@@ -180,18 +285,26 @@ mod tests {
     const KEY_A: &str = "1111111111111111111111111111111111111111111111111111111111111111";
     const KEY_B: &str = "2222222222222222222222222222222222222222222222222222222222222222";
     const UUID: &str = "123e4567-e89b-12d3-a456-426614174000";
-    const FINGERPRINT: &str = "ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCD";
+    const FINGERPRINT: &str =
+        "ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCD";
 
     fn decoded_command(command: WorkerCommand) -> serde_json::Value {
         let frame = command.encode().expect("valid command");
-        FrameDecoder::new().push(&frame).expect("valid frame").remove(0)
+        FrameDecoder::new()
+            .push(&frame)
+            .expect("valid frame")
+            .remove(0)
     }
 
     #[test]
     fn encodes_identity_configuration_using_worker_field_names() {
         let message = decoded_command(WorkerCommand::ConfigureIdentity {
-            public_key: KEY_A.into(), secret_key: KEY_B.into(),
-            trusted_peers: vec![TrustedPeer { transport_key: KEY_B.into(), conversation_key: KEY_A.into() }],
+            public_key: KEY_A.into(),
+            secret_key: KEY_B.into(),
+            trusted_peers: vec![TrustedPeer {
+                transport_key: KEY_B.into(),
+                conversation_key: KEY_A.into(),
+            }],
         });
         assert_eq!(message["type"], "identity:configure");
         assert_eq!(message["publicKey"], KEY_A);
@@ -203,7 +316,12 @@ mod tests {
     fn encodes_encrypted_message_command() {
         let message = decoded_command(WorkerCommand::AppendMessage {
             transport_key: KEY_A.into(),
-            message: EncryptedMessage { id: UUID.into(), ciphertext: "AQID".into(), sender_fingerprint: FINGERPRINT.into(), created_at: 42 },
+            message: EncryptedMessage {
+                id: UUID.into(),
+                ciphertext: "AQID".into(),
+                sender_fingerprint: FINGERPRINT.into(),
+                created_at: 42,
+            },
         });
         assert_eq!(message["type"], "message:append");
         assert_eq!(message["transportKey"], KEY_A);
@@ -213,15 +331,30 @@ mod tests {
 
     #[test]
     fn rejects_invalid_identity_keys() {
-        assert!(WorkerCommand::JoinSwarm { topic: "bad".into() }.encode().is_err());
-        assert!(WorkerCommand::ConfigureIdentity { public_key: "bad".into(), secret_key: KEY_B.into(), trusted_peers: Vec::new() }.encode().is_err());
+        assert!(WorkerCommand::JoinSwarm {
+            topic: "bad".into()
+        }
+        .encode()
+        .is_err());
+        assert!(WorkerCommand::ConfigureIdentity {
+            public_key: "bad".into(),
+            secret_key: KEY_B.into(),
+            trusted_peers: Vec::new()
+        }
+        .encode()
+        .is_err());
     }
 
     #[test]
     fn rejects_invalid_message_metadata_before_ipc() {
         let invalid = WorkerCommand::AppendMessage {
             transport_key: KEY_A.into(),
-            message: EncryptedMessage { id: "not-a-uuid".into(), ciphertext: "AQID".into(), sender_fingerprint: FINGERPRINT.into(), created_at: 42 },
+            message: EncryptedMessage {
+                id: "not-a-uuid".into(),
+                ciphertext: "AQID".into(),
+                sender_fingerprint: FINGERPRINT.into(),
+                created_at: 42,
+            },
         };
         assert!(invalid.encode().is_err());
     }
@@ -230,7 +363,12 @@ mod tests {
     fn rejects_ciphertext_over_worker_limit() {
         let invalid = WorkerCommand::AppendMessage {
             transport_key: KEY_A.into(),
-            message: EncryptedMessage { id: UUID.into(), ciphertext: "A".repeat(40 * 1024), sender_fingerprint: FINGERPRINT.into(), created_at: 42 },
+            message: EncryptedMessage {
+                id: UUID.into(),
+                ciphertext: "A".repeat(40 * 1024),
+                sender_fingerprint: FINGERPRINT.into(),
+                created_at: 42,
+            },
         };
         assert!(invalid.encode().is_err());
     }
@@ -255,9 +393,15 @@ mod tests {
         payload.insert("transportKey".into(), json!(KEY_A));
         let frame = crate::pear_ipc::encode_frame("peer:authorized", payload).expect("frame");
         let mut decoder = FrameDecoder::new();
-        assert!(decode_events(&mut decoder, &frame[..3]).expect("header fragment").is_empty());
-        assert_eq!(decode_events(&mut decoder, &frame[3..]).expect("remainder"),
-            vec![WorkerEvent::PeerAuthorized { transport_key: KEY_A.into() }]);
+        assert!(decode_events(&mut decoder, &frame[..3])
+            .expect("header fragment")
+            .is_empty());
+        assert_eq!(
+            decode_events(&mut decoder, &frame[3..]).expect("remainder"),
+            vec![WorkerEvent::PeerAuthorized {
+                transport_key: KEY_A.into()
+            }]
+        );
     }
 
     #[test]
