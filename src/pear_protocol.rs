@@ -4,7 +4,7 @@ use crate::pear_ipc::{encode_frame, FrameDecoder};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use serde::Deserialize;
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrustedPeer {
@@ -62,7 +62,7 @@ impl WorkerCommand {
                 validate_key(transport_key, "Peer key")?;
                 validate_uuid(&message.id, "Message ID")?;
                 validate_fingerprint(&message.sender_fingerprint)?;
-                if message.created_at > i64::MAX as u64 { return Err("Message timestamp is outside the worker's safe range".into()); }
+                if message.created_at > 9_007_199_254_740_991 { return Err("Message timestamp exceeds JavaScript's safe integer range".into()); }
                 let decoded = BASE64.decode(&message.ciphertext).map_err(|_| "Message ciphertext must be valid base64".to_string())?;
                 if decoded.is_empty() || decoded.len() > 24 * 1024 { return Err("Encrypted message must be between 1 byte and 24 KiB".into()); }
                 ("message:append", json!({
@@ -158,7 +158,7 @@ fn validate_uuid(value: &str, label: &str) -> Result<(), String> {
 
 fn validate_fingerprint(value: &str) -> Result<(), String> {
     let groups: Vec<&str> = value.split(' ').collect();
-    if groups.len() != 16 || groups.iter().any(|group| group.len() != 4 || !group.bytes().all(|byte| byte.is_ascii_hexdigit())) {
+    if groups.len() != 16 || groups.iter().any(|group| group.len() != 4 || !group.bytes().all(|byte| byte.is_ascii_digit() || (b'A'..=b'F').contains(&byte))) {
         return Err("Sender fingerprint must contain 16 groups of four hexadecimal digits".into());
     }
     Ok(())
