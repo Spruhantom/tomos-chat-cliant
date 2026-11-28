@@ -1,7 +1,7 @@
 mod contact_card;
 mod contact_store;
-pub mod pear_ipc;
 mod pear_identity;
+pub mod pear_ipc;
 mod peer;
 mod peer_chat;
 mod qr;
