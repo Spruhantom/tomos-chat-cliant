@@ -195,7 +195,6 @@ pub struct ContactCard {
     pub pear_transport_public_key: Option<[u8; 32]>,
 }
 impl ContactCard {
-
     /// Test-only V2 fixture builder retained for legacy wire-format regression tests.
     #[cfg(test)]
     fn create(
@@ -493,7 +492,6 @@ mod tests {
             Err(ContactCardError::InvalidNoiseKey)
         );
     }
-
 
     #[test]
     fn android_v3_wire_format_round_trips_both_transport_keys() {
