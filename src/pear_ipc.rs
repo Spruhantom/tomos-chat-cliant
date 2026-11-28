@@ -83,7 +83,10 @@ fn parse_message(body: &[u8]) -> Result<Value, String> {
     let object = message.as_object()
         .ok_or_else(|| "Pear worker frame must be a JSON object".to_string())?;
     if object.get("version").and_then(Value::as_u64) != Some(PROTOCOL_VERSION)
-        || object.get("type").and_then(Value::as_str).is_none_or(str::is_empty)
+        || object
+            .get("type")
+            .and_then(Value::as_str)
+            .is_none_or(str::is_empty)
     {
         return Err("Unsupported Pear worker protocol version or message type".to_string());
     }
@@ -118,8 +121,14 @@ mod tests {
     fn buffers_partial_header_and_body() {
         let frame = encode_frame("backend:close", Map::new()).expect("encoded");
         let mut decoder = FrameDecoder::new();
-        assert!(decoder.push(&frame[..2]).expect("header fragment").is_empty());
-        assert!(decoder.push(&frame[2..7]).expect("body fragment").is_empty());
+        assert!(decoder
+            .push(&frame[..2])
+            .expect("header fragment")
+            .is_empty());
+        assert!(decoder
+            .push(&frame[2..7])
+            .expect("body fragment")
+            .is_empty());
         let messages = decoder.push(&frame[7..]).expect("remainder");
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0]["type"], "backend:close");
@@ -152,9 +161,13 @@ mod tests {
         let invalid = [4_u32.to_be_bytes().as_slice(), b"nope".as_slice()].concat();
         assert!(decoder.push(&invalid).is_err());
 
-        let wrong = serde_json::to_vec(&json!({"version": 2, "type": "backend:ready"}))
-            .expect("json");
-        let frame = [(wrong.len() as u32).to_be_bytes().as_slice(), wrong.as_slice()].concat();
+        let wrong =
+            serde_json::to_vec(&json!({"version": 2, "type": "backend:ready"})).expect("json");
+        let frame = [
+            (wrong.len() as u32).to_be_bytes().as_slice(),
+            wrong.as_slice(),
+        ]
+        .concat();
         assert!(decoder.push(&frame).is_err());
     }
 
@@ -162,7 +175,11 @@ mod tests {
     fn rejects_non_objects_and_missing_message_types() {
         let mut decoder = FrameDecoder::new();
         let body = b"[]";
-        let frame = [(body.len() as u32).to_be_bytes().as_slice(), body.as_slice()].concat();
+        let frame = [
+            (body.len() as u32).to_be_bytes().as_slice(),
+            body.as_slice(),
+        ]
+        .concat();
         assert!(decoder.push(&frame).is_err());
 
         let body = br#"{"version":1}"#;
@@ -180,6 +197,9 @@ mod tests {
         let messages = decoder.push(&frame).expect("decoded");
         assert_eq!(messages[0]["version"], PROTOCOL_VERSION);
         assert_eq!(messages[0]["type"], "backend:close");
-        assert_eq!(frame_body(&frame).len() as u32, u32::from_be_bytes(frame[..4].try_into().unwrap()));
+        assert_eq!(
+            frame_body(&frame).len() as u32,
+            u32::from_be_bytes(frame[..4].try_into().unwrap())
+        );
     }
 }
