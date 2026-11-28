@@ -13,7 +13,13 @@ use std::{
 };
 use zeroize::Zeroize;
 
-const PEAR_KEY_ATTRIBUTE: [&str; 5] = [\n    "lookup",\n    "application",\n    "tomchat",\n    "key",\n    "pear-transport-v1",\n];
+const PEAR_KEY_ATTRIBUTE: [&str; 5] = [
+    "lookup",
+    "application",
+    "tomchat",
+    "key",
+    "pear-transport-v1",
+];
 const CONVERSATION_INFO: &[u8] = b"tomchat/pear/conversation-key/v1";
 const PAIR_SALT_PREFIX: &[u8] = b"tomchat/pear/pair-salt/v1";
 const TOPIC_PREFIX: &[u8] = b"tomchat/pear/discovery-topic/v1";
