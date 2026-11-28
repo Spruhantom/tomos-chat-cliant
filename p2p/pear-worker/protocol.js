@@ -58,8 +58,16 @@ class FrameDecoder {
         throw new Error('Invalid TomChat worker frame length')
       }
       if (this.pending.length < HEADER_BYTES + length) break
-      messages.push(parseMessage(this.pending.subarray(HEADER_BYTES, HEADER_BYTES + length)))
+      const body = this.pending.subarray(HEADER_BYTES, HEADER_BYTES + length)
       this.pending = this.pending.subarray(HEADER_BYTES + length)
+      try {
+        messages.push(parseMessage(body))
+      } catch (error) {
+        // Do not retain trailing coalesced frames after a malformed message;
+        // the stream is no longer safe to continue parsing.
+        this.pending = Buffer.alloc(0)
+        throw error
+      }
     }
     return messages
   }
