@@ -234,6 +234,20 @@ mod tests {
     }
 
     #[test]
+    fn rejects_base64_text_over_worker_field_limit() {
+        let invalid = WorkerCommand::AppendMessage {
+            transport_key: KEY_A.into(),
+            message: EncryptedMessage {
+                id: UUID.into(),
+                ciphertext: "A".repeat(24 * 1024 + 4),
+                sender_fingerprint: FINGERPRINT.into(),
+                created_at: 42,
+            },
+        };
+        assert!(invalid.encode().is_err());
+    }
+
+    #[test]
     fn decodes_worker_events_and_fragmented_reads() {
         let mut payload = Map::new();
         payload.insert("transportKey".into(), json!(KEY_A));
