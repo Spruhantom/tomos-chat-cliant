@@ -40,6 +40,18 @@ test('payload cannot override the protocol envelope', () => {
   assert.equal(decoded.type, 'backend:ready')
 })
 
+test('decoder clears buffered trailing frames after malformed JSON', () => {
+  const decoder = new FrameDecoder()
+  const invalidBody = Buffer.from('not-json')
+  const invalid = Buffer.alloc(4 + invalidBody.length)
+  invalid.writeUInt32BE(invalidBody.length, 0)
+  invalidBody.copy(invalid, 4)
+  const trailing = frame('backend:ready')
+
+  assert.throws(() => decoder.push(Buffer.concat([invalid, trailing])))
+  assert.deepEqual(decoder.push(trailing), [{ version: 1, type: 'backend:ready' }])
+})
+
 test('decoder buffers partial frames and emits coalesced frames in order', () => {
   const decoder = new FrameDecoder()
   const first = frame('peer:authorized', { id: 'a' })
