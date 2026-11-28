@@ -222,10 +222,13 @@ mod tests {
 
         assert!(decoder.push(&[invalid, trailing].concat()).is_err());
         assert!(!decoder.has_pending_data());
-        assert!(decoder
-            .push(&trailing)
-            .expect("fresh stream after error")
-            .len() == 1);
+        assert_eq!(
+            decoder
+                .push(&trailing)
+                .expect("fresh stream after error")
+                .len(),
+            1
+        );
     }
 
     #[test]
