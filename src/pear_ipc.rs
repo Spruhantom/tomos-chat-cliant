@@ -8,7 +8,10 @@ pub const MAX_FRAME_BYTES: usize = 64 * 1024;
 const HEADER_BYTES: usize = 4;
 
 /// Encode one protocol-v1 JSON object with a four-byte big-endian length prefix.
-pub fn encode_frame(message_type: &str, mut payload: Map<String, Value>) -> Result<Vec<u8>, String> {
+pub fn encode_frame(
+    message_type: &str,
+    mut payload: Map<String, Value>,
+) -> Result<Vec<u8>, String> {
     if message_type.trim().is_empty() {
         return Err("Pear worker message type is required".to_string());
     }
@@ -34,7 +37,9 @@ pub struct FrameDecoder {
 
 impl FrameDecoder {
     pub fn new() -> Self {
-        Self { pending: Vec::new() }
+        Self {
+            pending: Vec::new(),
+        }
     }
 
     /// Accept arbitrary IPC chunks; partial frames remain buffered.
@@ -46,7 +51,10 @@ impl FrameDecoder {
                 break;
             }
             let length = u32::from_be_bytes([
-                self.pending[0], self.pending[1], self.pending[2], self.pending[3],
+                self.pending[0],
+                self.pending[1],
+                self.pending[2],
+                self.pending[3],
             ]) as usize;
             if length == 0 || length > MAX_FRAME_BYTES {
                 self.pending.clear();
@@ -78,9 +86,10 @@ fn parse_message(body: &[u8]) -> Result<Value, String> {
     if body.is_empty() || body.len() > MAX_FRAME_BYTES {
         return Err("Invalid Pear worker frame size".to_string());
     }
-    let message: Value = serde_json::from_slice(body)
-        .map_err(|_| "Invalid Pear worker JSON frame".to_string())?;
-    let object = message.as_object()
+    let message: Value =
+        serde_json::from_slice(body).map_err(|_| "Invalid Pear worker JSON frame".to_string())?;
+    let object = message
+        .as_object()
         .ok_or_else(|| "Pear worker frame must be a JSON object".to_string())?;
     if object.get("version").and_then(Value::as_u64) != Some(PROTOCOL_VERSION)
         || object
@@ -183,7 +192,11 @@ mod tests {
         assert!(decoder.push(&frame).is_err());
 
         let body = br#"{"version":1}"#;
-        let frame = [(body.len() as u32).to_be_bytes().as_slice(), body.as_slice()].concat();
+        let frame = [
+            (body.len() as u32).to_be_bytes().as_slice(),
+            body.as_slice(),
+        ]
+        .concat();
         assert!(decoder.push(&frame).is_err());
     }
 
