@@ -63,8 +63,13 @@ impl WorkerCommand {
                 validate_uuid(&message.id, "Message ID")?;
                 validate_fingerprint(&message.sender_fingerprint)?;
                 if message.created_at > 9_007_199_254_740_991 { return Err("Message timestamp exceeds JavaScript's safe integer range".into()); }
+                if message.ciphertext.len() > 24 * 1024 {
+                    return Err("Base64 ciphertext exceeds the worker's 24 KiB frame-field limit".into());
+                }
                 let decoded = BASE64.decode(&message.ciphertext).map_err(|_| "Message ciphertext must be valid base64".to_string())?;
-                if decoded.is_empty() || decoded.len() > 24 * 1024 { return Err("Encrypted message must be between 1 byte and 24 KiB".into()); }
+                if decoded.is_empty() || decoded.len() > 24 * 1024 {
+                    return Err("Encrypted message must be between 1 byte and 24 KiB".into());
+                }
                 ("message:append", json!({
                     "transportKey": transport_key, "id": message.id, "ciphertext": message.ciphertext,
                     "senderFingerprint": message.sender_fingerprint, "createdAt": message.created_at
