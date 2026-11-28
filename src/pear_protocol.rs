@@ -133,7 +133,9 @@ pub fn decode_events(decoder: &mut FrameDecoder, chunk: &[u8]) -> Result<Vec<Wor
 }
 
 pub fn decode_event(value: Value) -> Result<WorkerEvent, String> {
-    let kind = value.get("type").and_then(Value::as_str).ok_or_else(|| "Pear worker event is missing its type".to_string())?;
+    let kind = value.get("type").and_then(Value::as_str)
+        .ok_or_else(|| "Pear worker event is missing its type".to_string())?
+        .to_owned();
     if value.get("version").and_then(Value::as_u64) != Some(crate::pear_ipc::PROTOCOL_VERSION) {
         return Err("Pear worker event has an unsupported protocol version".into());
     }
