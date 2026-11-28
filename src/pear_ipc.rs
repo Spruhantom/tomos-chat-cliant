@@ -220,7 +220,9 @@ mod tests {
         let trailing = encode_frame("backend:ready", Map::new()).expect("trailing frame");
         let mut decoder = FrameDecoder::new();
 
-        assert!(decoder.push(&[invalid, trailing].concat()).is_err());
+        assert!(decoder
+            .push(&[invalid.as_slice(), trailing.as_slice()].concat())
+            .is_err());
         assert!(!decoder.has_pending_data());
         assert_eq!(
             decoder
