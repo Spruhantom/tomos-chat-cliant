@@ -42,7 +42,9 @@ impl fmt::Display for ContactCardError {
                 f.write_str("Contact fingerprint does not match its public key.")
             }
             Self::InvalidNoiseKey => f.write_str("Contact Noise key must be exactly 32 bytes."),
-            Self::InvalidPearKey => {\n                f.write_str("Contact Pear transport key must be exactly 32 bytes.")\n            }
+            Self::InvalidPearKey => {
+                f.write_str("Contact Pear transport key must be exactly 32 bytes.")
+            }
             Self::InvalidSignature => f.write_str("Contact card signature verification failed."),
             Self::KeyStore(message) => write!(f, "Secure identity storage failed: {message}"),
             Self::Crypto => f.write_str("Contact identity cryptographic operation failed."),
@@ -496,7 +498,9 @@ mod tests {
     #[test]
     fn android_v3_wire_format_round_trips_both_transport_keys() {
         let identity = SigningIdentity::generate().unwrap();
-        let card =\n            ContactCard::create_pear("TomChat Pear Linux", &identity, [0x2a; 32], [0x3b; 32])\n                .unwrap();
+        let card =
+            ContactCard::create_pear("TomChat Pear Linux", &identity, [0x2a; 32], [0x3b; 32])
+                .unwrap();
         let encoded = card.encode().unwrap();
         assert!(encoded.starts_with("TOMCHAT-CONTACT-V3."));
         let decoded = ContactCard::decode(&encoded).unwrap();
