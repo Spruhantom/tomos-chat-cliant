@@ -125,7 +125,16 @@ is intentionally versioned so Android and Linux can migrate independently.
   Android chat screen through AES-256-GCM ciphertext in the replicated feeds.
 - Linux now creates and stores a separate Pear X25519 identity in Secret
   Service, derives the same pairwise HKDF material, and reads/writes signed V3
-  contact cards. Its Bare Kit C host and chat UI cutover are still outstanding.
+  contact cards. The Linux Rust client now has a protocol-v1 IPC framing codec
+  matching the worker's four-byte big-endian length prefix, 64 KiB limit and
+  JSON metadata checks, plus a typed command/event layer for identity setup,
+  trust changes, swarm joins, encrypted message append/history and worker
+  lifecycle events. Host-side validation enforces key sizes, UUIDs, uppercase
+  contact fingerprints, JavaScript-safe timestamps and the worker's 24 KiB
+  ciphertext limit. Unit tests cover frame handling, command field compatibility,
+  invalid input and event decoding. The Bare Kit C host, worker lifecycle,
+  native IPC transport and chat UI cutover are still outstanding; the existing
+  Linux Noise connection path remains active and is not considered migrated.
 - Voice calls and other real-time media have not yet been migrated to Pear.
 - The worker cannot start discovery until the native host supplies a valid
   local keypair and verified per-contact conversation keys.
