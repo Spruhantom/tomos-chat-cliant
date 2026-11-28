@@ -63,7 +63,9 @@ fn build_contacts(app: &adw::Application) {
         contact_card::SigningIdentity::load_from_secret_service().ok(),
     ));
     let noise_identity = Rc::new(RefCell::new(NoiseIdentity::load_from_secret_service().ok()));
-    let pear_identity = Rc::new(RefCell::new(\n        PearTransportIdentity::load_from_secret_service().ok(),\n    ));
+    let pear_identity = Rc::new(RefCell::new(
+        PearTransportIdentity::load_from_secret_service().ok(),
+    ));
     let store = Rc::new(contact_store::TrustedContactStore);
     let (initial_contacts, store_status) = match store.load() {
         Ok(loaded) => (
@@ -738,9 +740,15 @@ fn build_contacts(app: &adw::Application) {
         }
     });
 
-    if signing_identity.borrow().is_some()\n        && noise_identity.borrow().is_some()\n        && pear_identity.borrow().is_some()\n    {
+    if signing_identity.borrow().is_some()
+        && noise_identity.borrow().is_some()
+        && pear_identity.borrow().is_some()
+    {
         status.set_text(&store_status);
-    } else if signing_identity.borrow().is_some()\n        || noise_identity.borrow().is_some()\n        || pear_identity.borrow().is_some()\n    {
+    } else if signing_identity.borrow().is_some()
+        || noise_identity.borrow().is_some()
+        || pear_identity.borrow().is_some()
+    {
         status.set_text("Only part of this device identity could be loaded. TomChat will not replace keys; recover the missing key before connecting.");
     } else {
         status.set_text(&format!(
@@ -786,7 +794,10 @@ fn contact_label(contact: &contact_card::ContactCard) -> String {
 
 fn populate_contact_picker(picker: &gtk::ComboBoxText, contacts: &[contact_card::ContactCard]) {
     picker.remove_all();
-    for contact in contacts\n        .iter()\n        .filter(|card| card.is_noise_compatible() && card.is_pear_compatible())\n    {
+    for contact in contacts
+        .iter()
+        .filter(|card| card.is_noise_compatible() && card.is_pear_compatible())
+    {
         picker.append_text(&contact_label(contact));
     }
     if !contacts
@@ -806,7 +817,11 @@ fn selected_contact(
     let selected = picker.active_text()?.to_string();
     contacts
         .iter()
-        .find(|card| {\n            card.is_noise_compatible()\n                && card.is_pear_compatible()\n                && contact_label(card) == selected\n        })
+        .find(|card| {
+            card.is_noise_compatible()
+                && card.is_pear_compatible()
+                && contact_label(card) == selected
+        })
         .cloned()
 }
 
