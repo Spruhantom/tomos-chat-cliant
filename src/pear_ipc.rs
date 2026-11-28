@@ -66,7 +66,16 @@ impl FrameDecoder {
             }
             let body = self.pending[HEADER_BYTES..frame_length].to_vec();
             self.pending.drain(..frame_length);
-            messages.push(parse_message(&body)?);
+            match parse_message(&body) {
+                Ok(message) => messages.push(message),
+                Err(error) => {
+                    // A malformed frame makes the stream unusable. Drop any
+                    // coalesced trailing bytes rather than parsing them after
+                    // the protocol has lost frame synchronization.
+                    self.pending.clear();
+                    return Err(error);
+                }
+            }
         }
         Ok(messages)
     }
@@ -95,7 +104,7 @@ fn parse_message(body: &[u8]) -> Result<Value, String> {
         || object
             .get("type")
             .and_then(Value::as_str)
-            .is_none_or(str::is_empty)
+            .is_none_or(|message_type| message_type.trim().is_empty())
     {
         return Err("Unsupported Pear worker protocol version or message type".to_string());
     }
@@ -197,6 +206,37 @@ mod tests {
             body.as_slice(),
         ]
         .concat();
+        assert!(decoder.push(&frame).is_err());
+    }
+
+    #[test]
+    fn malformed_frame_clears_coalesced_trailing_data() {
+        let invalid_body = b"not-json";
+        let invalid = [
+            (invalid_body.len() as u32).to_be_bytes().as_slice(),
+            invalid_body.as_slice(),
+        ]
+        .concat();
+        let trailing = encode_frame("backend:ready", Map::new()).expect("trailing frame");
+        let mut decoder = FrameDecoder::new();
+
+        assert!(decoder.push(&[invalid, trailing].concat()).is_err());
+        assert!(!decoder.has_pending_data());
+        assert!(decoder
+            .push(&trailing)
+            .expect("fresh stream after error")
+            .len() == 1);
+    }
+
+    #[test]
+    fn rejects_whitespace_only_message_types() {
+        let body = br#"{"version":1,"type":"   "}"#;
+        let frame = [
+            (body.len() as u32).to_be_bytes().as_slice(),
+            body.as_slice(),
+        ]
+        .concat();
+        let mut decoder = FrameDecoder::new();
         assert!(decoder.push(&frame).is_err());
     }
 
