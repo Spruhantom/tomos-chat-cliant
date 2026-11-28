@@ -93,7 +93,7 @@ fn parse_message(body: &[u8]) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::{encode_frame, FrameDecoder, MAX_FRAME_BYTES, PROTOCOL_VERSION};
-    use serde_json::{json, Map, Value};
+    use serde_json::{json, Map};
 
     fn frame_body(frame: &[u8]) -> Vec<u8> {
         let length = u32::from_be_bytes(frame[..4].try_into().expect("header")) as usize;
