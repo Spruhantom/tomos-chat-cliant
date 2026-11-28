@@ -245,3 +245,29 @@ mod tests {
         assert!(decode_events(&mut FrameDecoder::new(), &frame).is_err());
     }
 }
+
+    #[test]
+    fn rejects_lowercase_fingerprints_and_unsafe_timestamps() {
+        let lowercase = WorkerCommand::AppendMessage {
+            transport_key: KEY_A.into(),
+            message: EncryptedMessage {
+                id: UUID.into(),
+                ciphertext: "AQID".into(),
+                sender_fingerprint: FINGERPRINT.to_ascii_lowercase(),
+                created_at: 42,
+            },
+        };
+        assert!(lowercase.encode().is_err());
+
+        let unsafe_timestamp = WorkerCommand::AppendMessage {
+            transport_key: KEY_A.into(),
+            message: EncryptedMessage {
+                id: UUID.into(),
+                ciphertext: "AQID".into(),
+                sender_fingerprint: FINGERPRINT.into(),
+                created_at: 9_007_199_254_740_992,
+            },
+        };
+        assert!(unsafe_timestamp.encode().is_err());
+    }
+}
