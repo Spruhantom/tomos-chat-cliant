@@ -215,10 +215,7 @@ pub struct StoredMessage {
     pub writer_transport_key: String,
 }
 
-pub fn decode_events(
-    decoder: &mut FrameDecoder,
-    chunk: &[u8],
-) -> Result<Vec<WorkerEvent>, String> {
+pub fn decode_events(decoder: &mut FrameDecoder, chunk: &[u8]) -> Result<Vec<WorkerEvent>, String> {
     decoder.push(chunk)?.into_iter().map(decode_event).collect()
 }
 
