@@ -29,6 +29,11 @@ test('does not permit empty message types', () => {
   assert.throws(() => frame(''))
 })
 
+test('rejects whitespace-only message types on encode and decode', () => {
+  assert.throws(() => frame('   '))
+  assert.throws(() => parseMessage(Buffer.from('{"version":1,"type":"   "}')))
+})
+
 test('payload cannot override the protocol envelope', () => {
   const decoded = parseFrame(frame('backend:ready', { version: 99, type: 'spoofed' }))
   assert.equal(decoded.version, 1)
