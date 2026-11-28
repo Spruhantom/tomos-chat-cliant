@@ -263,7 +263,6 @@ mod tests {
         let frame = crate::pear_ipc::encode_frame("future:event", Map::new()).expect("frame");
         assert!(decode_events(&mut FrameDecoder::new(), &frame).is_err());
     }
-}
 
     #[test]
     fn rejects_lowercase_fingerprints_and_unsafe_timestamps() {
