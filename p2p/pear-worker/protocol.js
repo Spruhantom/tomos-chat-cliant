@@ -15,14 +15,14 @@ function parseMessage (buffer) {
   if (!message || typeof message !== 'object' || Array.isArray(message)) {
     throw new Error('TomChat worker frame must be an object')
   }
-  if (message.version !== PROTOCOL_VERSION || typeof message.type !== 'string') {
+  if (message.version !== PROTOCOL_VERSION || typeof message.type !== 'string' || message.type.trim().length === 0) {
     throw new Error('Unsupported TomChat worker protocol version or message type')
   }
   return message
 }
 
 function frame (type, payload = {}) {
-  if (typeof type !== 'string' || !type) throw new Error('Worker message type is required')
+  if (typeof type !== 'string' || type.trim().length === 0) throw new Error('Worker message type is required')
   const body = Buffer.from(JSON.stringify({ ...payload, version: PROTOCOL_VERSION, type }))
   if (body.length === 0 || body.length > MAX_FRAME_BYTES) throw new Error('TomChat worker frame is too large')
   const header = Buffer.alloc(HEADER_BYTES)
