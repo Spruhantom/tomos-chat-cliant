@@ -80,6 +80,29 @@ class ContactCardCodecTest {
         org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { ContactCardCodec.decode(modified) }
     }
 
+
+    @Test fun signedV3ContactCardRoundTripsBothTransportKeys() {
+        val noise = noiseKey(4)
+        val pear = noiseKey(31)
+        val card = ContactCardCodec.createPear("TomChat Pear device", identity(), noise, pear)
+        val decoded = ContactCardCodec.decode(ContactCardCodec.encode(card))
+        assertArrayEquals(noise, decoded.noiseStaticPublicKey)
+        assertArrayEquals(pear, decoded.pearTransportPublicKey)
+        assertTrue(ContactCardCodec.verify(decoded))
+    }
+
+    @Test fun v3SignatureCoversPearTransportKey() {
+        val card = ContactCardCodec.createPear("Alice", identity(), noiseKey(), noiseKey(50))
+        assertFalse(ContactCardCodec.verify(card.copy(pearTransportPublicKey = noiseKey(90))))
+    }
+
+    @Test fun legacyV2CardsRemainReadableButHaveNoPearBinding() {
+        val card = ContactCardCodec.create("Old phone", identity(), noiseKey())
+        val decoded = ContactCardCodec.decode(ContactCardCodec.encode(card))
+        assertNull(decoded.pearTransportPublicKey)
+        assertTrue(ContactCardCodec.verify(decoded))
+    }
+
     @Test fun rejectsOversizedInput() {
         org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { ContactCardCodec.decode("x".repeat(4097)) }
     }

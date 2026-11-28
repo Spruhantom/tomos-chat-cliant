@@ -1,0 +1,42 @@
+name: android-pear-build
+
+on:
+  pull_request:
+  push:
+    branches: [main, feat/pear-p2p-backend]
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: p2p/pear-worker/package.json
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.2.12479018"
+      - name: Configure Android NDK environment
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - name: Install Rust and Android linker
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Assemble Android debug APK with Pear worker
+        run: gradle --no-daemon :android:app:assembleDebug

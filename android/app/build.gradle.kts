@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,12 +7,15 @@ plugins {
 }
 
 
+// Transitional only: the existing UI still references the old transport until
+// the Pear identity and conversation screens are migrated. Remove this task
+// together with android/native/tomchat-noise at the final Pear-only cutover.
 val nativeNoiseManifest = rootProject.file("android/native/tomchat-noise/Cargo.toml")
 val nativeNoiseOutput = rootProject.file("android/app/src/main/jniLibs")
 
 tasks.register<org.gradle.api.tasks.Exec>("buildTomChatNoise") {
     group = "build"
-    description = "Build the Rust Noise core for supported Android ABIs."
+    description = "Temporarily build the old transport while the Pear-only UI cutover is in progress."
     inputs.file(nativeNoiseManifest)
     inputs.dir(rootProject.file("android/native/tomchat-noise/src"))
     outputs.dir(nativeNoiseOutput)
@@ -19,7 +24,6 @@ tasks.register<org.gradle.api.tasks.Exec>("buildTomChatNoise") {
         "cargo", "ndk",
         "--platform", "26",
         "-t", "arm64-v8a",
-        "-t", "armeabi-v7a",
         "-t", "x86_64",
         "-o", nativeNoiseOutput.absolutePath,
         "build", "--release",
@@ -27,21 +31,44 @@ tasks.register<org.gradle.api.tasks.Exec>("buildTomChatNoise") {
     )
 }
 
-tasks.named("preBuild").configure {
+val pearWorkerScript = rootProject.file("p2p/pear-worker/build-android.sh")
+val pearWorkerAssets = rootProject.file("android/app/src/main/assets")
+val pearWorkerAddons = rootProject.file("android/app/build/pear-addons/jniLibs")
+
+tasks.register<org.gradle.api.tasks.Exec>("buildTomChatPear") {
     dependsOn("buildTomChatNoise")
+    group = "build"
+    description = "Bundle the shared Pear worker and link its Android native addons."
+    inputs.file(pearWorkerScript)
+    inputs.dir(rootProject.file("p2p/pear-worker"))
+    outputs.dir(pearWorkerAssets)
+    outputs.dir(pearWorkerAddons)
+    workingDir = rootProject.projectDir
+    commandLine("bash", pearWorkerScript.absolutePath)
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("buildTomChatPear")
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
 }
 
 android {
     namespace = "uk.co.tomos.chat"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "uk.co.tomos.chat"
-        minSdk = 26
+        minSdk = 29
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
     // Temporary test-release signing: use Android's standard debug key so a
@@ -57,7 +84,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     buildFeatures {
         compose = true
         buildConfig = true
@@ -89,7 +115,9 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.4.1")
     implementation("androidx.camera:camera-view:1.4.1")
 
-    // Pinned WebRTC core only; peer signalling remains inside the Noise channel.
+    implementation("com.github.holepunchto.bare-kit-kotlin:bare-kit-kotlin:v0.2.7")
+
+    // WebRTC media is independent of the Pear message transport.
     implementation("io.getstream:stream-webrtc-android:1.3.9")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")

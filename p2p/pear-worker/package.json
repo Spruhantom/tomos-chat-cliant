@@ -1,0 +1,25 @@
+{
+  "name": "@tomos-chat/pear-worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Experimental decentralised TomChat P2P worker built on Bare, Hyperswarm and Corestore",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test",
+    "lint": "node --check index.js && node --check protocol.js"
+  },
+  "dependencies": {
+    "bare-path": "^3.0.1",
+    "bare-storage": "^1.1.0",
+    "corestore": "^7.11.0",
+    "graceful-goodbye": "^1.3.3",
+    "hyperbee": "^2.20.0",
+    "hyperswarm": "^4.17.0",
+    "which-runtime": "^1.4.0"
+  },
+  "devDependencies": {
+    "bare-link": "^4.0.1",
+    "bare-pack": "^2.2.1"
+  }
+}

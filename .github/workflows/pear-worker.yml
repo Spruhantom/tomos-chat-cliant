@@ -1,0 +1,33 @@
+name: Pear P2P worker
+
+on:
+  pull_request:
+    paths:
+      - "p2p/pear-worker/**"
+      - "docs/pear-p2p-migration.md"
+      - ".github/workflows/pear-worker.yml"
+  push:
+    branches: [main, "feat/pear-p2p-backend"]
+    paths:
+      - "p2p/pear-worker/**"
+      - "docs/pear-p2p-migration.md"
+      - ".github/workflows/pear-worker.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  worker-protocol:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: p2p/pear-worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check JavaScript syntax
+        run: npm run lint
+      - name: Test IPC protocol
+        run: npm test

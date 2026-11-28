@@ -89,6 +89,34 @@ See [Android build and debug releases](docs/android-debug-test-releases.md) and 
 
 These are prototype implementations, not a security audit. See [architecture](docs/architecture.md), [the E2EE threat model](docs/e2ee-threat-model.md), [the Linux identity contract](docs/linux-peer-identity-and-desktop-migration.md), and [real-world testing](docs/real-world-testing.md).
 
+## Pear P2P backend migration
+
+TomChat is moving to Holepunch's Pear/Bare P2P stack as its **only** networking
+backend. The Android Kotlin/Compose and Linux Rust/GTK4 interfaces remain
+native; a shared Bare worker will handle peer discovery, encrypted transport
+and replicated storage through Hyperswarm, Hypercore/Corestore and Hyperbee.
+
+The Pear desktop shell is not being embedded in the mobile app. The native
+clients will embed Bare and run the shared Pear-end worker through the
+platform's Bare Kit binding.
+
+The Android Pear client will require Android 10 (API 29) or newer with a
+compatible Kotlin/Gradle toolchain. Android 8/9 will not be supported by the
+Pear-only client. The Linux client will embed Bare Kit's C API behind Rust FFI.
+
+The Android app now embeds Bare Kit, starts the shared worker, and uses a
+versioned length-prefixed IPC bridge; worker packaging and native addon linking
+are part of the Android build. Message discovery and delivery are not yet
+routed through Pear, and Linux host integration remains outstanding. The
+existing Noise code is retained only as temporary migration scaffolding while
+native UI call sites and contact identities are moved. It is not a planned
+fallback: the completed cutover will remove it and route all P2P traffic
+through Pear. Do not treat the worker as production-ready until signed identity
+migration, message replication, reconnect, and real-device cross-platform tests
+pass.
+
+See [the Pear P2P migration plan](docs/pear-p2p-migration.md) for architecture,
+compatibility requirements, protocol details and acceptance gates.
 ## Project structure
 
 - `android/app` — Android application and tests.
